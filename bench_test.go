@@ -1,6 +1,7 @@
 package thyrse
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 )
@@ -126,7 +127,7 @@ func BenchmarkMixStream(b *testing.B) {
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p.MixStream("data", data)
+				_ = p.MixStream("data", bytes.NewReader(data))
 			}
 		})
 	}

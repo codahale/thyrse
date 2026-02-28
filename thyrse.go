@@ -11,6 +11,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/codahale/thyrse/hazmat/kt128"
 	"github.com/codahale/thyrse/hazmat/treewrap"
@@ -59,9 +60,11 @@ func (p *Protocol) Mix(label string, data []byte) {
 
 // MixStream absorbs streaming data by pre-hashing through KT128. The Init label is used as the KT128 customization
 // string, binding the digest to the protocol identity.
-func (p *Protocol) MixStream(label string, data []byte) {
+func (p *Protocol) MixStream(label string, r io.Reader) error {
 	kh := kt128.NewCustom([]byte(p.initLabel))
-	_, _ = kh.Write(data)
+	if _, err := kh.ReadFrom(r); err != nil {
+		return err
+	}
 
 	var digest [chainValueSize]byte
 	_, _ = kh.Read(digest[:])
@@ -69,6 +72,7 @@ func (p *Protocol) MixStream(label string, data []byte) {
 	_, _ = p.h.Write([]byte{opMixStream})
 	p.writeLengthEncode([]byte(label))
 	_, _ = p.h.Write(digest[:]) // fixed H bytes, no length prefix
+	return nil
 }
 
 // Fork clones the protocol state into N independent branches and modifies the base. The base receives ordinal 0 with an

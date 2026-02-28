@@ -362,11 +362,15 @@ func TestMixStream(t *testing.T) {
 		}
 
 		p := New("test")
-		p.MixStream("large-data", data)
+		if err := p.MixStream("large-data", bytes.NewReader(data)); err != nil {
+			t.Fatal(err)
+		}
 		out := p.Derive("output", nil, 32)
 
 		p2 := New("test")
-		p2.MixStream("large-data", data)
+		if err := p2.MixStream("large-data", bytes.NewReader(data)); err != nil {
+			t.Fatal(err)
+		}
 		out2 := p2.Derive("output", nil, 32)
 
 		if !bytes.Equal(out, out2) {
