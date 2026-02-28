@@ -1,0 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+set -o xtrace
+
+gcloud compute instances delete thyrse --zone=us-central1-a --quiet

@@ -1,0 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+set -o xtrace
+
+gcloud compute instances create thyrse --zone=us-central1-a --machine-type=c4-standard-4 --min-cpu-platform 'Intel Emerald Rapids' --image-project 'debian-cloud' --image-family 'debian-12'

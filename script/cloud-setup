@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+set -o xtrace
+
+until gcloud compute ssh thyrse --zone=us-central1-a --command 'pwd' ; do
+  echo "Instance not fully available, retrying in 5 seconds..."
+  sleep 5
+done
+gcloud compute ssh thyrse --zone=us-central1-a --command 'sudo apt-get install tmux git -y'
+gcloud compute ssh thyrse --zone=us-central1-a --command 'wget -q https://go.dev/dl/go1.26.0.linux-amd64.tar.gz'
+gcloud compute ssh thyrse --zone=us-central1-a --command 'tar -xzf *.tar.gz'
+gcloud compute ssh thyrse --zone=us-central1-a --command "echo 'export PATH=\"\$PATH:~/go/bin\"' >> ~/.bashrc"
+gcloud compute ssh thyrse --zone=us-central1-a --command "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+gcloud compute ssh thyrse --zone=us-central1-a --command 'git clone https://github.com/codahale/thyrse'
+gcloud compute ssh thyrse --zone=us-central1-a --command 'curl -fsSL https://claude.ai/install.sh | bash'
+# shellcheck disable=SC2016
+gcloud compute ssh thyrse --zone=us-central1-a --command 'PATH=$PATH:~/go/bin go install golang.org/x/perf/cmd/benchstat@latest'
