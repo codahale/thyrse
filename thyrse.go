@@ -41,8 +41,7 @@ func New(label string) *Protocol {
 	var p Protocol
 	p.h = turboshake.New(dsChain)
 	p.initLabel = label
-	_, _ = p.h.Write([]byte{opInit})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opInit, label)
 	return &p
 }
 
@@ -59,8 +58,7 @@ func (p *Protocol) String() string {
 // Mix absorbs data into the protocol transcript. Use for key material, nonces, associated data, and any protocol input
 // that fits in memory.
 func (p *Protocol) Mix(label string, data []byte) {
-	_, _ = p.h.Write([]byte{opMix})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opMix, label)
 	p.writeLengthEncode(data)
 }
 
@@ -75,8 +73,7 @@ func (p *Protocol) MixStream(label string, r io.Reader) error {
 	var digest [chainValueSize]byte
 	_, _ = kh.Read(digest[:])
 
-	_, _ = p.h.Write([]byte{opMixStream})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opMixStream, label)
 	_, _ = p.h.Write(digest[:]) // fixed H bytes, no length prefix
 	return nil
 }
@@ -117,8 +114,7 @@ func (mw *MixWriter) Branch() *Protocol {
 	_, _ = kh.Read(digest[:])
 
 	p := mw.p.Clone()
-	_, _ = p.h.Write([]byte{opMixStream})
-	p.writeLengthEncode([]byte(mw.label))
+	p.writeOpLabel(opMixStream, mw.label)
 	_, _ = p.h.Write(digest[:]) // fixed H bytes, no length prefix
 	return p
 }
@@ -129,8 +125,7 @@ func (mw *MixWriter) Close() error {
 	var digest [chainValueSize]byte
 	_, _ = mw.kh.Read(digest[:])
 
-	_, _ = mw.p.h.Write([]byte{opMixStream})
-	mw.p.writeLengthEncode([]byte(mw.label))
+	mw.p.writeOpLabel(opMixStream, mw.label)
 	_, _ = mw.p.h.Write(digest[:]) // fixed H bytes, no length prefix
 	return nil
 }
@@ -142,8 +137,7 @@ func (p *Protocol) Fork(label string, values ...[]byte) []*Protocol {
 	n := len(values)
 
 	// Write the common prefix.
-	_, _ = p.h.Write([]byte{opFork})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opFork, label)
 	p.writeLeftEncode(uint64(n))
 
 	// Create clones before writing base ordinal.
@@ -170,8 +164,7 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 		panic("thyrse: Derive output_len must be greater than zero")
 	}
 
-	_, _ = p.h.Write([]byte{opDerive})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opDerive, label)
 	p.writeLeftEncode(uint64(outputLen))
 
 	cv := p.finalize(dsDerive, out)
@@ -182,8 +175,7 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 
 // Ratchet irreversibly advances the protocol state for forward secrecy. No user-visible output is produced.
 func (p *Protocol) Ratchet(label string) {
-	_, _ = p.h.Write([]byte{opRatchet})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opRatchet, label)
 
 	cv := p.finalize(dsRatchet, nil)
 	p.resetChain(opRatchet, cv[:], nil)
@@ -194,8 +186,7 @@ func (p *Protocol) Ratchet(label string) {
 //
 // Confidentiality requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
 func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
-	_, _ = p.h.Write([]byte{opMask})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opMask, label)
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -210,8 +201,7 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 // Unmask decrypts ciphertext encrypted with [Protocol.Mask]. Both sides must have identical transcript state at the
 // point of the Mask or Unmask call.
 func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
-	_, _ = p.h.Write([]byte{opMask})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opMask, label)
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -229,8 +219,7 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 //
 // MaskStream implements [cipher.Stream] and [io.Closer].
 func (p *Protocol) MaskStream(label string) *MaskStream {
-	_, _ = p.h.Write([]byte{opMask})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opMask, label)
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -271,8 +260,7 @@ func (ms *MaskStream) Close() error {
 //
 // UnmaskStream implements [cipher.Stream] and [io.Closer].
 func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
-	_, _ = p.h.Write([]byte{opMask})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opMask, label)
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -313,8 +301,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	ret, out := mem.SliceForAppend(dst, len(plaintext)+TagSize)
 	ciphertext, tag := out[:len(plaintext)], out[len(plaintext):]
 
-	_, _ = p.h.Write([]byte{opSeal})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opSeal, label)
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsSeal, twKey[:])
@@ -341,8 +328,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	ct := sealed[:len(sealed)-TagSize]
 	tt := sealed[len(sealed)-TagSize:]
 
-	_, _ = p.h.Write([]byte{opSeal})
-	p.writeLengthEncode([]byte(label))
+	p.writeOpLabel(opSeal, label)
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsSeal, twKey[:])
@@ -398,21 +384,52 @@ func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	return cv
 }
 
-// resetChain resets the transcript with a CHAIN frame.
+// writeOpLabel writes op || length_encode(label) in a single call to h.Write.
+// All protocol operations start with this preamble.
+func (p *Protocol) writeOpLabel(op byte, label string) {
+	n := len(label)
+	if n < 256 {
+		// Common case: left_encode(n) = [1, n], so frame is op || 1 || n || label.
+		var buf [259]byte // 3 + 256
+		buf[0] = op
+		buf[1] = 1
+		buf[2] = byte(n)
+		copy(buf[3:], label)
+		_, _ = p.h.Write(buf[:3+n])
+	} else {
+		_, _ = p.h.Write([]byte{op})
+		p.writeLengthEncode([]byte(label))
+	}
+}
+
+// resetChain resets the transcript with a CHAIN frame. The chain value is always chainValueSize bytes and the tag, when
+// present, is always treewrap.TagSize bytes.
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset(dsChain)
-	_, _ = p.h.Write([]byte{opChain, originOp})
+
+	// Build the entire CHAIN frame in a single stack buffer:
+	//   opChain || originOp || left_encode(count) || left_encode(len(cv)) || cv
+	//   [|| left_encode(len(tag)) || tag]
+	const prefixLen = 6 // opChain(1) + originOp(1) + left_encode(count)(2) + left_encode(cvLen)(2)
+	var buf [prefixLen + chainValueSize + 2 + 32]byte
+	buf[0] = opChain
+	buf[1] = originOp
+	buf[2] = 1 // left_encode length prefix
+	buf[4] = 1 // left_encode length prefix
+	buf[5] = chainValueSize
+
+	n := prefixLen + chainValueSize
+	copy(buf[prefixLen:], chainValue)
 
 	if len(tag) == 0 {
-		p.writeLeftEncode(1)
+		buf[3] = 1 // count = 1
+		_, _ = p.h.Write(buf[:n])
 	} else {
-		p.writeLeftEncode(2)
-	}
-
-	p.writeLengthEncode(chainValue)
-
-	if len(tag) > 0 {
-		p.writeLengthEncode(tag)
+		buf[3] = 2 // count = 2
+		buf[n] = 1 // left_encode length prefix
+		buf[n+1] = byte(len(tag))
+		copy(buf[n+2:], tag)
+		_, _ = p.h.Write(buf[:n+2+len(tag)])
 	}
 }
 
@@ -439,8 +456,18 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 
 // writeLengthEncode writes length_encode(x) = left_encode(len(x)) || x.
 func (p *Protocol) writeLengthEncode(data []byte) {
-	p.writeLeftEncode(uint64(len(data)))
-	if len(data) > 0 {
+	n := len(data)
+	if n > 0 && n < 128 {
+		// Common case: batch left_encode(len) and data into a single write.
+		var buf [130]byte // 2 + 128
+		buf[0] = 1
+		buf[1] = byte(n)
+		copy(buf[2:], data)
+		_, _ = p.h.Write(buf[:2+n])
+		return
+	}
+	p.writeLeftEncode(uint64(n))
+	if n > 0 {
 		_, _ = p.h.Write(data)
 	}
 }
