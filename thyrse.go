@@ -46,6 +46,12 @@ func New(label string) *Protocol {
 	return &p
 }
 
+// Equal compares the two Protocol instances in constant time, returning 1 if they are equal, 0 if not.
+func (p *Protocol) Equal(other *Protocol) int {
+	return subtle.ConstantTimeCompare([]byte(p.initLabel), []byte(other.initLabel)) &
+		p.h.Equal(&other.h)
+}
+
 func (p *Protocol) String() string {
 	return fmt.Sprintf("Protocol(%s)", p.initLabel)
 }

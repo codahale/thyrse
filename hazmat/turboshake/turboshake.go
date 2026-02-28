@@ -5,6 +5,8 @@
 package turboshake
 
 import (
+	"crypto/subtle"
+
 	"github.com/codahale/thyrse/hazmat/keccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
@@ -74,6 +76,20 @@ func (h *Hasher) Read(p []byte) (int, error) {
 		p = p[r:]
 	}
 	return n, nil
+}
+
+// Equal compares the two Hasher instances in constant time, returning 1 if they are equal, 0 if not.
+func (h *Hasher) Equal(other *Hasher) int {
+	var s int
+	if h.squeezing == other.squeezing {
+		s = 1
+	} else {
+		s = 0
+	}
+	return s &
+		subtle.ConstantTimeCompare(h.s[:], other.s[:]) &
+		subtle.ConstantTimeByteEq(h.ds, other.ds) &
+		subtle.ConstantTimeEq(int32(h.pos), int32(other.pos))
 }
 
 // Sum computes TurboSHAKE128(msg, ds, outLen) and returns the result.
