@@ -5,7 +5,7 @@ type Size struct {
 	N    int
 }
 
-var Sizes []Size = []Size{
+var Sizes = []Size{
 	{"1B", 1},
 	{"64B", 64},
 	{"8KiB", 8 * 1024},
