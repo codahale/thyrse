@@ -428,6 +428,88 @@ func TestMixWriter(t *testing.T) {
 	})
 }
 
+func TestMixWriterBranch(t *testing.T) {
+	data := make([]byte, 100000)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	t.Run("matches MixStream at snapshot point", func(t *testing.T) {
+		// Write partial data, branch, then verify the branch matches MixStream with the same partial data.
+		partial := data[:50000]
+
+		ref := New("test")
+		if err := ref.MixStream("large-data", bytes.NewReader(partial)); err != nil {
+			t.Fatal(err)
+		}
+		want := ref.Derive("output", nil, 32)
+
+		p := New("test")
+		mw := p.MixWriter("large-data")
+		if _, err := mw.Write(partial); err != nil {
+			t.Fatal(err)
+		}
+
+		branch := mw.Branch()
+		got := branch.Derive("output", nil, 32)
+		if !bytes.Equal(got, want) {
+			t.Error("branch output does not match MixStream with same data")
+		}
+	})
+
+	t.Run("original protocol unchanged after branch", func(t *testing.T) {
+		// Branch should not affect the original protocol. Closing the MixWriter and deriving
+		// from the original should match the full MixStream reference.
+		ref := New("test")
+		if err := ref.MixStream("large-data", bytes.NewReader(data)); err != nil {
+			t.Fatal(err)
+		}
+		want := ref.Derive("output", nil, 32)
+
+		p := New("test")
+		mw := p.MixWriter("large-data")
+		if _, err := mw.Write(data[:50000]); err != nil {
+			t.Fatal(err)
+		}
+
+		_ = mw.Branch() // should not affect p or mw
+
+		if _, err := mw.Write(data[50000:]); err != nil {
+			t.Fatal(err)
+		}
+		if err := mw.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		got := p.Derive("output", nil, 32)
+		if !bytes.Equal(got, want) {
+			t.Error("original protocol was affected by Branch")
+		}
+	})
+
+	t.Run("multiple branches are independent", func(t *testing.T) {
+		p := New("test")
+		mw := p.MixWriter("large-data")
+
+		if _, err := mw.Write(data[:25000]); err != nil {
+			t.Fatal(err)
+		}
+		b1 := mw.Branch()
+
+		if _, err := mw.Write(data[25000:50000]); err != nil {
+			t.Fatal(err)
+		}
+		b2 := mw.Branch()
+
+		out1 := b1.Derive("output", nil, 32)
+		out2 := b2.Derive("output", nil, 32)
+
+		if bytes.Equal(out1, out2) {
+			t.Error("branches with different data produced identical output")
+		}
+	})
+}
+
 func TestClone(t *testing.T) {
 	t.Run("independent evolution", func(t *testing.T) {
 		p := New("test")

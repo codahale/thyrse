@@ -107,6 +107,21 @@ func (mw *MixWriter) ReadFrom(r io.Reader) (int64, error) {
 	return mw.kh.ReadFrom(r)
 }
 
+// Branch returns a clone of the associated [Protocol] with the MixStream operation completed using the input
+// accumulated so far. The original Protocol and MixWriter remain unchanged and can continue to accumulate input.
+func (mw *MixWriter) Branch() *Protocol {
+	kh := mw.kh.Clone()
+
+	var digest [chainValueSize]byte
+	_, _ = kh.Read(digest[:])
+
+	p := mw.p.Clone()
+	_, _ = p.h.Write([]byte{opMixStream})
+	p.writeLengthEncode([]byte(mw.label))
+	_, _ = p.h.Write(digest[:]) // fixed H bytes, no length prefix
+	return p
+}
+
 // Close completes the MixStream operation, mixing the accumulated input into the protocol transcript. Close must be
 // called exactly once.
 func (mw *MixWriter) Close() error {
