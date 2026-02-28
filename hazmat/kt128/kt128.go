@@ -205,6 +205,18 @@ func (h *Hasher) Sum(b []byte) []byte {
 	return append(b, out...)
 }
 
+// Clone returns an independent copy of the Hasher. The original and clone evolve independently.
+func (h *Hasher) Clone() *Hasher {
+	return &Hasher{
+		suffix:    h.suffix, // immutable, safe to share
+		buf:       slices.Clone(h.buf),
+		ts:        h.ts,
+		leafCount: h.leafCount,
+		treeMode:  h.treeMode,
+		finalized: h.finalized,
+	}
+}
+
 // Reset resets the Hasher to its initial state, retaining the customization string.
 func (h *Hasher) Reset() {
 	h.buf = h.buf[:0]

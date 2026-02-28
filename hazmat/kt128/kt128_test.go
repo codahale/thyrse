@@ -303,6 +303,51 @@ func TestReadFrom(t *testing.T) {
 	}
 }
 
+func TestClone(t *testing.T) {
+	sizes := []int{0, 1, BlockSize - 1, BlockSize, BlockSize + 1, 83521}
+	for _, size := range sizes {
+		t.Run(fmt.Sprintf("%d", size), func(t *testing.T) {
+			msg := ptn(size)
+
+			// Write all data, clone, verify both produce the same output.
+			h := NewCustom([]byte("test"))
+			_, _ = h.Write(msg)
+
+			clone := h.Clone()
+
+			want := make([]byte, 64)
+			_, _ = h.Read(want)
+
+			got := make([]byte, 64)
+			_, _ = clone.Read(got)
+
+			if !bytes.Equal(got, want) {
+				t.Errorf("size=%d: clone output mismatch", size)
+			}
+		})
+	}
+
+	t.Run("independent after clone", func(t *testing.T) {
+		h := NewCustom([]byte("test"))
+		_, _ = h.Write(ptn(BlockSize + 1))
+
+		clone := h.Clone()
+
+		// Write more data to the original only.
+		_, _ = h.Write([]byte("extra"))
+
+		out1 := make([]byte, 64)
+		_, _ = h.Read(out1)
+
+		out2 := make([]byte, 64)
+		_, _ = clone.Read(out2)
+
+		if bytes.Equal(out1, out2) {
+			t.Error("clone and original produced identical output after diverging")
+		}
+	})
+}
+
 var sizes = slices.Concat(testdata.Sizes, []testdata.Size{
 	{Name: "8KiB+1B", N: BlockSize + 1},
 })
