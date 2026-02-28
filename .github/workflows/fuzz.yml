@@ -1,0 +1,39 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.fuzz.target }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+        fuzz:
+          - { target: FuzzProtocolDivergence, package: . }
+          - { target: FuzzProtocolReversibility, package: . }
+          - { target: FuzzP1600, package: ./hazmat/keccak }
+          - { target: FuzzP1600x2, package: ./hazmat/keccak }
+          - { target: FuzzP1600x4, package: ./hazmat/keccak }
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+        cache: true
+
+    - name: Fuzz
+      run: go test -v -fuzz=${{ matrix.fuzz.target }} -fuzztime=5m ${{ matrix.fuzz.package }}
