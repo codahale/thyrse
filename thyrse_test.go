@@ -379,6 +379,55 @@ func TestMixStream(t *testing.T) {
 	})
 }
 
+func TestMixWriter(t *testing.T) {
+	data := make([]byte, 100000)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	// Reference output via MixStream.
+	ref := New("test")
+	if err := ref.MixStream("large-data", bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+	want := ref.Derive("output", nil, 32)
+
+	t.Run("one-shot write matches MixStream", func(t *testing.T) {
+		p := New("test")
+		mw := p.MixWriter("large-data")
+		if _, err := mw.Write(data); err != nil {
+			t.Fatal(err)
+		}
+		if err := mw.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		got := p.Derive("output", nil, 32)
+		if !bytes.Equal(got, want) {
+			t.Error("one-shot write: transcript mismatch")
+		}
+	})
+
+	t.Run("incremental writes match MixStream", func(t *testing.T) {
+		p := New("test")
+		mw := p.MixWriter("large-data")
+		for i := 0; i < len(data); i += 1000 {
+			end := min(i+1000, len(data))
+			if _, err := mw.Write(data[i:end]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := mw.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		got := p.Derive("output", nil, 32)
+		if !bytes.Equal(got, want) {
+			t.Error("incremental writes: transcript mismatch")
+		}
+	})
+}
+
 func TestClone(t *testing.T) {
 	t.Run("independent evolution", func(t *testing.T) {
 		p := New("test")

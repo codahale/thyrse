@@ -133,6 +133,22 @@ func BenchmarkMixStream(b *testing.B) {
 	}
 }
 
+func BenchmarkMixWriter(b *testing.B) {
+	for _, size := range sizes {
+		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
+			data := make([]byte, size)
+			b.SetBytes(int64(size))
+			b.ReportAllocs()
+			for b.Loop() {
+				mw := p.MixWriter("data")
+				_, _ = mw.ReadFrom(bytes.NewReader(data))
+				_ = mw.Close()
+			}
+		})
+	}
+}
+
 func BenchmarkRatchet(b *testing.B) {
 	p := New("bench")
 	b.ReportAllocs()

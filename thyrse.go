@@ -75,6 +75,47 @@ func (p *Protocol) MixStream(label string, r io.Reader) error {
 	return nil
 }
 
+// MixWriter returns a [MixWriter] for incrementally supplying the input of a MixStream operation. Write data to it in
+// any number of calls, then Close it to complete the operation. To simultaneously route the data to another
+// destination, wrap both in an [io.MultiWriter].
+func (p *Protocol) MixWriter(label string) *MixWriter {
+	return &MixWriter{
+		p:     p,
+		label: label,
+		kh:    kt128.NewCustom([]byte(p.initLabel)),
+	}
+}
+
+// MixWriter incrementally accumulates the input of a MixStream operation. Call [MixWriter.Close] to complete the
+// operation on the associated [Protocol].
+type MixWriter struct {
+	p     *Protocol
+	label string
+	kh    *kt128.Hasher
+}
+
+// Write adds p to the MixStream input.
+func (mw *MixWriter) Write(p []byte) (int, error) {
+	return mw.kh.Write(p)
+}
+
+// ReadFrom adds all bytes read from r to the MixStream input.
+func (mw *MixWriter) ReadFrom(r io.Reader) (int64, error) {
+	return mw.kh.ReadFrom(r)
+}
+
+// Close completes the MixStream operation, mixing the accumulated input into the protocol transcript. Close must be
+// called exactly once.
+func (mw *MixWriter) Close() error {
+	var digest [chainValueSize]byte
+	_, _ = mw.kh.Read(digest[:])
+
+	_, _ = mw.p.h.Write([]byte{opMixStream})
+	mw.p.writeLengthEncode([]byte(mw.label))
+	_, _ = mw.p.h.Write(digest[:]) // fixed H bytes, no length prefix
+	return nil
+}
+
 // Fork clones the protocol state into N independent branches and modifies the base. The base receives ordinal 0 with an
 // empty value. Each clone receives ordinals 1 through N with the corresponding value. Callers must ensure clone values
 // are distinct from each other.
