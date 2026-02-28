@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/codahale/thyrse/hazmat/kt128"
 	"github.com/codahale/thyrse/schemes/basic/digest"
 )
 
@@ -25,7 +26,7 @@ func TestDigest_Size(t *testing.T) {
 
 func TestDigest_BlockSize(t *testing.T) {
 	h := digest.New("test")
-	if got, want := h.BlockSize(), 94; got != want {
+	if got, want := h.BlockSize(), kt128.BlockSize; got != want {
 		t.Errorf("BlockSize() = %d, want %d", got, want)
 	}
 }
