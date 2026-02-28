@@ -1,10 +1,11 @@
-// Package digest provides an implementation of a message digest (hash) using the thyrse protocol.
+// Package digest provides an implementation of a message digest (hash) using the Thyrse protocol.
 package digest
 
 import (
 	"hash"
 
 	"github.com/codahale/thyrse"
+	"github.com/codahale/thyrse/hazmat/kt128"
 )
 
 const (
@@ -69,7 +70,7 @@ func (d *digest) Size() int {
 }
 
 func (d *digest) BlockSize() int {
-	return 94 // thyrse rate (752 bits)
+	return kt128.BlockSize
 }
 
 var _ hash.Hash = (*digest)(nil)
