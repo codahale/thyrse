@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/gtank/ristretto255 v0.2.0
 	github.com/klauspost/cpuid/v2 v2.3.0
+	github.com/trailofbits/go-fuzz-utils v0.0.0-20250830184917-b61e672bc9ed
 )
 
 require (
