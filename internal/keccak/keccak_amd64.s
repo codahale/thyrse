@@ -1,0 +1,277 @@
+// Copyright 2022 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+//go:build !purego
+
+#define KECCAK_ROUND(S, D, RC) \
+	/* Prepare round */ \
+	RORXQ $63, BP, BX; \
+	MOVQ 16(S), R12; \
+	XORQ 56(S), DX; \
+	XORQ R15, BX; \
+	XORQ 96(S), R12; \
+	XORQ 136(S), DX; \
+	XORQ DX, R12; \
+	RORXQ $63, R12, CX; \
+	MOVQ 24(S), R13; \
+	XORQ 64(S), R8; \
+	XORQ SI, CX; \
+	XORQ 104(S), R13; \
+	XORQ 144(S), R8; \
+	XORQ R8, R13; \
+	RORXQ $63, R13, DX; \
+	RORXQ $63, R15, R8; \
+	XORQ BP, DX; \
+	XORQ R12, R8; \
+	RORXQ $63, SI, R9; \
+	\
+	/* Result b */ \
+	MOVQ (S), R10; \
+	MOVQ 48(S), R11; \
+	XORQ R13, R9; \
+	MOVQ 96(S), R12; \
+	MOVQ 144(S), R13; \
+	MOVQ 192(S), R14; \
+	XORQ CX, R11; \
+	ROLQ $0x2c, R11; \
+	XORQ DX, R12; \
+	XORQ BX, R10; \
+	ROLQ $0x2b, R12; \
+	MOVQ R11, SI; \
+	MOVQ RC, AX; \
+	ORQ  R12, SI; \
+	XORQ R10, AX; \
+	XORQ AX, SI; \
+	MOVQ SI, (D); \
+	XORQ R9, R14; \
+	ROLQ $0x0e, R14; \
+	MOVQ R10, R15; \
+	ANDQ R11, R15; \
+	XORQ R14, R15; \
+	MOVQ R15, 32(D); \
+	XORQ R8, R13; \
+	ROLQ $0x15, R13; \
+	MOVQ R13, AX; \
+	ANDQ R14, AX; \
+	XORQ R12, AX; \
+	MOVQ AX, 16(D); \
+	NOTQ R12; \
+	ORQ  R10, R14; \
+	ORQ  R13, R12; \
+	XORQ R13, R14; \
+	XORQ R11, R12; \
+	MOVQ R14, 24(D); \
+	MOVQ R12, 8(D); \
+	MOVQ R12, BP; \
+	\
+	/* Result g */ \
+	MOVQ 72(S), R11; \
+	XORQ R9, R11; \
+	MOVQ 80(S), R12; \
+	ROLQ $0x14, R11; \
+	XORQ BX, R12; \
+	ROLQ $0x03, R12; \
+	MOVQ 24(S), R10; \
+	MOVQ R11, AX; \
+	ORQ  R12, AX; \
+	XORQ R8, R10; \
+	MOVQ 128(S), R13; \
+	MOVQ 176(S), R14; \
+	ROLQ $0x1c, R10; \
+	XORQ R10, AX; \
+	MOVQ AX, 40(D); \
+	XORQ AX, SI; \
+	XORQ CX, R13; \
+	ROLQ $0x2d, R13; \
+	MOVQ R12, AX; \
+	ANDQ R13, AX; \
+	XORQ R11, AX; \
+	MOVQ AX, 48(D); \
+	XORQ AX, BP; \
+	XORQ DX, R14; \
+	ROLQ $0x3d, R14; \
+	MOVQ R14, AX; \
+	ORQ  R10, AX; \
+	XORQ R13, AX; \
+	MOVQ AX, 64(D); \
+	ANDQ R11, R10; \
+	XORQ R14, R10; \
+	MOVQ R10, 72(D); \
+	NOTQ R14; \
+	XORQ R10, R15; \
+	ORQ  R14, R13; \
+	XORQ R12, R13; \
+	MOVQ R13, 56(D); \
+	\
+	/* Result k */ \
+	MOVQ 8(S), R10; \
+	MOVQ 56(S), R11; \
+	MOVQ 104(S), R12; \
+	MOVQ 152(S), R13; \
+	MOVQ 160(S), R14; \
+	XORQ DX, R11; \
+	ROLQ $0x06, R11; \
+	XORQ R8, R12; \
+	ROLQ $0x19, R12; \
+	MOVQ R11, AX; \
+	ORQ  R12, AX; \
+	XORQ CX, R10; \
+	ROLQ $0x01, R10; \
+	XORQ R10, AX; \
+	MOVQ AX, 80(D); \
+	XORQ AX, SI; \
+	XORQ R9, R13; \
+	ROLQ $0x08, R13; \
+	MOVQ R12, AX; \
+	ANDQ R13, AX; \
+	XORQ R11, AX; \
+	MOVQ AX, 88(D); \
+	XORQ AX, BP; \
+	XORQ BX, R14; \
+	ROLQ $0x12, R14; \
+	ANDNQ R14, R13, AX; \
+	XORQ R12, AX; \
+	MOVQ AX, 96(D); \
+	MOVQ R14, AX; \
+	ORQ  R10, AX; \
+	XORQ R13, AX; \
+	NOTQ AX; \
+	MOVQ AX, 104(D); \
+	ANDQ R11, R10; \
+	XORQ R14, R10; \
+	MOVQ R10, 112(D); \
+	XORQ R10, R15; \
+	\
+	/* Result m */ \
+	MOVQ 40(S), R11; \
+	XORQ BX, R11; \
+	MOVQ 88(S), R12; \
+	ROLQ $0x24, R11; \
+	XORQ CX, R12; \
+	MOVQ 32(S), R10; \
+	ROLQ $0x0a, R12; \
+	MOVQ R11, AX; \
+	MOVQ 136(S), R13; \
+	ANDQ R12, AX; \
+	XORQ R9, R10; \
+	MOVQ 184(S), R14; \
+	ROLQ $0x1b, R10; \
+	XORQ R10, AX; \
+	MOVQ AX, 120(D); \
+	XORQ AX, SI; \
+	XORQ DX, R13; \
+	ROLQ $0x0f, R13; \
+	MOVQ R12, AX; \
+	ORQ  R13, AX; \
+	XORQ R11, AX; \
+	MOVQ AX, 128(D); \
+	XORQ AX, BP; \
+	XORQ R8, R14; \
+	ROLQ $0x38, R14; \
+	NOTQ R13; \
+	MOVQ R13, AX; \
+	ORQ  R14, AX; \
+	XORQ R12, AX; \
+	MOVQ AX, 136(D); \
+	ORQ  R10, R11; \
+	XORQ R14, R11; \
+	MOVQ R11, 152(D); \
+	ANDQ R10, R14; \
+	XORQ R13, R14; \
+	MOVQ R14, 144(D); \
+	XORQ R11, R15; \
+	\
+	/* Result s */ \
+	MOVQ 16(S), R10; \
+	MOVQ 64(S), R11; \
+	MOVQ 112(S), R12; \
+	XORQ DX, R10; \
+	MOVQ 120(S), R13; \
+	ROLQ $0x3e, R10; \
+	XORQ R8, R11; \
+	MOVQ 168(S), R14; \
+	ROLQ $0x37, R11; \
+	XORQ R9, R12; \
+	MOVQ R10, R9; \
+	XORQ CX, R14; \
+	ROLQ $0x02, R14; \
+	ANDQ R11, R9; \
+	XORQ R14, R9; \
+	MOVQ R9, 192(D); \
+	ROLQ $0x27, R12; \
+	XORQ R9, R15; \
+	XORQ BX, R13; \
+	ANDNQ R12, R11, BX; \
+	XORQ R10, BX; \
+	MOVQ BX, 160(D); \
+	XORQ BX, SI; \
+	ROLQ $0x29, R13; \
+	MOVQ R12, CX; \
+	ORQ  R13, CX; \
+	XORQ R11, CX; \
+	NOTQ CX; \
+	MOVQ CX, 168(D); \
+	XORQ CX, BP; \
+	MOVQ R13, DX; \
+	MOVQ R14, R8; \
+	ANDQ R14, DX; \
+	ORQ  R10, R8; \
+	XORQ R12, DX; \
+	XORQ R13, R8; \
+	MOVQ DX, 176(D); \
+	MOVQ R8, 184(D)
+
+
+// func p1600(a *[200]byte)
+TEXT ·p1600(SB), $200-8
+	MOVQ a+0(FP), DI
+
+	// Convert the user state into an internal state
+	NOTQ 8(DI)
+	NOTQ 16(DI)
+	NOTQ 64(DI)
+	NOTQ 96(DI)
+	NOTQ 136(DI)
+	NOTQ 160(DI)
+
+	// Execute the KeccakF permutation
+	MOVQ (DI), SI
+	MOVQ 8(DI), BP
+	MOVQ 32(DI), R15
+	XORQ 40(DI), SI
+	XORQ 48(DI), BP
+	XORQ 72(DI), R15
+	XORQ 80(DI), SI
+	XORQ 88(DI), BP
+	XORQ 112(DI), R15
+	XORQ 120(DI), SI
+	XORQ 128(DI), BP
+	XORQ 152(DI), R15
+	XORQ 160(DI), SI
+	XORQ 168(DI), BP
+	MOVQ 176(DI), DX
+	MOVQ 184(DI), R8
+	XORQ 192(DI), R15
+
+	KECCAK_ROUND(DI, SP, $0x000000008000808b)
+	KECCAK_ROUND(SP, DI, $0x800000000000008b)
+	KECCAK_ROUND(DI, SP, $0x8000000000008089)
+	KECCAK_ROUND(SP, DI, $0x8000000000008003)
+	KECCAK_ROUND(DI, SP, $0x8000000000008002)
+	KECCAK_ROUND(SP, DI, $0x8000000000000080)
+	KECCAK_ROUND(DI, SP, $0x000000000000800a)
+	KECCAK_ROUND(SP, DI, $0x800000008000000a)
+	KECCAK_ROUND(DI, SP, $0x8000000080008081)
+	KECCAK_ROUND(SP, DI, $0x8000000000008080)
+	KECCAK_ROUND(DI, SP, $0x0000000080000001)
+	KECCAK_ROUND(SP, DI, $0x8000000080008008)
+
+	// Revert the internal state to the user state
+	NOTQ 8(DI)
+	NOTQ 16(DI)
+	NOTQ 64(DI)
+	NOTQ 96(DI)
+	NOTQ 136(DI)
+	NOTQ 160(DI)
+	RET

@@ -1,0 +1,75 @@
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**.go'
+      - '**.mod'
+      - '**.s'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**.go'
+      - '**.mod'
+      - '**.s'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, ${{ matrix.config.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - ubuntu-24.04
+        - ubuntu-24.04-arm
+        config:
+        - { name: "Standard", tags: "", flags: "-race" }
+        - { name: "Pure Go",  tags: "purego", flags: "" }
+        exclude:
+          - os: ubuntu-24.04-arm
+            config: { name: "Pure Go", tags: "purego", flags: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+        cache: true
+
+    - name: Build
+      run: go build -v -tags "${{ matrix.config.tags }}" ./...
+
+    - name: Test
+      run: go test -v ${{ matrix.config.flags }} -tags "${{ matrix.config.tags }}" ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+        cache: false
+
+    - name: go fmt
+      run: go fmt ./... && git diff --exit-code
+
+    - name: go vet
+      run: go vet ./...
+
+    - name: go fix
+      run: go fix ./... && git diff --exit-code
+
+    - name: go mod tidy
+      run: go mod tidy && git diff --exit-code
