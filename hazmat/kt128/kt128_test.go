@@ -277,6 +277,29 @@ func TestSumNonDestructive(t *testing.T) {
 	}
 }
 
+func TestReadFrom(t *testing.T) {
+	sizes := []int{0, 1, BlockSize - 1, BlockSize, BlockSize + 1, 83521, 1419857}
+	for _, size := range sizes {
+		t.Run(fmt.Sprintf("%d", size), func(t *testing.T) {
+			msg := ptn(size)
+
+			h1 := New()
+			_, _ = h1.Write(msg)
+			want := make([]byte, 64)
+			_, _ = h1.Read(want)
+
+			h2 := New()
+			_, _ = h2.ReadFrom(bytes.NewReader(msg))
+			got := make([]byte, 64)
+			_, _ = h2.Read(got)
+
+			if !bytes.Equal(got, want) {
+				t.Errorf("size=%d: ReadFrom mismatch", size)
+			}
+		})
+	}
+}
+
 var benchSizes = []int{
 	64,               // tiny, single-node
 	BlockSize,        // exactly one chunk, single-node
@@ -320,6 +343,23 @@ func BenchmarkWriteStreaming(b *testing.B) {
 					end := min(i+BlockSize, len(msg))
 					_, _ = h.Write(msg[i:end])
 				}
+				_, _ = h.Read(out)
+			}
+		})
+	}
+}
+
+func BenchmarkReadFrom(b *testing.B) {
+	for _, size := range benchSizes {
+		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
+			msg := ptn(size)
+			out := make([]byte, 32)
+			b.SetBytes(int64(size))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				h := New()
+				_, _ = h.ReadFrom(bytes.NewReader(msg))
 				_, _ = h.Read(out)
 			}
 		})
