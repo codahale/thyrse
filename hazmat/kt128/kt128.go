@@ -23,16 +23,23 @@ const (
 
 // Hasher is an incremental KT128 instance that implements hash.Hash and io.Reader.
 type Hasher struct {
-	suffix    []byte             // C || lengthEncode(|C|), precomputed at construction, immutable
-	buf       []byte             // buffered message/leaf data
-	ts        *turboshake.Hasher // final-node hasher, nil until tree mode entered or finalized
-	leafCount int                // total leaf CVs written to ts so far
-	treeMode  bool               // true once S_0 has been flushed to ts
+	suffix    []byte            // C || lengthEncode(|C|), precomputed at construction, immutable
+	buf       []byte            // buffered message/leaf data
+	ts        turboshake.Hasher // final-node hasher
+	leafCount int               // total leaf CVs written to ts so far
+	treeMode  bool              // true once S_0 has been flushed to ts
+	finalized bool              // true once finalize has completed
 }
+
+// emptySuffix is the suffix for empty customization: lengthEncode(0) = [0x00].
+var emptySuffix = []byte{0x00}
 
 // New returns a new Hasher with empty customization.
 func New() *Hasher {
-	return &Hasher{suffix: lengthEncode(0)}
+	return &Hasher{
+		suffix: emptySuffix,
+		buf:    make([]byte, 0, BlockSize+1+len(emptySuffix)),
+	}
 }
 
 // NewCustom returns a new Hasher with the given customization string.
@@ -40,7 +47,10 @@ func NewCustom(c []byte) *Hasher {
 	suffix := make([]byte, 0, len(c)+9)
 	suffix = append(suffix, c...)
 	suffix = append(suffix, lengthEncode(uint64(len(c)))...)
-	return &Hasher{suffix: suffix}
+	return &Hasher{
+		suffix: suffix,
+		buf:    make([]byte, 0, BlockSize+1+len(suffix)),
+	}
 }
 
 // Write absorbs message bytes. It must not be called after Read or Sum.
@@ -59,7 +69,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		// Enter tree mode: flush S_0 from buf + start of p.
 		h.buf = append(h.buf, p[:need]...)
 		p = p[need:]
-		h.ts = new(turboshake.New(0x06))
+		h.ts = turboshake.New(0x06)
 		_, _ = h.ts.Write(h.buf[:BlockSize])
 		_, _ = h.ts.Write(kt12Marker[:])
 		// Keep the one overflow byte.
@@ -152,11 +162,10 @@ func (h *Hasher) Sum(b []byte) []byte {
 	clone := &Hasher{
 		suffix:    h.suffix,
 		buf:       slices.Clone(h.buf),
+		ts:        h.ts,
 		leafCount: h.leafCount,
 		treeMode:  h.treeMode,
-	}
-	if h.ts != nil {
-		clone.ts = new(*h.ts)
+		finalized: h.finalized,
 	}
 	clone.finalize()
 
@@ -168,9 +177,10 @@ func (h *Hasher) Sum(b []byte) []byte {
 // Reset resets the Hasher to its initial state, retaining the customization string.
 func (h *Hasher) Reset() {
 	h.buf = h.buf[:0]
-	h.ts = nil
+	h.ts.Reset(0)
 	h.leafCount = 0
 	h.treeMode = false
+	h.finalized = false
 }
 
 // Size returns the default output size in bytes.
@@ -181,10 +191,10 @@ func (h *Hasher) BlockSize() int { return BlockSize }
 
 // finalize appends the suffix and computes the final hash.
 func (h *Hasher) finalize() {
-	if h.ts != nil && !h.treeMode {
-		// Already finalized (single-node path was taken previously via Sum clone).
+	if h.finalized {
 		return
 	}
+	h.finalized = true
 
 	// Append suffix to buffered data.
 	h.buf = append(h.buf, h.suffix...)
@@ -192,13 +202,13 @@ func (h *Hasher) finalize() {
 	if !h.treeMode {
 		if len(h.buf) <= BlockSize {
 			// Single-node: TurboSHAKE128(S, 0x07, L).
-			h.ts = new(turboshake.New(0x07))
+			h.ts = turboshake.New(0x07)
 			_, _ = h.ts.Write(h.buf)
 			return
 		}
 
 		// Enter tree mode: flush S_0.
-		h.ts = new(turboshake.New(0x06))
+		h.ts = turboshake.New(0x06)
 		_, _ = h.ts.Write(h.buf[:BlockSize])
 		_, _ = h.ts.Write(kt12Marker[:])
 		remaining := copy(h.buf, h.buf[BlockSize:])
