@@ -67,6 +67,11 @@ func (h *Hasher) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// Clone returns a full clone of the receiver.
+func (h *Hasher) Clone() *Hasher {
+	return new(*h)
+}
+
 // Sum computes TurboSHAKE128(msg, ds, outLen) and returns the result.
 // The domain separation byte ds must be in the range [0x01, 0x7F].
 func Sum(msg []byte, ds byte, outLen int) []byte {
