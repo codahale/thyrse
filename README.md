@@ -1,10 +1,6 @@
-<span style="display:block; float: left; margin-right: 1em;">
+# Thyrse
 
 ![A diagram of a botanical thyrse.](thyrse.png)
-
-</span>
-
-# Thyrse
 
 Inspired by [STROBE], [Noise Protocol], and [Xoodyak], Thyrse is a next-generation cryptographic framework based on the
 $\text{Keccak-}f[1600, 12]$ permutation, providing a unified interface for unkeyed and symmetric-key operations. Thyrse
