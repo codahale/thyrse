@@ -1,15 +1,13 @@
-// Package treewrap implements TreeWrap, a tree-parallel authenticated encryption
-// algorithm that uses a KangarooTwelve-like topology to enable SIMD acceleration
-// on large inputs.
+// Package treewrap implements TreeWrap, a tree-parallel authenticated encryption algorithm that uses a
+// KangarooTwelve-like topology to enable SIMD acceleration on large inputs.
 //
-// Each leaf operates as an independent SpongeWrap instance using Keccak-p[1600,12],
-// and leaf chain values are accumulated into a single authentication tag via
-// TurboSHAKE128. All leaf operations are independent and execute in parallel
-// using SIMD-accelerated permutations.
+// Each leaf operates as an independent SpongeWrap instance using Keccak-p[1600,12], and leaf chain values are
+// accumulated into a single authentication tag via TurboSHAKE128. All leaf operations are independent and executed in
+// parallel using SIMD-accelerated permutations.
 //
-// TreeWrap is a pure function with no internal state. It is intended as a building
-// block for duplex-based protocols, where key uniqueness and associated data are
-// managed by the caller. The key MUST be unique per invocation.
+// TreeWrap provides both stateful incremental types ([Encryptor] and [Decryptor]) and stateless convenience functions
+// ([EncryptAndMAC] and [DecryptAndMAC]). It is intended as a building block for duplex-based protocols, where key
+// uniqueness and associated data are managed by the caller. The key MUST be unique per invocation.
 package treewrap
 
 import (
@@ -36,96 +34,308 @@ const (
 	tagDS     = 0x61                // Domain separation byte for tag computation.
 )
 
+// Encryptor incrementally encrypts data and computes the authentication tag. It implements a streaming interface where
+// each call to [Encryptor.XORKeyStream] immediately produces ciphertext. Call [Encryptor.Finalize] after all data has
+// been processed to obtain the authentication tag.
+type Encryptor struct {
+	key      [KeySize]byte
+	s        [200]byte
+	h        turboshake.Hasher
+	cvBuf    [4 * cvSize]byte
+	cvCount  int
+	idx      int
+	pos      int
+	chunkOff int
+}
+
+// NewEncryptor returns a new Encryptor initialized with the given key.
+func NewEncryptor(key *[KeySize]byte) Encryptor {
+	return Encryptor{
+		key: *key,
+		h:   turboshake.New(tagDS),
+	}
+}
+
+// XORKeyStream encrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
+func (e *Encryptor) XORKeyStream(dst, src []byte) {
+	if len(src) == 0 {
+		return
+	}
+
+	// Continue an in-progress partial chunk.
+	if e.chunkOff > 0 {
+		n := min(len(src), ChunkSize-e.chunkOff)
+		e.encryptPartial(dst[:n], src[:n])
+		dst = dst[n:]
+		src = src[n:]
+
+		if e.chunkOff == ChunkSize {
+			e.finalizeCV()
+		}
+	}
+
+	// Process complete chunks via SIMD cascade.
+	if nComplete := len(src) / ChunkSize; nComplete > 0 {
+		e.encryptComplete(dst[:nComplete*ChunkSize], src[:nComplete*ChunkSize], nComplete)
+		dst = dst[nComplete*ChunkSize:]
+		src = src[nComplete*ChunkSize:]
+	}
+
+	// Start a new partial chunk with remaining bytes.
+	if len(src) > 0 {
+		e.s = [200]byte{}
+		leafPad(&e.s, &e.key, uint64(e.idx))
+		keccak.P1600(&e.s)
+		e.pos = 0
+		e.chunkOff = 0
+		e.encryptPartial(dst[:len(src)], src)
+	}
+}
+
+// encryptPartial processes bytes through the current chunk's sponge state.
+func (e *Encryptor) encryptPartial(dst, src []byte) {
+	for len(src) > 0 {
+		if e.pos == blockRate {
+			e.s[blockRate] ^= leafDS
+			e.s[turboshake.Rate-1] ^= 0x80
+			keccak.P1600(&e.s)
+			e.pos = 0
+		}
+
+		n := min(blockRate-e.pos, len(src))
+		mem.XORAndCopy(dst[:n], src[:n], e.s[e.pos:e.pos+n])
+		e.pos += n
+		e.chunkOff += n
+		dst = dst[n:]
+		src = src[n:]
+	}
+}
+
+// encryptComplete processes nFlush complete chunks via the SIMD cascade.
+func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
+	idx := 0
+
+	for idx+4 <= nFlush {
+		off := idx * ChunkSize
+		encryptX4(&e.key, uint64(e.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], e.cvBuf[:])
+		feedCVs(&e.h, e.cvBuf[:4*cvSize], &e.cvCount)
+		e.idx += 4
+		idx += 4
+	}
+
+	for idx+2 <= nFlush {
+		off := idx * ChunkSize
+		encryptX2(&e.key, uint64(e.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], e.cvBuf[:2*cvSize])
+		feedCVs(&e.h, e.cvBuf[:2*cvSize], &e.cvCount)
+		e.idx += 2
+		idx += 2
+	}
+
+	for idx < nFlush {
+		off := idx * ChunkSize
+		encryptX1(&e.key, uint64(e.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], e.cvBuf[:cvSize])
+		feedCVs(&e.h, e.cvBuf[:cvSize], &e.cvCount)
+		e.idx++
+		idx++
+	}
+}
+
+// finalizeCV squeezes the chain value from the current chunk's sponge state.
+func (e *Encryptor) finalizeCV() {
+	e.s[e.pos] ^= leafDS
+	e.s[turboshake.Rate-1] ^= 0x80
+	keccak.P1600(&e.s)
+	copy(e.cvBuf[:cvSize], e.s[:cvSize])
+	feedCVs(&e.h, e.cvBuf[:cvSize], &e.cvCount)
+	e.idx++
+	e.chunkOff = 0
+	e.pos = 0
+}
+
+// Finalize returns the authentication tag. It must be called exactly once after all data has been processed via
+// [Encryptor.XORKeyStream].
+func (e *Encryptor) Finalize() [TagSize]byte {
+	if e.chunkOff == 0 && e.idx == 0 {
+		// Empty input: process one empty chunk.
+		encryptX1(&e.key, 0, nil, nil, e.cvBuf[:cvSize])
+		feedCVs(&e.h, e.cvBuf[:cvSize], &e.cvCount)
+		return finalizeTag(&e.h, 1)
+	}
+
+	if e.chunkOff > 0 {
+		e.finalizeCV()
+	}
+
+	return finalizeTag(&e.h, e.idx)
+}
+
+// Decryptor incrementally decrypts data and computes the authentication tag. It implements a streaming interface where
+// each call to [Decryptor.XORKeyStream] immediately produces plaintext. Call [Decryptor.Finalize] after all data has
+// been processed to obtain the expected authentication tag. The caller MUST verify the tag using constant-time
+// comparison before using the plaintext.
+type Decryptor struct {
+	key      [KeySize]byte
+	s        [200]byte
+	h        turboshake.Hasher
+	cvBuf    [4 * cvSize]byte
+	cvCount  int
+	idx      int
+	pos      int
+	chunkOff int
+}
+
+// NewDecryptor returns a new Decryptor initialized with the given key.
+func NewDecryptor(key *[KeySize]byte) Decryptor {
+	return Decryptor{
+		key: *key,
+		h:   turboshake.New(tagDS),
+	}
+}
+
+// XORKeyStream decrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
+func (d *Decryptor) XORKeyStream(dst, src []byte) {
+	if len(src) == 0 {
+		return
+	}
+
+	// Continue an in-progress partial chunk.
+	if d.chunkOff > 0 {
+		n := min(len(src), ChunkSize-d.chunkOff)
+		d.decryptPartial(dst[:n], src[:n])
+		dst = dst[n:]
+		src = src[n:]
+
+		if d.chunkOff == ChunkSize {
+			d.finalizeCV()
+		}
+	}
+
+	// Process complete chunks via SIMD cascade.
+	if nComplete := len(src) / ChunkSize; nComplete > 0 {
+		d.decryptComplete(dst[:nComplete*ChunkSize], src[:nComplete*ChunkSize], nComplete)
+		dst = dst[nComplete*ChunkSize:]
+		src = src[nComplete*ChunkSize:]
+	}
+
+	// Start a new partial chunk with remaining bytes.
+	if len(src) > 0 {
+		d.s = [200]byte{}
+		leafPad(&d.s, &d.key, uint64(d.idx))
+		keccak.P1600(&d.s)
+		d.pos = 0
+		d.chunkOff = 0
+		d.decryptPartial(dst[:len(src)], src)
+	}
+}
+
+// decryptPartial processes bytes through the current chunk's sponge state.
+func (d *Decryptor) decryptPartial(dst, src []byte) {
+	for len(src) > 0 {
+		if d.pos == blockRate {
+			d.s[blockRate] ^= leafDS
+			d.s[turboshake.Rate-1] ^= 0x80
+			keccak.P1600(&d.s)
+			d.pos = 0
+		}
+
+		n := min(blockRate-d.pos, len(src))
+		mem.XORAndReplace(dst[:n], src[:n], d.s[d.pos:d.pos+n])
+		d.pos += n
+		d.chunkOff += n
+		dst = dst[n:]
+		src = src[n:]
+	}
+}
+
+// decryptComplete processes nFlush complete chunks via the SIMD cascade.
+func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
+	idx := 0
+
+	for idx+4 <= nFlush {
+		off := idx * ChunkSize
+		decryptX4(&d.key, uint64(d.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], d.cvBuf[:])
+		feedCVs(&d.h, d.cvBuf[:4*cvSize], &d.cvCount)
+		d.idx += 4
+		idx += 4
+	}
+
+	for idx+2 <= nFlush {
+		off := idx * ChunkSize
+		decryptX2(&d.key, uint64(d.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], d.cvBuf[:2*cvSize])
+		feedCVs(&d.h, d.cvBuf[:2*cvSize], &d.cvCount)
+		d.idx += 2
+		idx += 2
+	}
+
+	for idx < nFlush {
+		off := idx * ChunkSize
+		decryptX1(&d.key, uint64(d.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], d.cvBuf[:cvSize])
+		feedCVs(&d.h, d.cvBuf[:cvSize], &d.cvCount)
+		d.idx++
+		idx++
+	}
+}
+
+// finalizeCV squeezes the chain value from the current chunk's sponge state.
+func (d *Decryptor) finalizeCV() {
+	d.s[d.pos] ^= leafDS
+	d.s[turboshake.Rate-1] ^= 0x80
+	keccak.P1600(&d.s)
+	copy(d.cvBuf[:cvSize], d.s[:cvSize])
+	feedCVs(&d.h, d.cvBuf[:cvSize], &d.cvCount)
+	d.idx++
+	d.chunkOff = 0
+	d.pos = 0
+}
+
+// Finalize returns the expected authentication tag. It must be called exactly once after all data has been processed
+// via [Decryptor.XORKeyStream]. The caller MUST verify the tag using constant-time comparison before using the
+// plaintext.
+func (d *Decryptor) Finalize() [TagSize]byte {
+	if d.chunkOff == 0 && d.idx == 0 {
+		// Empty input: process one empty chunk.
+		decryptX1(&d.key, 0, nil, nil, d.cvBuf[:cvSize])
+		feedCVs(&d.h, d.cvBuf[:cvSize], &d.cvCount)
+		return finalizeTag(&d.h, 1)
+	}
+
+	if d.chunkOff > 0 {
+		d.finalizeCV()
+	}
+
+	return finalizeTag(&d.h, d.idx)
+}
+
 // EncryptAndMAC encrypts plaintext, appends the ciphertext to dst, and returns the resulting slice along with a
 // TagSize-byte authentication tag. The key MUST be unique per invocation.
 //
 // To reuse plaintext's storage for the encrypted output, use plaintext[:0] as dst. Otherwise, the remaining capacity
 // of dst must not overlap plaintext.
 func EncryptAndMAC(dst []byte, key *[KeySize]byte, plaintext []byte) ([]byte, [TagSize]byte) {
-	n := max(1, (len(plaintext)+ChunkSize-1)/ChunkSize)
-
-	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
-	h := turboshake.New(tagDS)
-	var cvBuf [4 * cvSize]byte
-	cvCount := 0
-
-	fullChunks := len(plaintext) / ChunkSize
-	idx := 0
-
-	for idx+4 <= fullChunks {
-		off := idx * ChunkSize
-		encryptX4(key, uint64(idx), plaintext[off:off+4*ChunkSize], ciphertext[off:off+4*ChunkSize], cvBuf[:])
-		feedCVs(&h, cvBuf[:4*cvSize], &cvCount)
-		idx += 4
-	}
-
-	for idx+2 <= fullChunks {
-		off := idx * ChunkSize
-		encryptX2(key, uint64(idx), plaintext[off:off+2*ChunkSize], ciphertext[off:off+2*ChunkSize], cvBuf[:2*cvSize])
-		feedCVs(&h, cvBuf[:2*cvSize], &cvCount)
-		idx += 2
-	}
-
-	for idx < n {
-		off := idx * ChunkSize
-		end := min(off+ChunkSize, len(plaintext))
-		encryptX1(key, uint64(idx), plaintext[off:end], ciphertext[off:end], cvBuf[:cvSize])
-		feedCVs(&h, cvBuf[:cvSize], &cvCount)
-		idx++
-	}
-
-	return ret, finalizeTag(&h, n)
+	ret, ct := mem.SliceForAppend(dst, len(plaintext))
+	e := NewEncryptor(key)
+	e.XORKeyStream(ct, plaintext)
+	return ret, e.Finalize()
 }
 
 // DecryptAndMAC decrypts ciphertext, appends the plaintext to dst, and returns the resulting slice along with the
 // expected TagSize-byte authentication tag. The caller MUST verify the tag using constant-time comparison before using
-// the
-// plaintext.
+// the plaintext.
 //
-// To reuse ciphertext's storage for the decrypted output, use ciphertext[:0] as dst. Otherwise, the remaining
-// capacity of dst must not overlap ciphertext.
+// To reuse ciphertext's storage for the decrypted output, use ciphertext[:0] as dst. Otherwise, the remaining capacity
+// of dst must not overlap ciphertext.
 func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [TagSize]byte) {
-	n := max(1, (len(ciphertext)+ChunkSize-1)/ChunkSize)
-
-	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
-	h := turboshake.New(tagDS)
-	var cvBuf [4 * cvSize]byte
-	cvCount := 0
-
-	fullChunks := len(ciphertext) / ChunkSize
-	idx := 0
-
-	for idx+4 <= fullChunks {
-		off := idx * ChunkSize
-		decryptX4(key, uint64(idx), ciphertext[off:off+4*ChunkSize], plaintext[off:off+4*ChunkSize], cvBuf[:])
-		feedCVs(&h, cvBuf[:4*cvSize], &cvCount)
-		idx += 4
-	}
-
-	for idx+2 <= fullChunks {
-		off := idx * ChunkSize
-		decryptX2(key, uint64(idx), ciphertext[off:off+2*ChunkSize], plaintext[off:off+2*ChunkSize], cvBuf[:2*cvSize])
-		feedCVs(&h, cvBuf[:2*cvSize], &cvCount)
-		idx += 2
-	}
-
-	for idx < n {
-		off := idx * ChunkSize
-		end := min(off+ChunkSize, len(ciphertext))
-		decryptX1(key, uint64(idx), ciphertext[off:end], plaintext[off:end], cvBuf[:cvSize])
-		feedCVs(&h, cvBuf[:cvSize], &cvCount)
-		idx++
-	}
-
-	return ret, finalizeTag(&h, n)
+	ret, pt := mem.SliceForAppend(dst, len(ciphertext))
+	d := NewDecryptor(key)
+	d.XORKeyStream(pt, ciphertext)
+	return ret, d.Finalize()
 }
 
 // kt12Marker is the 8-byte KangarooTwelve marker written after cv[0].
 var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-// feedCVs writes chain values into the hasher with KT12 final-node framing.
-// After the first CV, it inserts the KT12 marker. cvCount tracks how many
-// CVs have been written so far.
+// feedCVs writes chain values into the hasher with KT12 final-node framing. After the first CV, it inserts the KT12
+// marker. cvCount tracks how many CVs have been written so far.
 func feedCVs(h *turboshake.Hasher, cvs []byte, cvCount *int) {
 	for len(cvs) >= cvSize {
 		_, _ = h.Write(cvs[:cvSize])
@@ -145,8 +355,8 @@ func finalizeTag(h *turboshake.Hasher, n int) (tag [TagSize]byte) {
 	return tag
 }
 
-// lengthEncode encodes x as in KangarooTwelve: big-endian with no leading zeros,
-// followed by a byte giving the length of the encoding.
+// lengthEncode encodes x as in KangarooTwelve: big-endian with no leading zeros, followed by a byte giving the length
+// of the encoding.
 func lengthEncode(x uint64) []byte {
 	if x == 0 {
 		return []byte{0x00}
