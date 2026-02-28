@@ -36,10 +36,7 @@ var emptySuffix = []byte{0x00}
 
 // New returns a new Hasher with empty customization.
 func New() *Hasher {
-	return &Hasher{
-		suffix: emptySuffix,
-		buf:    make([]byte, 0, BlockSize+1+len(emptySuffix)),
-	}
+	return &Hasher{suffix: emptySuffix}
 }
 
 // NewCustom returns a new Hasher with the given customization string.
@@ -47,10 +44,7 @@ func NewCustom(c []byte) *Hasher {
 	suffix := make([]byte, 0, len(c)+9)
 	suffix = append(suffix, c...)
 	suffix = append(suffix, lengthEncode(uint64(len(c)))...)
-	return &Hasher{
-		suffix: suffix,
-		buf:    make([]byte, 0, BlockSize+1+len(suffix)),
-	}
+	return &Hasher{suffix: suffix}
 }
 
 // Write absorbs message bytes. It must not be called after Read or Sum.
