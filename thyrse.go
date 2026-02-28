@@ -76,8 +76,11 @@ func (p *Protocol) MixStream(label string, r io.Reader) error {
 }
 
 // MixWriter returns a [MixWriter] for incrementally supplying the input of a MixStream operation. Write data to it in
-// any number of calls, then Close it to complete the operation. To simultaneously route the data to another
-// destination, wrap both in an [io.MultiWriter].
+// any number of calls, then Close it to complete the operation.
+//
+// To simultaneously route written data to another destination, wrap the MixWriter and the other destination in an
+// [io.MultiWriter]. To mix data from an [io.Reader] while also routing it to another destination, wrap the reader with
+// [io.TeeReader].
 func (p *Protocol) MixWriter(label string) *MixWriter {
 	return &MixWriter{
 		p:     p,
