@@ -1,4 +1,4 @@
-// Package aead provides an implementation of Authenticated Encryption with Associated Data (AEAD) using the thyrse
+// Package aead provides an implementation of Authenticated Encryption with Associated Data (AEAD) using the Thyrse
 // protocol.
 package aead
 
