@@ -84,13 +84,21 @@ func (h *Hasher) Write(p []byte) (int, error) {
 
 	// Large-write fast path: process chunks directly from p to avoid copying.
 	if len(p) > lanes*BlockSize {
-		// Complete any partial chunk in buf from p, then process it.
+		// Drain any buffered data: flush complete blocks, then complete the
+		// partial tail with bytes from p.
 		if len(h.buf) > 0 {
-			need := BlockSize - len(h.buf)
-			h.buf = append(h.buf, p[:need]...)
-			p = p[need:]
-			h.processLeafBatch(h.buf[:BlockSize], 1)
-			h.buf = h.buf[:0]
+			if full := len(h.buf) / BlockSize; full > 0 {
+				h.processLeafBatch(h.buf[:full*BlockSize], full)
+				remaining := copy(h.buf, h.buf[full*BlockSize:])
+				h.buf = h.buf[:remaining]
+			}
+			if len(h.buf) > 0 {
+				need := BlockSize - len(h.buf)
+				h.buf = append(h.buf, p[:need]...)
+				p = p[need:]
+				h.processLeafBatch(h.buf[:BlockSize], 1)
+				h.buf = h.buf[:0]
+			}
 		}
 
 		// Process complete chunks directly from p, keeping at least 1 byte back.
@@ -128,7 +136,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 // The buffer is sized to keccak.Lanes*BlockSize so each read supplies enough
 // data to keep all available SIMD lanes busy.
 func (h *Hasher) ReadFrom(r io.Reader) (int64, error) {
-	buf := make([]byte, keccak.Lanes*BlockSize)
+	buf := make([]byte, 2*keccak.Lanes*BlockSize)
 	var total int64
 	for {
 		n, err := r.Read(buf)
