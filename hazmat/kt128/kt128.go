@@ -17,8 +17,7 @@ const (
 	// BlockSize is the KT128 chunk size in bytes.
 	BlockSize = 8192
 
-	rate   = 168 // TurboSHAKE128 rate (200 − 32).
-	cvSize = 32  // Chain value size.
+	cvSize = 32 // Chain value size.
 	leafDS = 0x0B
 )
 
@@ -276,17 +275,17 @@ func leafCVX1(data []byte, cv []byte) {
 	pos := 0
 	off := 0
 	for off < chunkLen {
-		n := min(rate-pos, chunkLen-off)
+		n := min(turboshake.Rate-pos, chunkLen-off)
 		mem.XORInPlace(s[pos:pos+n], data[off:off+n])
 		pos += n
 		off += n
-		if pos == rate {
+		if pos == turboshake.Rate {
 			keccak.P1600(&s)
 			pos = 0
 		}
 	}
 	s[pos] ^= leafDS
-	s[rate-1] ^= 0x80
+	s[turboshake.Rate-1] ^= 0x80
 	keccak.P1600(&s)
 	copy(cv, s[:cvSize])
 }
@@ -297,20 +296,20 @@ func leafCVsX2(data []byte, cv []byte) {
 	pos := 0
 	off := 0
 	for off < BlockSize {
-		n := min(rate-pos, BlockSize-off)
+		n := min(turboshake.Rate-pos, BlockSize-off)
 		mem.XORInPlace(s0[pos:pos+n], data[off:off+n])
 		mem.XORInPlace(s1[pos:pos+n], data[BlockSize+off:BlockSize+off+n])
 		pos += n
 		off += n
-		if pos == rate {
+		if pos == turboshake.Rate {
 			keccak.P1600x2(&s0, &s1)
 			pos = 0
 		}
 	}
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	s1[pos] ^= leafDS
-	s1[rate-1] ^= 0x80
+	s1[turboshake.Rate-1] ^= 0x80
 	keccak.P1600x2(&s0, &s1)
 	copy(cv[:cvSize], s0[:cvSize])
 	copy(cv[cvSize:], s1[:cvSize])
@@ -322,26 +321,26 @@ func leafCVsX4(data []byte, cv []byte) {
 	pos := 0
 	off := 0
 	for off < BlockSize {
-		n := min(rate-pos, BlockSize-off)
+		n := min(turboshake.Rate-pos, BlockSize-off)
 		mem.XORInPlace(s0[pos:pos+n], data[off:off+n])
 		mem.XORInPlace(s1[pos:pos+n], data[BlockSize+off:BlockSize+off+n])
 		mem.XORInPlace(s2[pos:pos+n], data[2*BlockSize+off:2*BlockSize+off+n])
 		mem.XORInPlace(s3[pos:pos+n], data[3*BlockSize+off:3*BlockSize+off+n])
 		pos += n
 		off += n
-		if pos == rate {
+		if pos == turboshake.Rate {
 			keccak.P1600x4(&s0, &s1, &s2, &s3)
 			pos = 0
 		}
 	}
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	s1[pos] ^= leafDS
-	s1[rate-1] ^= 0x80
+	s1[turboshake.Rate-1] ^= 0x80
 	s2[pos] ^= leafDS
-	s2[rate-1] ^= 0x80
+	s2[turboshake.Rate-1] ^= 0x80
 	s3[pos] ^= leafDS
-	s3[rate-1] ^= 0x80
+	s3[turboshake.Rate-1] ^= 0x80
 	keccak.P1600x4(&s0, &s1, &s2, &s3)
 	copy(cv[:cvSize], s0[:cvSize])
 	copy(cv[cvSize:2*cvSize], s1[:cvSize])

@@ -30,11 +30,10 @@ const (
 	// ChunkSize is the size of each leaf chunk in bytes.
 	ChunkSize = 8 * 1024
 
-	rate      = 168      // TurboSHAKE128 rate (200 − 32).
-	cvSize    = 32       // Chain value size (= capacity).
-	blockRate = rate - 1 // 167: usable data bytes per sponge block.
-	leafDS    = 0x60     // Domain separation byte for leaf sponges.
-	tagDS     = 0x61     // Domain separation byte for tag computation.
+	cvSize    = 32                  // Chain value size (= capacity).
+	blockRate = turboshake.Rate - 1 // 167: usable data bytes per sponge block.
+	leafDS    = 0x60                // Domain separation byte for leaf sponges.
+	tagDS     = 0x61                // Domain separation byte for tag computation.
 )
 
 // EncryptAndMAC encrypts plaintext, appends the ciphertext to dst, and returns the resulting slice along with a
@@ -174,7 +173,7 @@ func leafPad(s *[200]byte, key *[KeySize]byte, index uint64) {
 	copy(s[:KeySize], key[:])
 	binary.LittleEndian.PutUint64(s[KeySize:KeySize+8], index)
 	s[KeySize+8] = leafDS
-	s[rate-1] = 0x80
+	s[turboshake.Rate-1] = 0x80
 }
 
 // finalPos returns the sponge position after encrypting/decrypting chunkLen bytes.
@@ -202,14 +201,14 @@ func encryptX1(key *[KeySize]byte, index uint64, pt, ct, cvBuf []byte) {
 		off += n
 		if off < chunkLen {
 			s0[blockRate] ^= leafDS
-			s0[rate-1] ^= 0x80
+			s0[turboshake.Rate-1] ^= 0x80
 			keccak.P1600(&s0)
 		}
 	}
 
 	pos := finalPos(chunkLen)
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	keccak.P1600(&s0)
 	copy(cvBuf[:cvSize], s0[:cvSize])
 }
@@ -228,18 +227,18 @@ func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= leafDS
-			s0[rate-1] ^= 0x80
+			s0[turboshake.Rate-1] ^= 0x80
 			s1[blockRate] ^= leafDS
-			s1[rate-1] ^= 0x80
+			s1[turboshake.Rate-1] ^= 0x80
 			keccak.P1600x2(&s0, &s1)
 		}
 	}
 
 	pos := finalPos(ChunkSize)
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	s1[pos] ^= leafDS
-	s1[rate-1] ^= 0x80
+	s1[turboshake.Rate-1] ^= 0x80
 	keccak.P1600x2(&s0, &s1)
 	copy(cvBuf[:cvSize], s0[:cvSize])
 	copy(cvBuf[cvSize:], s1[:cvSize])
@@ -263,26 +262,26 @@ func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= leafDS
-			s0[rate-1] ^= 0x80
+			s0[turboshake.Rate-1] ^= 0x80
 			s1[blockRate] ^= leafDS
-			s1[rate-1] ^= 0x80
+			s1[turboshake.Rate-1] ^= 0x80
 			s2[blockRate] ^= leafDS
-			s2[rate-1] ^= 0x80
+			s2[turboshake.Rate-1] ^= 0x80
 			s3[blockRate] ^= leafDS
-			s3[rate-1] ^= 0x80
+			s3[turboshake.Rate-1] ^= 0x80
 			keccak.P1600x4(&s0, &s1, &s2, &s3)
 		}
 	}
 
 	pos := finalPos(ChunkSize)
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	s1[pos] ^= leafDS
-	s1[rate-1] ^= 0x80
+	s1[turboshake.Rate-1] ^= 0x80
 	s2[pos] ^= leafDS
-	s2[rate-1] ^= 0x80
+	s2[turboshake.Rate-1] ^= 0x80
 	s3[pos] ^= leafDS
-	s3[rate-1] ^= 0x80
+	s3[turboshake.Rate-1] ^= 0x80
 	keccak.P1600x4(&s0, &s1, &s2, &s3)
 	copy(cvBuf[:cvSize], s0[:cvSize])
 	copy(cvBuf[cvSize:2*cvSize], s1[:cvSize])
@@ -303,14 +302,14 @@ func decryptX1(key *[KeySize]byte, index uint64, ct, pt, cvBuf []byte) {
 		off += n
 		if off < chunkLen {
 			s0[blockRate] ^= leafDS
-			s0[rate-1] ^= 0x80
+			s0[turboshake.Rate-1] ^= 0x80
 			keccak.P1600(&s0)
 		}
 	}
 
 	pos := finalPos(chunkLen)
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	keccak.P1600(&s0)
 	copy(cvBuf[:cvSize], s0[:cvSize])
 }
@@ -329,18 +328,18 @@ func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= leafDS
-			s0[rate-1] ^= 0x80
+			s0[turboshake.Rate-1] ^= 0x80
 			s1[blockRate] ^= leafDS
-			s1[rate-1] ^= 0x80
+			s1[turboshake.Rate-1] ^= 0x80
 			keccak.P1600x2(&s0, &s1)
 		}
 	}
 
 	pos := finalPos(ChunkSize)
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	s1[pos] ^= leafDS
-	s1[rate-1] ^= 0x80
+	s1[turboshake.Rate-1] ^= 0x80
 	keccak.P1600x2(&s0, &s1)
 	copy(cvBuf[:cvSize], s0[:cvSize])
 	copy(cvBuf[cvSize:], s1[:cvSize])
@@ -364,26 +363,26 @@ func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= leafDS
-			s0[rate-1] ^= 0x80
+			s0[turboshake.Rate-1] ^= 0x80
 			s1[blockRate] ^= leafDS
-			s1[rate-1] ^= 0x80
+			s1[turboshake.Rate-1] ^= 0x80
 			s2[blockRate] ^= leafDS
-			s2[rate-1] ^= 0x80
+			s2[turboshake.Rate-1] ^= 0x80
 			s3[blockRate] ^= leafDS
-			s3[rate-1] ^= 0x80
+			s3[turboshake.Rate-1] ^= 0x80
 			keccak.P1600x4(&s0, &s1, &s2, &s3)
 		}
 	}
 
 	pos := finalPos(ChunkSize)
 	s0[pos] ^= leafDS
-	s0[rate-1] ^= 0x80
+	s0[turboshake.Rate-1] ^= 0x80
 	s1[pos] ^= leafDS
-	s1[rate-1] ^= 0x80
+	s1[turboshake.Rate-1] ^= 0x80
 	s2[pos] ^= leafDS
-	s2[rate-1] ^= 0x80
+	s2[turboshake.Rate-1] ^= 0x80
 	s3[pos] ^= leafDS
-	s3[rate-1] ^= 0x80
+	s3[turboshake.Rate-1] ^= 0x80
 	keccak.P1600x4(&s0, &s1, &s2, &s3)
 	copy(cvBuf[:cvSize], s0[:cvSize])
 	copy(cvBuf[cvSize:2*cvSize], s1[:cvSize])
