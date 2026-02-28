@@ -222,6 +222,90 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	return plaintext
 }
 
+// MaskStream returns a [MaskStream] for incrementally encrypting data without authentication. Write ciphertext by
+// calling [MaskStream.XORKeyStream], then call [MaskStream.Close] to finalize the operation and advance the protocol
+// transcript.
+//
+// MaskStream implements [cipher.Stream] and [io.Closer].
+func (p *Protocol) MaskStream(label string) *MaskStream {
+	_, _ = p.h.Write([]byte{opMask})
+	p.writeLengthEncode([]byte(label))
+
+	var twKey [treewrap.KeySize]byte
+	cv := p.finalize(dsMask, twKey[:])
+
+	ms := &MaskStream{
+		p:  p,
+		cv: cv,
+		e:  treewrap.NewEncryptor(&twKey),
+	}
+	clear(twKey[:])
+
+	return ms
+}
+
+// MaskStream incrementally encrypts data for a Mask operation. Call [MaskStream.Close] to finalize the operation on the
+// associated [Protocol].
+type MaskStream struct {
+	p  *Protocol
+	cv [chainValueSize]byte
+	e  treewrap.Encryptor
+}
+
+// XORKeyStream encrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
+func (ms *MaskStream) XORKeyStream(dst, src []byte) {
+	ms.e.XORKeyStream(dst, src)
+}
+
+// Close finalizes the Mask operation, advancing the protocol transcript. Close must be called exactly once.
+func (ms *MaskStream) Close() error {
+	tag := ms.e.Finalize()
+	ms.p.resetChain(opMask, ms.cv[:], tag[:])
+	return nil
+}
+
+// UnmaskStream returns an [UnmaskStream] for incrementally decrypting data. Write plaintext by calling
+// [UnmaskStream.XORKeyStream], then call [UnmaskStream.Close] to finalize the operation and advance the protocol
+// transcript.
+//
+// UnmaskStream implements [cipher.Stream] and [io.Closer].
+func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
+	_, _ = p.h.Write([]byte{opMask})
+	p.writeLengthEncode([]byte(label))
+
+	var twKey [treewrap.KeySize]byte
+	cv := p.finalize(dsMask, twKey[:])
+
+	us := &UnmaskStream{
+		p:  p,
+		cv: cv,
+		d:  treewrap.NewDecryptor(&twKey),
+	}
+	clear(twKey[:])
+
+	return us
+}
+
+// UnmaskStream incrementally decrypts data for an Unmask operation. Call [UnmaskStream.Close] to finalize the operation
+// on the associated [Protocol].
+type UnmaskStream struct {
+	p  *Protocol
+	cv [chainValueSize]byte
+	d  treewrap.Decryptor
+}
+
+// XORKeyStream decrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
+func (us *UnmaskStream) XORKeyStream(dst, src []byte) {
+	us.d.XORKeyStream(dst, src)
+}
+
+// Close finalizes the Unmask operation, advancing the protocol transcript. Close must be called exactly once.
+func (us *UnmaskStream) Close() error {
+	tag := us.d.Finalize()
+	us.p.resetChain(opMask, us.cv[:], tag[:])
+	return nil
+}
+
 // Seal encrypts plaintext with authentication. Returns ciphertext with a [TagSize]-byte tag appended. Confidentiality
 // requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
 func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {

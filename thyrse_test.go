@@ -2,8 +2,10 @@ package thyrse
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"encoding/hex"
 	"errors"
+	"io"
 	"testing"
 )
 
@@ -288,6 +290,289 @@ func TestMask(t *testing.T) {
 		}
 		if !bytes.Equal(pt2, pt) {
 			t.Fatalf("Open: got %q, want %q", pt2, pt)
+		}
+	})
+}
+
+func TestMaskStream(t *testing.T) {
+	t.Run("round trip", func(t *testing.T) {
+		key := []byte("32-byte-key-material-for-testing!")
+		plaintext := []byte("hello, world!")
+
+		enc := New("test.mask")
+		enc.Mix("key", key)
+		ciphertext := make([]byte, len(plaintext))
+		ms := enc.MaskStream("message")
+		ms.XORKeyStream(ciphertext, plaintext)
+		if err := ms.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		dec := New("test.mask")
+		dec.Mix("key", key)
+		recovered := make([]byte, len(ciphertext))
+		us := dec.UnmaskStream("message")
+		us.XORKeyStream(recovered, ciphertext)
+		if err := us.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Equal(recovered, plaintext) {
+			t.Fatalf("got %q, want %q", recovered, plaintext)
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		key := []byte("key")
+
+		enc := New("test.mask")
+		enc.Mix("key", key)
+		ms := enc.MaskStream("msg")
+		if err := ms.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		dec := New("test.mask")
+		dec.Mix("key", key)
+		us := dec.UnmaskStream("msg")
+		if err := us.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Transcripts should be in sync: derive the same output.
+		out1 := enc.Derive("check", nil, 32)
+		out2 := dec.Derive("check", nil, 32)
+		if !bytes.Equal(out1, out2) {
+			t.Fatal("transcripts diverged after empty MaskStream/UnmaskStream")
+		}
+	})
+
+	t.Run("equivalence with Mask", func(t *testing.T) {
+		key := []byte("key-material")
+		plaintext := []byte("the quick brown fox jumps over the lazy dog")
+
+		// One-shot Mask.
+		p1 := New("test")
+		p1.Mix("key", key)
+		wantCT := p1.Mask("msg", nil, plaintext)
+		wantOut := p1.Derive("check", nil, 32)
+
+		// Streaming MaskStream.
+		p2 := New("test")
+		p2.Mix("key", key)
+		gotCT := make([]byte, len(plaintext))
+		ms := p2.MaskStream("msg")
+		ms.XORKeyStream(gotCT, plaintext)
+		if err := ms.Close(); err != nil {
+			t.Fatal(err)
+		}
+		gotOut := p2.Derive("check", nil, 32)
+
+		if !bytes.Equal(gotCT, wantCT) {
+			t.Error("MaskStream ciphertext does not match Mask")
+		}
+		if !bytes.Equal(gotOut, wantOut) {
+			t.Error("MaskStream transcript does not match Mask")
+		}
+	})
+
+	t.Run("equivalence with Unmask", func(t *testing.T) {
+		key := []byte("key-material")
+		plaintext := []byte("the quick brown fox jumps over the lazy dog")
+
+		// Encrypt first.
+		enc := New("test")
+		enc.Mix("key", key)
+		ct := enc.Mask("msg", nil, plaintext)
+
+		// One-shot Unmask.
+		p1 := New("test")
+		p1.Mix("key", key)
+		wantPT := p1.Unmask("msg", nil, ct)
+		wantOut := p1.Derive("check", nil, 32)
+
+		// Streaming UnmaskStream.
+		p2 := New("test")
+		p2.Mix("key", key)
+		gotPT := make([]byte, len(ct))
+		us := p2.UnmaskStream("msg")
+		us.XORKeyStream(gotPT, ct)
+		if err := us.Close(); err != nil {
+			t.Fatal(err)
+		}
+		gotOut := p2.Derive("check", nil, 32)
+
+		if !bytes.Equal(gotPT, wantPT) {
+			t.Error("UnmaskStream plaintext does not match Unmask")
+		}
+		if !bytes.Equal(gotOut, wantOut) {
+			t.Error("UnmaskStream transcript does not match Unmask")
+		}
+	})
+
+	t.Run("incremental writes", func(t *testing.T) {
+		key := []byte("key-material")
+		plaintext := make([]byte, 50000)
+		for i := range plaintext {
+			plaintext[i] = byte(i)
+		}
+
+		// Reference: one-shot Mask.
+		p1 := New("test")
+		p1.Mix("key", key)
+		wantCT := p1.Mask("msg", nil, plaintext)
+		wantOut := p1.Derive("check", nil, 32)
+
+		// Streaming: write in 1000-byte chunks.
+		p2 := New("test")
+		p2.Mix("key", key)
+		gotCT := make([]byte, len(plaintext))
+		ms := p2.MaskStream("msg")
+		for i := 0; i < len(plaintext); i += 1000 {
+			end := min(i+1000, len(plaintext))
+			ms.XORKeyStream(gotCT[i:end], plaintext[i:end])
+		}
+		if err := ms.Close(); err != nil {
+			t.Fatal(err)
+		}
+		gotOut := p2.Derive("check", nil, 32)
+
+		if !bytes.Equal(gotCT, wantCT) {
+			t.Error("incremental MaskStream ciphertext does not match Mask")
+		}
+		if !bytes.Equal(gotOut, wantOut) {
+			t.Error("incremental MaskStream transcript does not match Mask")
+		}
+	})
+
+	t.Run("then seal", func(t *testing.T) {
+		key := []byte("key-material")
+		pt := []byte("hello")
+
+		enc := New("test")
+		enc.Mix("key", key)
+		ct := make([]byte, len(pt))
+		ms := enc.MaskStream("mask-msg")
+		ms.XORKeyStream(ct, pt)
+		_ = ms.Close()
+		sealed := enc.Seal("seal-msg", nil, pt)
+
+		dec := New("test")
+		dec.Mix("key", key)
+		pt1 := make([]byte, len(ct))
+		us := dec.UnmaskStream("mask-msg")
+		us.XORKeyStream(pt1, ct)
+		_ = us.Close()
+		pt2, err := dec.Open("seal-msg", nil, sealed)
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+
+		if !bytes.Equal(pt1, pt) {
+			t.Fatalf("UnmaskStream: got %q, want %q", pt1, pt)
+		}
+		if !bytes.Equal(pt2, pt) {
+			t.Fatalf("Open: got %q, want %q", pt2, pt)
+		}
+	})
+
+	t.Run("cipher.StreamWriter encrypt", func(t *testing.T) {
+		key := []byte("key-material")
+		plaintext := []byte("streamed encryption via cipher.StreamWriter")
+
+		// Reference.
+		p1 := New("test")
+		p1.Mix("key", key)
+		wantCT := p1.Mask("msg", nil, plaintext)
+
+		// StreamWriter.
+		p2 := New("test")
+		p2.Mix("key", key)
+		ms := p2.MaskStream("msg")
+		var buf bytes.Buffer
+		w := cipher.StreamWriter{S: ms, W: &buf}
+		if _, err := w.Write(plaintext); err != nil {
+			t.Fatal(err)
+		}
+		if err := ms.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Equal(buf.Bytes(), wantCT) {
+			t.Error("StreamWriter ciphertext does not match Mask")
+		}
+	})
+
+	t.Run("cipher.StreamReader decrypt", func(t *testing.T) {
+		key := []byte("key-material")
+		plaintext := []byte("streamed decryption via cipher.StreamReader")
+
+		// Encrypt.
+		enc := New("test")
+		enc.Mix("key", key)
+		ct := enc.Mask("msg", nil, plaintext)
+
+		// StreamReader.
+		dec := New("test")
+		dec.Mix("key", key)
+		us := dec.UnmaskStream("msg")
+		r := cipher.StreamReader{S: us, R: bytes.NewReader(ct)}
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := us.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Equal(got, plaintext) {
+			t.Fatalf("StreamReader: got %q, want %q", got, plaintext)
+		}
+	})
+
+	t.Run("cipher.StreamWriter then StreamReader round trip", func(t *testing.T) {
+		key := []byte("key-material")
+		plaintext := make([]byte, 100000)
+		for i := range plaintext {
+			plaintext[i] = byte(i)
+		}
+
+		// Encrypt via StreamWriter.
+		enc := New("test")
+		enc.Mix("key", key)
+		ms := enc.MaskStream("msg")
+		var ctBuf bytes.Buffer
+		w := cipher.StreamWriter{S: ms, W: &ctBuf}
+		// Write in varied chunk sizes.
+		for i := 0; i < len(plaintext); {
+			chunkSize := min(1337, len(plaintext)-i)
+			if _, err := w.Write(plaintext[i : i+chunkSize]); err != nil {
+				t.Fatal(err)
+			}
+			i += chunkSize
+		}
+		_ = ms.Close()
+
+		// Decrypt via StreamReader.
+		dec := New("test")
+		dec.Mix("key", key)
+		us := dec.UnmaskStream("msg")
+		r := cipher.StreamReader{S: us, R: bytes.NewReader(ctBuf.Bytes())}
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = us.Close()
+
+		if !bytes.Equal(got, plaintext) {
+			t.Error("StreamWriter/StreamReader round trip failed")
+		}
+
+		// Transcripts should be in sync.
+		out1 := enc.Derive("check", nil, 32)
+		out2 := dec.Derive("check", nil, 32)
+		if !bytes.Equal(out1, out2) {
+			t.Error("transcripts diverged after streaming round trip")
 		}
 	})
 }

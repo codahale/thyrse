@@ -130,6 +130,42 @@ func BenchmarkMixWriter(b *testing.B) {
 	}
 }
 
+func BenchmarkMaskStream(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			p := New("bench")
+			plaintext := make([]byte, size.N)
+			ciphertext := make([]byte, size.N)
+			b.SetBytes(int64(size.N))
+			b.ReportAllocs()
+			for b.Loop() {
+				ms := p.MaskStream("msg")
+				ms.XORKeyStream(ciphertext, plaintext)
+				_ = ms.Close()
+			}
+		})
+	}
+}
+
+func BenchmarkUnmaskStream(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			p := New("bench")
+			plaintext := make([]byte, size.N)
+			ciphertext := make([]byte, size.N)
+			p.Clone().Mask("msg", ciphertext[:0], plaintext)
+
+			b.SetBytes(int64(size.N))
+			b.ReportAllocs()
+			for b.Loop() {
+				us := p.Clone().UnmaskStream("msg")
+				us.XORKeyStream(plaintext, ciphertext)
+				_ = us.Close()
+			}
+		})
+	}
+}
+
 func BenchmarkRatchet(b *testing.B) {
 	p := New("bench")
 	b.ReportAllocs()
