@@ -68,7 +68,7 @@ func (p *Protocol) Mix(label string, data []byte) {
 // string, binding the digest to the protocol identity.
 func (p *Protocol) MixStream(label string, r io.Reader) error {
 	kh := kt128.NewCustom([]byte(p.initLabel))
-	if _, err := kh.ReadFrom(r); err != nil {
+	if _, err := io.Copy(kh, r); err != nil {
 		return err
 	}
 
@@ -106,11 +106,6 @@ type MixWriter struct {
 // Write adds p to the MixStream input.
 func (mw *MixWriter) Write(p []byte) (int, error) {
 	return mw.kh.Write(p)
-}
-
-// ReadFrom adds all bytes read from r to the MixStream input.
-func (mw *MixWriter) ReadFrom(r io.Reader) (int64, error) {
-	return mw.kh.ReadFrom(r)
 }
 
 // Branch returns a clone of the associated [Protocol] with the MixStream operation completed using the input

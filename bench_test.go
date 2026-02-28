@@ -2,6 +2,7 @@ package thyrse
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	"github.com/codahale/thyrse/internal/testdata"
@@ -123,7 +124,7 @@ func BenchmarkMixWriter(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				mw := p.MixWriter("data")
-				_, _ = mw.ReadFrom(bytes.NewReader(data))
+				_, _ = io.Copy(mw, bytes.NewReader(data))
 				_ = mw.Close()
 			}
 		})

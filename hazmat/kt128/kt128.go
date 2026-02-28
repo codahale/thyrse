@@ -6,8 +6,6 @@
 package kt128
 
 import (
-	"errors"
-	"io"
 	"slices"
 
 	"github.com/codahale/thyrse/hazmat/keccak"
@@ -130,27 +128,6 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		h.buf = h.buf[:remaining]
 	}
 	return n, nil
-}
-
-// ReadFrom implements [io.ReaderFrom]. It absorbs all bytes from r until EOF.
-// The buffer is sized to keccak.Lanes*BlockSize so each read supplies enough
-// data to keep all available SIMD lanes busy.
-func (h *Hasher) ReadFrom(r io.Reader) (int64, error) {
-	buf := make([]byte, 2*keccak.Lanes*BlockSize)
-	var total int64
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			_, _ = h.Write(buf[:n])
-			total += int64(n)
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return total, nil
-			}
-			return total, err
-		}
-	}
 }
 
 // processLeafBatch computes leaf CVs for nLeaves complete chunks using X4→X2→X1 cascade.
