@@ -21,7 +21,7 @@ jobs:
         fuzz:
           - { target: FuzzProtocolDivergence, package: . }
           - { target: FuzzProtocolReversibility, package: . }
-          - { target: 'FuzzP1600^', package: ./hazmat/keccak }
+          - { target: 'FuzzP1600$', package: ./hazmat/keccak }
           - { target: FuzzP1600x2, package: ./hazmat/keccak }
           - { target: FuzzP1600x4, package: ./hazmat/keccak }
 
