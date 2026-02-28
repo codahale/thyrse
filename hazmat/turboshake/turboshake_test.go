@@ -225,8 +225,9 @@ func TestChain(t *testing.T) {
 
 	var h3, h4 [16]byte
 	a := New(0x22)
+	var b Hasher
 	_, _ = a.Write(msg)
-	b := Chain(a, 0x23)
+	Chain(&a, &b, 0x23)
 	_, _ = a.Read(h3[:])
 	_, _ = b.Read(h4[:])
 

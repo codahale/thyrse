@@ -59,7 +59,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		// Enter tree mode: flush S_0 from buf + start of p.
 		h.buf = append(h.buf, p[:need]...)
 		p = p[need:]
-		h.ts = turboshake.New(0x06)
+		h.ts = new(turboshake.New(0x06))
 		_, _ = h.ts.Write(h.buf[:BlockSize])
 		_, _ = h.ts.Write(kt12Marker[:])
 		// Keep the one overflow byte.
@@ -192,13 +192,13 @@ func (h *Hasher) finalize() {
 	if !h.treeMode {
 		if len(h.buf) <= BlockSize {
 			// Single-node: TurboSHAKE128(S, 0x07, L).
-			h.ts = turboshake.New(0x07)
+			h.ts = new(turboshake.New(0x07))
 			_, _ = h.ts.Write(h.buf)
 			return
 		}
 
 		// Enter tree mode: flush S_0.
-		h.ts = turboshake.New(0x06)
+		h.ts = new(turboshake.New(0x06))
 		_, _ = h.ts.Write(h.buf[:BlockSize])
 		_, _ = h.ts.Write(kt12Marker[:])
 		remaining := copy(h.buf, h.buf[BlockSize:])

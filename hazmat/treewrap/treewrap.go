@@ -55,14 +55,14 @@ func EncryptAndMAC(dst []byte, key *[KeySize]byte, plaintext []byte) ([]byte, [T
 	for idx+4 <= fullChunks {
 		off := idx * ChunkSize
 		encryptX4(key, uint64(idx), plaintext[off:off+4*ChunkSize], ciphertext[off:off+4*ChunkSize], cvBuf[:])
-		feedCVs(h, cvBuf[:4*cvSize], &cvCount)
+		feedCVs(&h, cvBuf[:4*cvSize], &cvCount)
 		idx += 4
 	}
 
 	for idx+2 <= fullChunks {
 		off := idx * ChunkSize
 		encryptX2(key, uint64(idx), plaintext[off:off+2*ChunkSize], ciphertext[off:off+2*ChunkSize], cvBuf[:2*cvSize])
-		feedCVs(h, cvBuf[:2*cvSize], &cvCount)
+		feedCVs(&h, cvBuf[:2*cvSize], &cvCount)
 		idx += 2
 	}
 
@@ -70,11 +70,11 @@ func EncryptAndMAC(dst []byte, key *[KeySize]byte, plaintext []byte) ([]byte, [T
 		off := idx * ChunkSize
 		end := min(off+ChunkSize, len(plaintext))
 		encryptX1(key, uint64(idx), plaintext[off:end], ciphertext[off:end], cvBuf[:cvSize])
-		feedCVs(h, cvBuf[:cvSize], &cvCount)
+		feedCVs(&h, cvBuf[:cvSize], &cvCount)
 		idx++
 	}
 
-	return ret, finalizeTag(h, n)
+	return ret, finalizeTag(&h, n)
 }
 
 // DecryptAndMAC decrypts ciphertext, appends the plaintext to dst, and returns the resulting slice along with the
@@ -98,14 +98,14 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 	for idx+4 <= fullChunks {
 		off := idx * ChunkSize
 		decryptX4(key, uint64(idx), ciphertext[off:off+4*ChunkSize], plaintext[off:off+4*ChunkSize], cvBuf[:])
-		feedCVs(h, cvBuf[:4*cvSize], &cvCount)
+		feedCVs(&h, cvBuf[:4*cvSize], &cvCount)
 		idx += 4
 	}
 
 	for idx+2 <= fullChunks {
 		off := idx * ChunkSize
 		decryptX2(key, uint64(idx), ciphertext[off:off+2*ChunkSize], plaintext[off:off+2*ChunkSize], cvBuf[:2*cvSize])
-		feedCVs(h, cvBuf[:2*cvSize], &cvCount)
+		feedCVs(&h, cvBuf[:2*cvSize], &cvCount)
 		idx += 2
 	}
 
@@ -113,11 +113,11 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 		off := idx * ChunkSize
 		end := min(off+ChunkSize, len(ciphertext))
 		decryptX1(key, uint64(idx), ciphertext[off:end], plaintext[off:end], cvBuf[:cvSize])
-		feedCVs(h, cvBuf[:cvSize], &cvCount)
+		feedCVs(&h, cvBuf[:cvSize], &cvCount)
 		idx++
 	}
 
-	return ret, finalizeTag(h, n)
+	return ret, finalizeTag(&h, n)
 }
 
 // kt12Marker is the 8-byte KangarooTwelve marker written after cv[0].

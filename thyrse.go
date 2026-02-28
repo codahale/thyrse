@@ -10,6 +10,7 @@ package thyrse
 import (
 	"crypto/subtle"
 	"errors"
+	"fmt"
 
 	"github.com/codahale/thyrse/hazmat/kt128"
 	"github.com/codahale/thyrse/hazmat/treewrap"
@@ -29,20 +30,23 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 // Operations append frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal) evaluate
 // TurboSHAKE128 over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
-	h         *turboshake.Hasher
-	initLabel []byte
+	h         turboshake.Hasher
+	initLabel string
 }
 
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	p := &Protocol{
-		h:         turboshake.New(dsChain),
-		initLabel: []byte(label),
-	}
+	var p Protocol
+	p.h = turboshake.New(dsChain)
+	p.initLabel = label
 	_, _ = p.h.Write([]byte{opInit})
-	p.writeLengthEncode(p.initLabel)
-	return p
+	p.writeLengthEncode([]byte(label))
+	return &p
+}
+
+func (p *Protocol) String() string {
+	return fmt.Sprintf("Protocol(%s)", p.initLabel)
 }
 
 // Mix absorbs data into the protocol transcript. Use for key material, nonces, associated data, and any protocol input
@@ -56,7 +60,7 @@ func (p *Protocol) Mix(label string, data []byte) {
 // MixStream absorbs streaming data by pre-hashing through KT128. The Init label is used as the KT128 customization
 // string, binding the digest to the protocol identity.
 func (p *Protocol) MixStream(label string, data []byte) {
-	kh := kt128.NewCustom(p.initLabel)
+	kh := kt128.NewCustom([]byte(p.initLabel))
 	_, _ = kh.Write(data)
 
 	var digest [chainValueSize]byte
@@ -210,19 +214,14 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 
 // Clone returns an independent copy of the protocol state. The original and clone evolve independently.
 func (p *Protocol) Clone() *Protocol {
-	h := p.h.Clone()
-	initLabel := make([]byte, len(p.initLabel))
-	copy(initLabel, p.initLabel)
-	return &Protocol{h: h, initLabel: initLabel}
+	return &Protocol{h: p.h, initLabel: p.initLabel}
 }
 
 // Clear overwrites the protocol state with zeros and invalidates the instance. After Clear, the instance must not be
 // used.
 func (p *Protocol) Clear() {
-	*p.h = turboshake.Hasher{}
-	p.h = nil
-	clear(p.initLabel)
-	p.initLabel = nil
+	p.h.Reset(0)
+	p.initLabel = ""
 }
 
 // finalize performs the dual TurboSHAKE128 finalization in parallel using [turboshake.Chain].
@@ -236,11 +235,12 @@ func (p *Protocol) Clear() {
 func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
 
+	oh := p.h
 	if outputDS == dsRatchet {
-		rh := turboshake.Chain(p.h, dsRatchet)
-		_, _ = rh.Read(cv[:])
+		turboshake.Chain(&p.h, &oh, dsRatchet)
+		_, _ = oh.Read(cv[:])
 	} else {
-		oh := turboshake.Chain(p.h, outputDS)
+		turboshake.Chain(&p.h, &oh, outputDS)
 		_, _ = p.h.Read(cv[:])
 		if dst != nil {
 			_, _ = oh.Read(dst)
@@ -252,7 +252,7 @@ func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 
 // resetChain resets the transcript with a CHAIN frame.
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
-	p.h = turboshake.New(dsChain)
+	p.h.Reset(dsChain)
 	_, _ = p.h.Write([]byte{opChain, originOp})
 
 	if len(tag) == 0 {

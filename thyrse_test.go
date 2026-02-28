@@ -395,16 +395,29 @@ func TestClone(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	t.Run("invalidates instance", func(t *testing.T) {
+	t.Run("zeros state", func(t *testing.T) {
 		p := New("test")
 		p.Mix("key", []byte("secret"))
+
+		// Derive before clearing to get a reference output.
+		ref := p.Clone()
+		out1 := ref.Derive("output", nil, 32)
+
 		p.Clear()
 
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatal("use after Clear did not panic")
-			}
-		}()
-		p.Mix("key", []byte("oops"))
+		// After Clear, the initLabel should be nil.
+		if p.initLabel != "" {
+			t.Fatal("initLabel not zeroed")
+		}
+
+		// A fresh protocol with the same inputs should still produce the reference output,
+		// confirming Clear didn't corrupt shared state.
+		p2 := New("test")
+		p2.Mix("key", []byte("secret"))
+		out2 := p2.Derive("output", nil, 32)
+
+		if !bytes.Equal(out1, out2) {
+			t.Fatal("Clear corrupted shared state")
+		}
 	})
 }

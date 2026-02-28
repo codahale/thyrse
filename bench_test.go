@@ -25,21 +25,14 @@ func sizeName(n int) string {
 	}
 }
 
-// newSeeded returns a Protocol with Init + Mix(key) already applied.
-func newSeeded() *Protocol {
-	p := New("bench")
-	p.Mix("key", make([]byte, 32))
-	return p
-}
-
 func BenchmarkDerive(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
 			out := make([]byte, size)
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p := newSeeded()
 				p.Derive("output", out[:0], size)
 			}
 		})
@@ -49,12 +42,12 @@ func BenchmarkDerive(b *testing.B) {
 func BenchmarkSeal(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
 			plaintext := make([]byte, size)
 			ciphertext := make([]byte, size+TagSize)
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p := newSeeded()
 				p.Seal("msg", ciphertext[:0], plaintext)
 			}
 		})
@@ -64,17 +57,16 @@ func BenchmarkSeal(b *testing.B) {
 func BenchmarkOpen(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
 			plaintext := make([]byte, size)
 			ciphertext := make([]byte, size+TagSize)
 			// Pre-seal to get valid sealed data.
-			p := newSeeded()
-			sealed := p.Seal("msg", ciphertext[:0], plaintext)
+			sealed := p.Clone().Seal("msg", ciphertext[:0], plaintext)
 
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p := newSeeded()
-				_, _ = p.Open("msg", plaintext[:0], sealed)
+				_, _ = p.Clone().Open("msg", plaintext[:0], sealed)
 			}
 		})
 	}
@@ -83,12 +75,12 @@ func BenchmarkOpen(b *testing.B) {
 func BenchmarkMask(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
 			plaintext := make([]byte, size)
 			ciphertext := make([]byte, size)
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p := newSeeded()
 				p.Mask("msg", ciphertext[:0], plaintext)
 			}
 		})
@@ -98,16 +90,15 @@ func BenchmarkMask(b *testing.B) {
 func BenchmarkUnmask(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
 			plaintext := make([]byte, size)
 			ciphertext := make([]byte, size)
-			p := newSeeded()
-			p.Mask("msg", ciphertext[:0], plaintext)
+			p.Clone().Mask("msg", ciphertext[:0], plaintext)
 
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p := newSeeded()
-				p.Unmask("msg", plaintext[:0], ciphertext)
+				p.Clone().Unmask("msg", plaintext[:0], ciphertext)
 			}
 		})
 	}
@@ -116,11 +107,11 @@ func BenchmarkUnmask(b *testing.B) {
 func BenchmarkMix(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
 			data := make([]byte, size)
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p := New("bench")
 				p.Mix("data", data)
 			}
 		})
@@ -130,11 +121,11 @@ func BenchmarkMix(b *testing.B) {
 func BenchmarkMixStream(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(sizeName(size), func(b *testing.B) {
+			p := New("bench")
 			data := make([]byte, size)
 			b.SetBytes(int64(size))
 			b.ReportAllocs()
 			for b.Loop() {
-				p := New("bench")
 				p.MixStream("data", data)
 			}
 		})
@@ -142,18 +133,18 @@ func BenchmarkMixStream(b *testing.B) {
 }
 
 func BenchmarkRatchet(b *testing.B) {
+	p := New("bench")
 	b.ReportAllocs()
 	for b.Loop() {
-		p := newSeeded()
 		p.Ratchet("ratchet")
 	}
 }
 
 func BenchmarkFork(b *testing.B) {
+	p := New("bench")
 	values := [][]byte{[]byte("alice"), []byte("bob")}
 	b.ReportAllocs()
 	for b.Loop() {
-		p := newSeeded()
 		p.Fork("role", values...)
 	}
 }

@@ -23,8 +23,17 @@ type Hasher struct {
 }
 
 // New returns a new Hasher with the given domain separation byte.
-func New(ds byte) *Hasher {
-	return &Hasher{ds: ds}
+func New(ds byte) (h Hasher) {
+	h.ds = ds
+	return h
+}
+
+// Reset zeros the hasher and reinitializes it with the given domain separation byte.
+func (h *Hasher) Reset(ds byte) {
+	clear(h.s[:])
+	h.pos = 0
+	h.ds = ds
+	h.squeezing = false
 }
 
 // Write absorbs p into the sponge state. It must not be called after Read.
@@ -67,11 +76,6 @@ func (h *Hasher) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// Clone returns a full clone of the receiver.
-func (h *Hasher) Clone() *Hasher {
-	return new(*h)
-}
-
 // Sum computes TurboSHAKE128(msg, ds, outLen) and returns the result.
 // The domain separation byte ds must be in the range [0x01, 0x7F].
 func Sum(msg []byte, ds byte, outLen int) []byte {
@@ -82,14 +86,14 @@ func Sum(msg []byte, ds byte, outLen int) []byte {
 	return out
 }
 
-// Chain clones the given Hasher, updates the clone with the given domain separation byte, and finalizes both in
-// parallel.
-func Chain(a *Hasher, ds byte) *Hasher {
+// Chain clones a into b, updates b with the given domain separation byte, and finalizes both in parallel. After Chain
+// returns, both a and b are in squeezing mode and ready for Read.
+func Chain(a, b *Hasher, ds byte) {
 	if a.squeezing {
 		panic("turboshake: parallel finalization with finalized state")
 	}
 
-	b := *a
+	*b = *a
 	a.s[a.pos] ^= a.ds
 	a.s[Rate-1] ^= 0x80
 	b.s[b.pos] ^= ds
@@ -97,5 +101,4 @@ func Chain(a *Hasher, ds byte) *Hasher {
 	keccak.P1600x2(&a.s, &b.s)
 	a.pos, b.pos = 0, 0
 	a.squeezing, b.squeezing = true, true
-	return &b
 }
