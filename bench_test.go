@@ -2,51 +2,32 @@ package thyrse
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
+
+	"github.com/codahale/thyrse/internal/testdata"
 )
 
-var sizes = []int{
-	1,
-	64,
-	1 << 10,  // 1 KiB
-	8 << 10,  // 8 KiB
-	64 << 10, // 64 KiB
-	1 << 20,  // 1 MiB
-}
-
-func sizeName(n int) string {
-	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%dMiB", n>>20)
-	case n >= 1<<10:
-		return fmt.Sprintf("%dKiB", n>>10)
-	default:
-		return fmt.Sprintf("%dB", n)
-	}
-}
-
 func BenchmarkDerive(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			out := make([]byte, size)
-			b.SetBytes(int64(size))
+			out := make([]byte, size.N)
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
-				p.Derive("output", out[:0], size)
+				p.Derive("output", out[:0], size.N)
 			}
 		})
 	}
 }
 
 func BenchmarkSeal(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			plaintext := make([]byte, size)
-			ciphertext := make([]byte, size+TagSize)
-			b.SetBytes(int64(size))
+			plaintext := make([]byte, size.N)
+			ciphertext := make([]byte, size.N+TagSize)
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Seal("msg", ciphertext[:0], plaintext)
@@ -56,15 +37,15 @@ func BenchmarkSeal(b *testing.B) {
 }
 
 func BenchmarkOpen(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			plaintext := make([]byte, size)
-			ciphertext := make([]byte, size+TagSize)
+			plaintext := make([]byte, size.N)
+			ciphertext := make([]byte, size.N+TagSize)
 			// Pre-seal to get valid sealed data.
 			sealed := p.Clone().Seal("msg", ciphertext[:0], plaintext)
 
-			b.SetBytes(int64(size))
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				_, _ = p.Clone().Open("msg", plaintext[:0], sealed)
@@ -74,12 +55,12 @@ func BenchmarkOpen(b *testing.B) {
 }
 
 func BenchmarkMask(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			plaintext := make([]byte, size)
-			ciphertext := make([]byte, size)
-			b.SetBytes(int64(size))
+			plaintext := make([]byte, size.N)
+			ciphertext := make([]byte, size.N)
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Mask("msg", ciphertext[:0], plaintext)
@@ -89,14 +70,14 @@ func BenchmarkMask(b *testing.B) {
 }
 
 func BenchmarkUnmask(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			plaintext := make([]byte, size)
-			ciphertext := make([]byte, size)
+			plaintext := make([]byte, size.N)
+			ciphertext := make([]byte, size.N)
 			p.Clone().Mask("msg", ciphertext[:0], plaintext)
 
-			b.SetBytes(int64(size))
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Clone().Unmask("msg", plaintext[:0], ciphertext)
@@ -106,11 +87,11 @@ func BenchmarkUnmask(b *testing.B) {
 }
 
 func BenchmarkMix(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			data := make([]byte, size)
-			b.SetBytes(int64(size))
+			data := make([]byte, size.N)
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Mix("data", data)
@@ -120,11 +101,11 @@ func BenchmarkMix(b *testing.B) {
 }
 
 func BenchmarkMixStream(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			data := make([]byte, size)
-			b.SetBytes(int64(size))
+			data := make([]byte, size.N)
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				_ = p.MixStream("data", bytes.NewReader(data))
@@ -134,11 +115,11 @@ func BenchmarkMixStream(b *testing.B) {
 }
 
 func BenchmarkMixWriter(b *testing.B) {
-	for _, size := range sizes {
-		b.Run(sizeName(size), func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
-			data := make([]byte, size)
-			b.SetBytes(int64(size))
+			data := make([]byte, size.N)
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				mw := p.MixWriter("data")

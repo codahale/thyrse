@@ -5,8 +5,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/codahale/thyrse/internal/testdata"
 )
 
 // ptn returns a byte slice of length n using the KT128 test pattern:
@@ -300,21 +303,16 @@ func TestReadFrom(t *testing.T) {
 	}
 }
 
-var benchSizes = []int{
-	64,               // tiny, single-node
-	BlockSize,        // exactly one chunk, single-node
-	BlockSize + 1,    // just enters tree mode
-	64 * 1024,        // 64 KiB, ~8 leaves
-	1024 * 1024,      // 1 MiB
-	16 * 1024 * 1024, // 16 MiB
-}
+var sizes = slices.Concat(testdata.Sizes, []testdata.Size{
+	{"8KiB+1B", BlockSize + 1},
+})
 
 func BenchmarkWrite(b *testing.B) {
-	for _, size := range benchSizes {
-		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
-			msg := ptn(size)
+	for _, size := range sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			msg := ptn(size.N)
 			out := make([]byte, 32)
-			b.SetBytes(int64(size))
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
@@ -327,14 +325,14 @@ func BenchmarkWrite(b *testing.B) {
 }
 
 func BenchmarkWriteStreaming(b *testing.B) {
-	for _, size := range benchSizes {
-		if size < 2*BlockSize {
+	for _, size := range sizes {
+		if size.N < 2*BlockSize {
 			continue
 		}
-		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
-			msg := ptn(size)
+		b.Run(size.Name, func(b *testing.B) {
+			msg := ptn(size.N)
 			out := make([]byte, 32)
-			b.SetBytes(int64(size))
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
@@ -350,11 +348,11 @@ func BenchmarkWriteStreaming(b *testing.B) {
 }
 
 func BenchmarkReadFrom(b *testing.B) {
-	for _, size := range benchSizes {
-		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
-			msg := ptn(size)
+	for _, size := range sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			msg := ptn(size.N)
 			out := make([]byte, 32)
-			b.SetBytes(int64(size))
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {

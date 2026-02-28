@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/hex"
-	"fmt"
 	"testing"
+
+	"github.com/codahale/thyrse/internal/testdata"
 )
 
 func testKey() *[KeySize]byte {
@@ -359,23 +360,11 @@ func TestEncryptAndMAC(t *testing.T) {
 
 func BenchmarkEncryptAndMAC(b *testing.B) {
 	key := testKey()
-
-	benchmarks := []struct {
-		name   string
-		length int
-	}{
-		{"1B", 1},
-		{"8KiB", 8 * 1024},
-		{"32KiB", 32 * 1024},
-		{"64KiB", 64 * 1024},
-		{"1MiB", 1024 * 1024},
-	}
-
-	for _, bb := range benchmarks {
-		pt := make([]byte, bb.length)
-		output := make([]byte, bb.length)
-		b.Run(fmt.Sprintf("EncryptAndMAC/%s", bb.name), func(b *testing.B) {
-			b.SetBytes(int64(bb.length))
+	for _, size := range testdata.Sizes {
+		pt := make([]byte, size.N)
+		output := make([]byte, size.N)
+		b.Run(size.Name, func(b *testing.B) {
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				EncryptAndMAC(output[:0], key, pt)
@@ -386,23 +375,12 @@ func BenchmarkEncryptAndMAC(b *testing.B) {
 
 func BenchmarkDecryptAndMAC(b *testing.B) {
 	key := testKey()
-
-	benchmarks := []struct {
-		name   string
-		length int
-	}{
-		{"1B", 1},
-		{"8KiB", 8 * 1024},
-		{"64KiB", 64 * 1024},
-		{"1MiB", 1024 * 1024},
-	}
-
-	for _, bb := range benchmarks {
-		pt := make([]byte, bb.length)
+	for _, size := range testdata.Sizes {
+		pt := make([]byte, size.N)
 		ct, _ := EncryptAndMAC(nil, key, pt)
-		output := make([]byte, bb.length)
-		b.Run(fmt.Sprintf("DecryptAndMAC/%s", bb.name), func(b *testing.B) {
-			b.SetBytes(int64(bb.length))
+		output := make([]byte, size.N)
+		b.Run(size.Name, func(b *testing.B) {
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				DecryptAndMAC(output[:0], key, ct)
