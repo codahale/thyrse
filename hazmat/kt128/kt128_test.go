@@ -304,7 +304,7 @@ func TestReadFrom(t *testing.T) {
 }
 
 var sizes = slices.Concat(testdata.Sizes, []testdata.Size{
-	{"8KiB+1B", BlockSize + 1},
+	{Name: "8KiB+1B", N: BlockSize + 1},
 })
 
 func BenchmarkWrite(b *testing.B) {
