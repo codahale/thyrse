@@ -371,10 +371,9 @@ $$\varepsilon_{\mathrm{cmt4}} \leq \varepsilon_{\mathrm{kdf\text{-}coll}} + \fra
    bijection for a fixed key (the overwrite duplex `encrypt`/`decrypt` operations are inverses), so $M \neq M'$ implies
    $\mathit{CT} \neq \mathit{CT}'$. This contradicts the equal-ciphertext requirement.
 
-In Case 1, the adversary's search for colliding keys $(K, K')$ is structurally bottlenecked through the $c = 256$-bit
-capacity: the chosen ciphertext overwrites the rate portion of the state, so the Keccak state entering the final tag
-permutation differs between the two keys only in the capacity. The tag collision probability is therefore bounded by the
-birthday bound on the $c$-bit capacity, not the full state.
+In Case 1, after the sponge→RO hop, distinct (key, ciphertext) pairs produce independent, uniformly random tags
+(by the tag collision resistance argument in §6.6). The collision probability is the standard birthday bound on the
+$8C = 256$-bit tag output: $Q^2 / 2^{8C+1}$.
 
 This committing property is inherent to the construction — it does not require any additional processing or a second
 pass over the data, unlike generic CMT-4 transforms applied to non-committing AE schemes.
