@@ -31,9 +31,10 @@ const (
 	cvSize         = 32                  // Chain value size (= capacity).
 	blockRate      = turboshake.Rate - 1 // 167: usable data bytes per sponge block.
 	initDS         = 0x60                // Domain separation byte for leaf init (key/index absorption).
-	intermediateDS = 0x61                // Domain separation byte for intermediate leaf sponges.
-	finalDS        = 0x62                // Domain separation byte for final leaf sponges.
-	tagDS          = 0x63                // Domain separation byte for tag computation.
+	singleNodeDS   = 0x61                // Domain separation byte for single-node tag.
+	intermediateDS = 0x62                // Domain separation byte for intermediate leaf sponges.
+	finalDS        = 0x63                // Domain separation byte for final leaf sponges.
+	tagDS          = 0x64                // Domain separation byte for tag computation.
 )
 
 // Encryptor incrementally encrypts data and computes the authentication tag. It implements a streaming interface where
@@ -64,6 +65,10 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 		return
 	}
 
+	if e.idx == 0 && e.chunkOff == ChunkSize && len(src) > 0 {
+		e.finalizeCV()
+	}
+
 	// Continue an in-progress partial chunk.
 	if e.chunkOff > 0 {
 		n := min(len(src), ChunkSize-e.chunkOff)
@@ -72,8 +77,20 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 		src = src[n:]
 
 		if e.chunkOff == ChunkSize {
-			e.finalizeCV()
+			if e.idx > 0 || len(src) > 0 {
+				e.finalizeCV()
+			}
 		}
+	}
+
+	if e.idx == 0 && e.chunkOff == 0 && len(src) <= ChunkSize {
+		e.s = [200]byte{}
+		leafPad(&e.s, &e.key, 0)
+		keccak.P1600(&e.s)
+		e.pos = 0
+		e.chunkOff = 0
+		e.encryptPartial(dst, src)
+		return
 	}
 
 	// Process complete chunks via SIMD cascade.
@@ -158,10 +175,26 @@ func (e *Encryptor) finalizeCV() {
 // [Encryptor.XORKeyStream].
 func (e *Encryptor) Finalize() [TagSize]byte {
 	if e.chunkOff == 0 && e.idx == 0 {
-		// Empty input: process one empty chunk.
-		encryptX1(&e.key, 0, nil, nil, e.cvBuf[:cvSize])
-		feedCVs(&e.h, e.cvBuf[:cvSize], &e.cvCount)
-		return finalizeTag(&e.h, 1)
+		// Empty input: process one empty chunk with singleNodeDS fast-path.
+		var s0 [200]byte
+		leafPad(&s0, &e.key, 0)
+		keccak.P1600(&s0)
+		s0[0] ^= singleNodeDS
+		s0[turboshake.Rate-1] ^= 0x80
+		keccak.P1600(&s0)
+		var tag [TagSize]byte
+		copy(tag[:], s0[:TagSize])
+		return tag
+	}
+
+	if e.idx == 0 {
+		// Fast path for n=1: derive tag directly from the single chunk.
+		var tag [TagSize]byte
+		e.s[e.pos] ^= singleNodeDS
+		e.s[turboshake.Rate-1] ^= 0x80
+		keccak.P1600(&e.s)
+		copy(tag[:], e.s[:TagSize])
+		return tag
 	}
 
 	if e.chunkOff > 0 {
@@ -200,6 +233,10 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 		return
 	}
 
+	if d.idx == 0 && d.chunkOff == ChunkSize && len(src) > 0 {
+		d.finalizeCV()
+	}
+
 	// Continue an in-progress partial chunk.
 	if d.chunkOff > 0 {
 		n := min(len(src), ChunkSize-d.chunkOff)
@@ -208,8 +245,20 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 		src = src[n:]
 
 		if d.chunkOff == ChunkSize {
-			d.finalizeCV()
+			if d.idx > 0 || len(src) > 0 {
+				d.finalizeCV()
+			}
 		}
+	}
+
+	if d.idx == 0 && d.chunkOff == 0 && len(src) <= ChunkSize {
+		d.s = [200]byte{}
+		leafPad(&d.s, &d.key, 0)
+		keccak.P1600(&d.s)
+		d.pos = 0
+		d.chunkOff = 0
+		d.decryptPartial(dst, src)
+		return
 	}
 
 	// Process complete chunks via SIMD cascade.
@@ -295,10 +344,26 @@ func (d *Decryptor) finalizeCV() {
 // plaintext.
 func (d *Decryptor) Finalize() [TagSize]byte {
 	if d.chunkOff == 0 && d.idx == 0 {
-		// Empty input: process one empty chunk.
-		decryptX1(&d.key, 0, nil, nil, d.cvBuf[:cvSize])
-		feedCVs(&d.h, d.cvBuf[:cvSize], &d.cvCount)
-		return finalizeTag(&d.h, 1)
+		// Empty input: process one empty chunk with singleNodeDS fast-path.
+		var s0 [200]byte
+		leafPad(&s0, &d.key, 0)
+		keccak.P1600(&s0)
+		s0[0] ^= singleNodeDS
+		s0[turboshake.Rate-1] ^= 0x80
+		keccak.P1600(&s0)
+		var tag [TagSize]byte
+		copy(tag[:], s0[:TagSize])
+		return tag
+	}
+
+	if d.idx == 0 {
+		// Fast path for n=1: derive tag directly from the single chunk.
+		var tag [TagSize]byte
+		d.s[d.pos] ^= singleNodeDS
+		d.s[turboshake.Rate-1] ^= 0x80
+		keccak.P1600(&d.s)
+		copy(tag[:], d.s[:TagSize])
+		return tag
 	}
 
 	if d.chunkOff > 0 {

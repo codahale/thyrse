@@ -1,7 +1,7 @@
 # TreeWrap: Tree-Parallel Stream Cipher and MAC
 
 **Status:** Draft
-**Version:** 0.5
+**Version:** 0.6
 **Date:** 2026-02-28
 **Security Target:** 128-bit
 
@@ -28,7 +28,7 @@ TreeWrap is a pure function with no internal state. Key uniqueness and associate
 
 ## 4. Leaf Cipher
 
-A leaf cipher implements the DWrap mode (using the overwrite duplex optimization) over a standard Keccak sponge, using the same permutation and rate/capacity parameters as TurboSHAKE128. It uses four domain separation bytes: `0x60` for init (key/index absorption), `0x61` for intermediate encrypt/decrypt blocks, `0x62` for the final block (chain value derivation), and `0x63` for tag accumulation.
+A leaf cipher implements the DWrap mode (using the overwrite duplex optimization) over a standard Keccak sponge, using the same permutation and rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes: `0x60` for init (key/index absorption), `0x61` for single-node tag squeezing (fast path), `0x62` for intermediate encrypt/decrypt blocks, `0x63` for the final block (chain value derivation), and `0x64` for tag accumulation.
 
 The overwrite duplex differs from the traditional XOR-absorb duplex (SpongeWrap) in that the encrypt operation overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it enables a clean security reduction to the standard Keccak sponge via the equivalence shown by Daemen et al. for the overwrite duplex construction; second, for full-rate blocks, overwrite is faster than XOR on most architectures (write-only vs. read-XOR-write).
 
@@ -46,29 +46,33 @@ Note: This matches standard TurboSHAKE padding, where the domain byte includes t
 &emsp; For each byte of `key ‖ [index]₆₄LE`, XOR it into `S[pos]` and increment `pos`. When `pos` reaches R−1 and more input remains, call `pad_permute(0x60)`.
 &emsp; Call `pad_permute(0x60)`.
 
-Note: Init uses domain byte `0x60`, distinct from the intermediate encrypt/decrypt byte `0x61`. This ensures the key absorption block is domain-separated from ciphertext blocks.
+Note: Init uses domain byte `0x60`, distinct from the intermediate encrypt/decrypt byte `0x62`. This ensures the key absorption block is domain-separated from ciphertext blocks.
 
 After `init`, the cipher has absorbed the key and index and is ready for encryption.
 
 **encrypt(P) → C:** For each plaintext byte `Pⱼ`:
 &emsp; `Cⱼ ← Pⱼ ⊕ S[pos]`
 &emsp; `S[pos] ← Cⱼ` (overwrite with ciphertext)
-&emsp; Increment `pos`. When `pos` reaches R−1 and more plaintext remains, call `pad_permute(0x61)`.  
+&emsp; Increment `pos`. When `pos` reaches R−1 and more plaintext remains, call `pad_permute(0x62)`.  
 Return concatenated ciphertext bytes.
 
 **decrypt(C) → P:** For each ciphertext byte `Cⱼ`:
 &emsp; `Pⱼ ← Cⱼ ⊕ S[pos]`
 &emsp; `S[pos] ← Cⱼ` (overwrite with ciphertext)
-&emsp; Increment `pos`. When `pos` reaches R−1 and more ciphertext remains, call `pad_permute(0x61)`.  
+&emsp; Increment `pos`. When `pos` reaches R−1 and more ciphertext remains, call `pad_permute(0x62)`.  
 Return concatenated plaintext bytes.
 
 Note: both encrypt and decrypt overwrite the rate with ciphertext. This ensures the state evolution is identical regardless of direction, which is required for EncryptAndMAC/DecryptAndMAC consistency.
 
-**chain_value() → cv:**
-&emsp; Call `pad_permute(0x62)`.
-&emsp; Output C bytes: for each byte, output `S[pos]` and increment `pos`. When `pos` reaches R−1 and more output remains, call `pad_permute(0x62)`.
+**single_node_tag() → tag:**
+&emsp; Call `pad_permute(0x61)`.
+&emsp; Output C bytes: for each byte, output `S[pos]` and increment `pos`.
 
-`chain_value()` always begins with `pad_permute(0x62)` to ensure all encrypted data is fully mixed and securely domain-separated from intermediate permutations before the chain value is derived.
+**chain_value() → cv:**
+&emsp; Call `pad_permute(0x63)`.
+&emsp; Output C bytes: for each byte, output `S[pos]` and increment `pos`. When `pos` reaches R−1 and more output remains, call `pad_permute(0x63)`.
+
+`chain_value()` always begins with `pad_permute(0x63)` to ensure all encrypted data is fully mixed and securely domain-separated from intermediate permutations before the chain value is derived.
 
 ## 5. TreeWrap
 
@@ -94,21 +98,26 @@ Note: both encrypt and decrypt overwrite the rate with ciphertext. This ensures 
 
 Partition `plaintext` into $n = \max(1, \lceil\mathit{len}(\mathit{plaintext}) / B\rceil)$ chunks. Chunk $i$ (0-indexed) has size $\ell_i = \min(B,\, \mathit{len}(\mathit{plaintext}) - i \cdot B)$. If plaintext is empty, $n = 1$ and the single chunk is empty.
 
-For each chunk `i`:  
+If `n = 1` (fast-path):
 &emsp; Create a leaf cipher `L`.  
-&emsp; `L.init(key, i)`  
-&emsp; `ciphertext[i] ← L.encrypt(plaintext_chunk[i])`  
-&emsp; `cv[i] ← L.chain_value()`
+&emsp; `L.init(key, 0)`  
+&emsp; `ciphertext[0] ← L.encrypt(plaintext_chunk[0])`  
+&emsp; `tag ← L.single_node_tag()`
 
-Compute the tag using the KangarooTwelve final node structure:
+If `n > 1`:
+&emsp; For each chunk `i`:  
+&emsp; &emsp; Create a leaf cipher `L`.  
+&emsp; &emsp; `L.init(key, i)`  
+&emsp; &emsp; `ciphertext[i] ← L.encrypt(plaintext_chunk[i])`  
+&emsp; &emsp; `cv[i] ← L.chain_value()`
+
+&emsp; Compute the tag using the KangarooTwelve final node structure:
 
 &emsp; `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`  
 &emsp; `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`  
 &emsp; `final_input ← final_input ‖ length_encode(n−1)`  
 &emsp; `final_input ← final_input ‖ 0xFF 0xFF`  
-&emsp; `tag ← TurboSHAKE128(final_input, 0x63, C)`
-
-When `n = 1`, the final input reduces to `cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ length_encode(0) ‖ 0xFF 0xFF`.
+&emsp; `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
 Return `(ciphertext[0] ‖ ... ‖ ciphertext[n−1], tag)`.
 
@@ -130,19 +139,26 @@ All leaf operations are independent and may execute in parallel. Tag computation
 
 Partition `ciphertext` into chunks identically to EncryptAndMAC.
 
-For each chunk `i`:  
+If `n = 1` (fast-path):
 &emsp; Create a leaf cipher `L`.  
-&emsp; `L.init(key, i)`  
-&emsp; `plaintext[i] ← L.decrypt(ciphertext_chunk[i])`  
-&emsp; `cv[i] ← L.chain_value()`
+&emsp; `L.init(key, 0)`  
+&emsp; `plaintext[0] ← L.decrypt(ciphertext_chunk[0])`  
+&emsp; `tag ← L.single_node_tag()`
 
-Compute the tag using the same final node structure as EncryptAndMAC:
+If `n > 1`:
+&emsp; For each chunk `i`:  
+&emsp; &emsp; Create a leaf cipher `L`.  
+&emsp; &emsp; `L.init(key, i)`  
+&emsp; &emsp; `plaintext[i] ← L.decrypt(ciphertext_chunk[i])`  
+&emsp; &emsp; `cv[i] ← L.chain_value()`
+
+&emsp; Compute the tag using the same final node structure as EncryptAndMAC:
 
 &emsp; `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`  
 &emsp; `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`  
 &emsp; `final_input ← final_input ‖ length_encode(n−1)`  
 &emsp; `final_input ← final_input ‖ 0xFF 0xFF`  
-&emsp; `tag ← TurboSHAKE128(final_input, 0x63, C)`
+&emsp; `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
 Return `(plaintext[0] ‖ ... ‖ plaintext[n−1], tag)`.
 
@@ -183,7 +199,7 @@ The number of leaves does not appear as a separate factor because the indifferen
 
 Under a uniformly random key, the TreeWrap tag is a pseudorandom function of the ciphertext. Specifically, for any fixed ciphertext, the tag output of EncryptAndMAC (or DecryptAndMAC) is indistinguishable from a uniformly random $C$-byte string.
 
-The argument follows from the same monolithic reduction as §6.2. After replacing all sponge evaluations with random oracle evaluations, each leaf's chain value is an independent random oracle output (distinct inputs due to leaf indices). The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x63}, C)$ where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte 0x63 separates the tag computation from the leaf ciphers (0x60–0x62), so the tag evaluation is an independent random oracle call on a pseudorandom input, producing a pseudorandom output.
+The argument follows from the same monolithic reduction as §6.2. After replacing all sponge evaluations with random oracle evaluations, each leaf's chain value is an independent random oracle output (distinct inputs due to leaf indices). The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values (or just the single leaf output squeezed with domain byte \texttt{0x61} if $n=1$). Domain byte 0x64 separates the tag accumulation from the leaf ciphers (0x60–0x63), so the tag evaluation is an independent random oracle call on a pseudorandom input, producing a pseudorandom output.
 
 The tag PRF advantage shares the same bound as IND$:
 
@@ -234,7 +250,7 @@ Each leaf is initialized with `key ‖ [index]₆₄LE`, binding it to its posit
 
 ### 6.8 Empty Plaintext
 
-When plaintext is empty, a single leaf is still created. The chain value is derived from the cipher state after `init` (with a `pad_permute` but no encrypt calls). The final node input is `cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ 0x00 ‖ 0xFF 0xFF`, producing a valid tag that authenticates the key. This ensures DecryptAndMAC with an empty ciphertext computes the same tag as EncryptAndMAC with an empty plaintext.
+When plaintext is empty, $n = 1$. A single leaf is initialized and the fast-path is used. The tag is derived directly from the cipher state after `init` via `single_node_tag()`, with no encrypt calls or final node structure. This ensures DecryptAndMAC with an empty ciphertext computes the same tag as EncryptAndMAC with an empty plaintext.
 
 ### 6.9 Tag Accumulation Structure
 
@@ -256,7 +272,7 @@ The components of this encoding are:
 
 - **`0xFF 0xFF`**: The Sakura tree hash terminator, signaling the end of the final node input.
 
-This is processed by TurboSHAKE128 with domain separation byte 0x63, separating TreeWrap tag computation from both KT128 hashing (0x07) and TreeWrap leaf ciphers (0x60–0x62).
+This is processed by TurboSHAKE128 with domain separation byte 0x64, separating TreeWrap tag accumulation from both KT128 hashing (0x07) and TreeWrap leaf ciphers (0x60–0x63).
 
 The encoding is injective: chain values are fixed-size ($C$ bytes each), the chaining hop indicator and terminator are fixed constants, and `length_encode` uniquely determines $n$. The number of chunks is also determined by the ciphertext length, which is assumed to be public.
 
@@ -280,11 +296,11 @@ The equivalence requires four preconditions, all of which TreeWrap satisfies:
 
 4. **Key absorption via XOR.** The `init` procedure absorbs key and index material by XORing it into the rate, which is standard sponge absorption (not overwrite). The overwrite applies only during encryption/decryption.
 
-The injectivity of the encoding holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 for init, 0x61 for intermediate encrypt/decrypt blocks, 0x62 for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities.
+The injectivity of the encoding holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 for init, 0x61 for single-node tag, 0x62 for intermediate encrypt/decrypt blocks, 0x63 for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities.
 
-After this rewriting, all computations in a TreeWrap invocation — $n$ leaf sponge evaluations plus one tag accumulation (TurboSHAKE128 with domain byte 0x63) — are standard sponge evaluations on distinct inputs. Leaf inputs differ by index; the tag evaluation is separated by domain byte.
+After this rewriting, all computations in a TreeWrap invocation — $n$ leaf sponge evaluations plus one optional tag accumulation (TurboSHAKE128 with domain byte 0x64) — are standard sponge evaluations on distinct inputs. Leaf inputs differ by index; the tag evaluation is separated by domain byte.
 
-**Step 2: Monolithic indifferentiability reduction.** The sponge indifferentiability theorem replaces all sponge evaluations simultaneously with random oracle evaluations in a single reduction. Under the random oracle, distinct inputs yield independent, uniformly random outputs: all $n$ chain values are simultaneously pseudorandom (independent across leaves due to distinct indices), and the tag is pseudorandom (independent of the leaves due to domain byte 0x63).
+**Step 2: Monolithic indifferentiability reduction.** The sponge indifferentiability theorem replaces all sponge evaluations simultaneously with random oracle evaluations in a single reduction. Under the random oracle, distinct inputs yield independent, uniformly random outputs: for $n > 1$, all $n$ chain values are simultaneously pseudorandom (independent across leaves due to distinct indices), and the tag is pseudorandom (independent of the leaves due to domain byte 0x64). For $n = 1$, the single leaf directly outputs the pseudorandom tag (independent from other steps due to domain byte 0x61).
 
 The advantage of this reduction is bounded by:
 
@@ -327,7 +343,7 @@ Ciphertext prefix shows the first min(32, len) bytes. Tags are full 32 bytes. Al
 |-------|--------------------------------------------------------------------|
 | len   | 0                                                                  |
 | ct    | (empty)                                                            |
-| tag   | `d7cac817ce2e43eb21d29a694e21d6d9c6eb6ae8cd5d87d7ae9c382019908e72` |
+| tag   | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
 
 DecryptAndMAC with the same key and empty ciphertext produces the same tag.
 
@@ -337,10 +353,10 @@ DecryptAndMAC with the same key and empty ciphertext produces the same tag.
 |-------|--------------------------------------------------------------------|
 | len   | 1                                                                  |
 | ct    | `f1`                                                               |
-| tag   | `0a1aa945e1ae0b95ec57b1155272237b987457df9783a17234331d4c1e21459c` |
+| tag   | `c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35` |
 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
-`81df961a4a2601dcbacca5a5c1ecdc9915829bb84df26020c43262f983f1429d`.
+`8e419b1ad3363b42ebdf788c914c94e826a0d4864b6eb828c33ac460a60f7cee`.
 
 ### 9.3 B-Byte Plaintext (exactly one chunk, $n = 1$)
 
@@ -348,10 +364,10 @@ Flipping bit 0 of the ciphertext (`f0`) yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 8192                                                               |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `4580abcfebe3e1ef44c7a823c3c89dea20f5f38172827d5067983edb6bb836ef` |
+| tag     | `16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`4de1f6f0832316cb08c6d8ddf1dafab0739c6adb31c41a7b2cbec6e5c448571a`.
+`252c145ed845841ee9156ed46febaf03ad213d727256c761a36db0bf10901ea8`.
 
 ### 9.4 B+1-Byte Plaintext (two chunks, minimal second, $n = 2$)
 
@@ -359,10 +375,10 @@ Flipping bit 0 of `ct[0]` yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 8193                                                               |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `f22ec68d3bd8ff22580e57ad6638f26cd05c73ad8011af0bc55cc1ac51be7cbc` |
+| tag     | `b55dda0960670702b54d962a06a4dc526126c56a57d517eb527be1dfe2352460` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`b3298c953cd18c2cf3a52dca5c68c529a4a120b3f1870f01a33df857fe0bb1c3`.
+`2717135bb6939213dedd2c5e1c90d30c221aa594d9bbde36893f43ec4c590961`.
 
 ### 9.5 4B-Byte Plaintext (four full chunks, $n = 4$)
 
@@ -370,13 +386,13 @@ Flipping bit 0 of `ct[0]` yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 32768                                                              |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `159dd85c118d70fde96e72c62fa02aa10cc9ea9d4e0ca54aff340af92688219e` |
+| tag     | `41d1028f4f36dca68308b5549f5990e840b6d2a594db74e455cc57b6330ac748` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`676ad27ef0550c4bac2f503bb51cb73961ba267d45715ab9d8825a61b6004077`.
+`49489e8fc13e06832ae9c5fd98492f649f96df49846fb2e50423864367ace4fa`.
 
 Swapping chunks 0 and 1 (bytes 0–8191 and 8192–16383) yields tag
-`322eba113b8894ffa3f13be2f3ce3f5600a4cf3a532b36bf97d7742e9df712ff`.
+`c17214c699fa94d820dcd7c86aca4fdf2229e896e47609aa702c6abbf937be8a`.
 
 ### 9.6 Round-Trip Consistency
 
