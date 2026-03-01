@@ -128,7 +128,8 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 *Inputs:*
 
 - `key`: A C-byte key. MUST be pseudorandom and unique per invocation (see §6.1, §6.2).
-- `plaintext`: Plaintext of any length (may be empty).
+- `plaintext`: Plaintext of any length (may be empty). Maximum length is $(2^{64} - 1) \cdot B$ bytes, since leaf
+  indices are encoded as 8-byte little-endian integers.
 
 *Outputs:*
 
@@ -175,7 +176,7 @@ available.
 *Inputs:*
 
 - `key`: A C-byte key.
-- `ciphertext`: Ciphertext of any length (may be empty).
+- `ciphertext`: Ciphertext of any length (may be empty). Same maximum length as `plaintext` in `EncryptAndMAC`.
 
 *Outputs:*
 
