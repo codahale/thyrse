@@ -446,7 +446,15 @@ length, which is assumed to be public.
 ### 6.11 Side Channels
 
 All leaves process the same key. Implementations MUST ensure constant-time processing regardless of key and plaintext
-values. The chunk index is not secret and does not require side-channel protection.
+values. The chunk index is not secret and does not require side-channel protection. Specific hazards include:
+
+- **Data-dependent memory access.** SIMD or vectorized Keccak implementations must not use lookup tables indexed by
+  state bytes. All memory access patterns must be independent of key and plaintext values.
+- **Variable-time tag comparison.** The caller is responsible for tag verification (§1). Tag comparison MUST use a
+  constant-time equality check to prevent timing oracles.
+- **Variable-time partial block handling.** The final chunk may be shorter than $B$ bytes. Implementations must not
+  branch on plaintext byte values when processing partial blocks; the *length* of the partial block is public and
+  need not be protected.
 
 ### 6.12 Concrete Security Reduction
 
