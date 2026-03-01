@@ -219,11 +219,11 @@ This committing property is inherent to the construction — it does not require
 
 An adversary who does not know the key and attempts to produce a valid (ciphertext, tag) pair succeeds with probability at most:
 
-$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} = \frac{S}{2^{256}}$$
+$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} + \varepsilon_{\mathrm{prf}} \leq \frac{S}{2^{256}} + \frac{(\sigma + t)^2}{2^{c+1}}$$
 
-for $S$ forgery attempts against the full $C$-byte tag. When the caller truncates the tag to $T$ bytes (as in Thyrse's Seal/Open), the forgery bound becomes $S / 2^{8T}$.
+for $S$ forgery attempts against the full $C$-byte tag. When the caller truncates the tag to $T$ bytes (as in Thyrse's Seal/Open), the guessing probability increases and the bound becomes $S / 2^{8T} + \varepsilon_{\mathrm{prf}}$.
 
-Note that forgery resistance is a consequence of tag PRF security (§6.3): the tag on any ciphertext the adversary has not queried is indistinguishable from random, and guessing a random $C$-byte value succeeds with probability $1 / 2^{8C}$.
+Note that forgery resistance is a consequence of tag PRF security (§6.3): the tag on any ciphertext the adversary has not queried is indistinguishable from random up to the PRF advantage. Guessing a truly random $T$-byte value succeeds with probability $S / 2^{8T}$, and this is additive with the adversary's advantage in breaking the PRF.
 
 **Tag truncation and committing security.** When the caller truncates the tag to $T < C$ bytes, the collision resistance bound (§6.4) degrades from $(\sigma + t)^2 / 2^{c+1}$ to the birthday bound on the truncated tag: $Q^2 / 2^{8T+1}$ for $Q$ distinct (key, ciphertext) evaluations. This weakens the CMT-4 committing property (§6.5), which is bounded by the collision resistance of the truncated tag. For $T = 16$ (128-bit truncated tags), collisions among honest sessions are expected at $Q \approx 2^{64}$. Callers that truncate the tag and rely on committing security must ensure that the total number of invocations remains well below $2^{4T}$.
 
