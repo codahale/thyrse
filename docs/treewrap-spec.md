@@ -270,8 +270,11 @@ heuristic assumption (see §6 preamble).
 
 **Notation:**
 
-- $\sigma$: online Keccak-p blocks per invocation (all leaves and tag computation combined).
-- $t$: adversary's total offline Keccak-p evaluations.
+- $\sigma$: online Keccak-p calls per invocation (all leaves and tag computation combined). For a message of length
+  $L$ bytes with $n = \max(1, \lceil L / B \rceil)$ chunks, $\sigma = \sum_{i=0}^{n-1}(1 + \lceil \ell_i / (R-1) \rceil)
+  + \mathbb{1}_{n>1} \cdot \lceil |\mathit{final\_input}| / R \rceil$, where the first term counts each leaf's init and
+  ciphertext blocks, and the second counts the tag accumulation.
+- $t$: adversary's total offline Keccak-p calls.
 - $c = 256$: capacity in bits.
 - $C = 32$: capacity in bytes; key, chain value, and tag size.
 - $S$: number of forgery attempts (§6.4) or verification queries.
