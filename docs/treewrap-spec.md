@@ -362,11 +362,11 @@ pass over the data, unlike generic CMT-4 transforms applied to non-committing AE
 
 > [!WARNING]
 > **Tag truncation and committing security.** When the caller truncates the tag to $T < C$ bytes, the collision
-> resistance bound degrades from $(\sigma + t)^2 / 2^{c+1}$ to the birthday bound on the truncated
-> tag: $Q^2 / 2^{8T+1}$ for $Q$ distinct (key, ciphertext) evaluations. For $T = 16$ (128-bit truncated tags),
-> collisions among honest sessions are expected at $Q \approx 2^{64}$. Callers that truncate the tag and rely on
-> committing security MUST ensure that the total number of invocations remains well below $2^{4T}$ to maintain a safe
-> cryptographic margin.
+> resistance bound becomes $(\sigma + t)^2 / 2^{c+1} + Q^2 / 2^{8T+1}$: the sponge-vs-RO indifferentiability term is
+> unchanged, but the RO-world birthday term is governed by the truncated output length $8T$ bits rather than the full
+> $8C$ bits. For $T = 16$ (128-bit truncated tags), collisions among honest sessions are expected at
+> $Q \approx 2^{64}$. Callers that truncate the tag and rely on committing security MUST ensure that the total number
+> of invocations remains well below $2^{4T}$ to maintain a safe cryptographic margin.
 
 ### 6.6 Tag Collision Resistance
 
