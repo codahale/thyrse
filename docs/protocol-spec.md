@@ -15,16 +15,16 @@ authenticated or unauthenticated ciphertext is needed.
 
 The framework provides the following operations:
 
-- **Init**: Establish a protocol identity.
-- **Mix**: Absorb key material, nonces, or associated data.
-- **Mix Stream**: Absorb streaming data too large to fit in memory, via KT128 pre-hashing.
-- **Derive**: Produce pseudorandom output that is a function of the full transcript.
-- **Ratchet**: Irreversibly advance the protocol state for forward secrecy.
-- **Mask / Unmask**: Encrypt or decrypt without authentication. The caller is responsible for authenticating the
+- **`Init`**: Establish a protocol identity.
+- **`Mix`**: Absorb key material, nonces, or associated data.
+- **`MixStream`**: Absorb streaming data too large to fit in memory, via KT128 pre-hashing.
+- **`Derive`**: Produce pseudorandom output that is a function of the full transcript.
+- **`Ratchet`**: Irreversibly advance the protocol state for forward secrecy.
+- **`Mask`** / **`Unmask`**: Encrypt or decrypt without authentication. The caller is responsible for authenticating the
   ciphertext through external mechanisms.
-- **Seal / Open**: Encrypt or decrypt with authentication. Open rejects tampered ciphertext and terminates the protocol
-  instance.
-- **Fork**: Clone the protocol state into independent branches with distinct identities.
+- **`Seal`** / **`Open`**: Encrypt or decrypt with authentication. `Open` rejects tampered ciphertext and terminates the
+  protocol instance.
+- **`Fork`**: Clone the protocol state into independent branches with distinct identities.
 
 All operations accept a label for domain separation. The full transcript is encoded with a recoverable (left-to-right
 parseable) encoding, as required by the RO-KDF proof.
@@ -38,11 +38,11 @@ parseable) encoding, as required by the RO-KDF proof.
 
 ## 3. Dependencies
 
-**TurboSHAKE128(M, D, $\ell$):** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D`
-(0x01 – 0x7F), and an output length $\ell$ in bytes.
+**`TurboSHAKE128(M, D, ℓ)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D`
+(0x01 – 0x7F), and an output length `ℓ` in bytes.
 
-**KT128(M, S, $\ell$):** KangarooTwelve as specified in RFC 9861. Takes a message `M`, a customization string `S`, and
-an output length $\ell$ in bytes.
+**`KT128(M, S, ℓ)`:** KangarooTwelve as specified in RFC 9861. Takes a message `M`, a customization string `S`, and
+an output length `ℓ` in bytes.
 
 **`TreeWrap.EncryptAndMAC(key, plaintext) → (ciphertext, tag)`:** As specified in the TreeWrap specification. Takes a
 `C`-byte key and arbitrary-length plaintext; returns same-length ciphertext and a `C`-byte tag.
@@ -137,79 +137,80 @@ pseudorandom — it is a PRF output, which may still be sufficient depending on 
 
 ### 10.1 Init
 
-Establishes the protocol identity. The Init label provides protocol-level domain separation: two protocols using
-different Init labels produce cryptographically independent transcripts even if all subsequent operations are identical.
-See §11 for transcript validity requirements.
+Establishes the protocol identity. The `Init` label provides protocol-level domain separation: two protocols using
+different `Init` labels produce cryptographically independent transcripts even if all subsequent operations are
+identical. See §11 for transcript validity requirements.
 
-**Init(label)**
+**`Init(label)`**
 
-&emsp; `transcript ← 0x10 ‖ length_encode(label)`
+- `transcript ← 0x10 ‖ length_encode(label)`
 
 ### 10.2 Mix
 
 Absorbs data into the protocol transcript. Used for key material, nonces, associated data, and any protocol input that
 fits in memory.
 
-**Mix(label, data)**
+**`Mix(label, data)`**
 
-&emsp; `transcript ← transcript ‖ 0x11 ‖ length_encode(label) ‖ length_encode(data)`
+- `transcript ← transcript ‖ 0x11 ‖ length_encode(label) ‖ length_encode(data)`
 
 ### 10.3 Mix Stream
 
 Absorbs streaming data that may not fit in memory. The data is pre-hashed through KT128 to produce a fixed-size
-commitment. The Init label is used as the KT128 customization string, binding the digest to the protocol identity.
+commitment. The `Init` label is used as the KT128 customization string, binding the digest to the protocol identity.
 
-**MixStream(label, data)**
+**`MixStream(label, data)`**
 
-&emsp; `digest ← KT128(data, init_label, H)`  
-&emsp; `transcript ← transcript ‖ 0x12 ‖ length_encode(label) ‖ length_encode(digest)`
+- `digest ← KT128(data, init_label, H)`
+- `transcript ← transcript ‖ 0x12 ‖ length_encode(label) ‖ length_encode(digest)`
 
-Here `init_label` is the label passed to the Init operation that established this protocol instance. Implementations
+Here `init_label` is the label passed to the `Init` operation that established this protocol instance. Implementations
 MUST retain this value for the lifetime of the instance.
 
 ### 10.4 Fork
 
-Clones the protocol state into N independent branches and modifies the base. Each branch receives a left-encoded ordinal
-ID for domain separation. The base receives ordinal 0; clones receive ordinals 1 through N.
+Clones the protocol state into `N` independent branches and modifies the base. Each branch receives a left-encoded
+ordinal ID for domain separation. The base receives ordinal `0`; clones receive ordinals `1` through `N`.
 
-**Fork(label, values...) → clones[]**
+**`Fork(label, values...) → clones[]`**
 
 Let `N = len(values)` and let `t` be the current value of `transcript`.
 
 For the base (ordinal 0):
 
-&emsp; `transcript ← t ‖ 0x13 ‖ length_encode(label) ‖ left_encode(N) ‖ left_encode(0) ‖ length_encode("")`
+- `transcript ← t ‖ 0x13 ‖ length_encode(label) ‖ left_encode(N) ‖ left_encode(0) ‖ length_encode("")`
 
 For each clone `i` (1 ≤ i ≤ N), create an independent protocol state with:
 
-&emsp; `transcript ← t ‖ 0x13 ‖ length_encode(label) ‖ left_encode(N) ‖ left_encode(i) ‖ length_encode(values[i-1])`
+- `transcript ← t ‖ 0x13 ‖ length_encode(label) ‖ left_encode(N) ‖ left_encode(i) ‖ length_encode(values[i-1])`
 
-Fork does not finalize. All N+1 branches share the same transcript up to `t` and diverge via their ordinals and values.
+`Fork` does not finalize. All N+1 branches share the same transcript up to `t` and diverge via their ordinals and
+values.
 
-Example: `Fork("role", "prover", "verifier")` produces three protocol states. The base continues with ordinal 0 and an
-empty value. Clone 1 gets ordinal 1 with value "prover". Clone 2 gets ordinal 2 with value "verifier".
+Example: `Fork("role", "prover", "verifier")` produces three protocol states. The base continues with ordinal `0` and an
+empty value. Clone 1 gets ordinal `1` with value `prover`. Clone 2 gets ordinal `2` with value `verifier`.
 
 ### 10.5 Derive
 
 Produces pseudorandom output that is a deterministic function of the full transcript. Finalizes the current transcript
 and begins a new one.
 
-**Derive(label, output_len) → output**
+**`Derive(label, output_len) → output`**
 
-Precondition: `output_len` MUST be greater than zero. Use Ratchet for zero-output-length state advancement.
+Precondition: `output_len` MUST be greater than zero. Use `Ratchet` for zero-output-length state advancement.
 
 1. Append the frame:
 
-&emsp; `transcript ← transcript ‖ 0x14 ‖ length_encode(label) ‖ left_encode(output_len)`
+- `transcript ← transcript ‖ 0x14 ‖ length_encode(label) ‖ left_encode(output_len)`
 
 2. Evaluate TurboSHAKE128 twice over the same transcript with different domain bytes:
 
-&emsp; `chain_value ← TurboSHAKE128(transcript, 0x20, H)`  
-&emsp; `output ← TurboSHAKE128(transcript, 0x21, output_len)`
+- `chain_value ← TurboSHAKE128(transcript, 0x20, H)`
+- `output ← TurboSHAKE128(transcript, 0x21, output_len)`
 
 3. Reset the transcript:
 
-&emsp; `transcript ← 0x18 ‖ 0x14 ‖ left_encode(1) ‖ length_encode(chain_value)`
+- `transcript ← 0x18 ‖ 0x14 ‖ left_encode(1) ‖ length_encode(chain_value)`
 
 The two TurboSHAKE128 evaluations are independent and may execute in parallel.
 
@@ -219,143 +220,144 @@ Return `output`.
 
 Irreversibly advances the protocol state. No user-visible output is produced.
 
-**Ratchet(label)**
+**`Ratchet(label)`**
 
 1. Append the frame:
 
-&emsp; `transcript ← transcript ‖ 0x15 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x15 ‖ length_encode(label)`
 
 2. Derive a chain value:
 
-&emsp; `chain_value ← TurboSHAKE128(transcript, 0x24, H)`
+- `chain_value ← TurboSHAKE128(transcript, 0x24, H)`
 
 3. Reset the transcript:
 
-&emsp; `transcript ← 0x18 ‖ 0x15 ‖ left_encode(1) ‖ length_encode(chain_value)`
+- `transcript ← 0x18 ‖ 0x15 ‖ left_encode(1) ‖ length_encode(chain_value)`
 
 ### 10.7 Mask / Unmask
 
-Encrypts (Mask) or decrypts (Unmask) without authentication. Use Mask when integrity is provided by an external
+Encrypts (`Mask`) or decrypts (`Unmask`) without authentication. Use `Mask` when integrity is provided by an external
 mechanism (e.g., a signature over the transcript) or when confidentiality alone is sufficient.
 
-**Mask(label, plaintext) → ciphertext**
+**`Mask(label, plaintext) → ciphertext`**
 
 1. Append the frame:
 
-&emsp; `transcript ← transcript ‖ 0x16 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x16 ‖ length_encode(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
-&emsp; `chain_value ← TurboSHAKE128(transcript, 0x20, H)`  
-&emsp; `key ← TurboSHAKE128(transcript, 0x22, C)`
+- `chain_value ← TurboSHAKE128(transcript, 0x20, H)`
+- `key ← TurboSHAKE128(transcript, 0x22, C)`
 
 3. Encrypt:
 
-&emsp; `(ciphertext, tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`
+- `(ciphertext, tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`
 
 4. Reset the transcript:
 
-&emsp; `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
+- `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
 
 The two TurboSHAKE128 evaluations are independent and may execute in parallel.
 
 Return `ciphertext`. The tag is not transmitted.
 
-**Unmask(label, ciphertext) → plaintext**
+**`Unmask(label, ciphertext) → plaintext`**
 
-1. Append the frame (identical to Mask):
+1. Append the frame (identical to `Mask`):
 
-&emsp; `transcript ← transcript ‖ 0x16 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x16 ‖ length_encode(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
-&emsp; `chain_value ← TurboSHAKE128(transcript, 0x20, H)`  
-&emsp; `key ← TurboSHAKE128(transcript, 0x22, C)`
+- `chain_value ← TurboSHAKE128(transcript, 0x20, H)`
+- `key ← TurboSHAKE128(transcript, 0x22, C)`
 
 3. Decrypt:
 
-&emsp; `(plaintext, tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
+- `(plaintext, tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
 
 4. Reset the transcript:
 
-&emsp; `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
+- `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
 
 Return `plaintext`.
 
 *Warning:* Any application-level processing of the unmasked plaintext MUST be treated as untrusted and safely buffered
-until an external authenticating operation (such as verifying a signature over a subsequent Derive output) has
+until an external authenticating operation (such as verifying a signature over a subsequent `Derive` output) has
 succeeded.
 
 ### 10.8 Seal / Open
 
-Encrypts (Seal) or decrypts (Open) with authentication. Use Seal when the ciphertext must be verified on receipt. A
-failed Open indicates tampering and permanently invalidates the protocol instance.
+Encrypts (`Seal`) or decrypts (`Open`) with authentication. Use `Seal` when the ciphertext must be verified on receipt.
+A failed `Open` indicates tampering and permanently invalidates the protocol instance.
 
-**Seal(label, plaintext) → ciphertext ‖ tag**
+**`Seal(label, plaintext) → ciphertext ‖ tag`**
 
 1. Append the frame:
 
-&emsp; `transcript ← transcript ‖ 0x17 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x17 ‖ length_encode(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
-&emsp; `chain_value ← TurboSHAKE128(transcript, 0x20, H)`  
-&emsp; `key ← TurboSHAKE128(transcript, 0x23, C)`
+- `chain_value ← TurboSHAKE128(transcript, 0x20, H)`
+- `key ← TurboSHAKE128(transcript, 0x23, C)`
 
 3. Encrypt:
 
-&emsp; `(ciphertext, tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`
+- `(ciphertext, tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`
 
 4. Reset the transcript:
 
-&emsp; `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
+- `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
 
 The two TurboSHAKE128 evaluations are independent and may execute in parallel.
 
 Return `ciphertext ‖ tag`.
 
-**Open(label, ciphertext, tag) → plaintext or ⊥**
+**`Open(label, ciphertext, tag) → plaintext or ⊥`**
 
-1. Append the frame (identical to Seal):
+1. Append the frame (identical to `Seal`):
 
-&emsp; `transcript ← transcript ‖ 0x17 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x17 ‖ length_encode(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
-&emsp; `chain_value ← TurboSHAKE128(transcript, 0x20, H)`  
-&emsp; `key ← TurboSHAKE128(transcript, 0x23, C)`
+- `chain_value ← TurboSHAKE128(transcript, 0x20, H)`
+- `key ← TurboSHAKE128(transcript, 0x23, C)`
 
 3. Decrypt:
 
-&emsp; `(plaintext, computed_tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
+- `(plaintext, computed_tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
 
 4. Reset the transcript (unconditionally):
 
-&emsp; `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(computed_tag)`
+- `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(computed_tag)`
 
 5. Verify:
 
-&emsp; If `computed_tag ≠ tag` (constant-time comparison), discard `plaintext` and return ⊥. The protocol instance is
-&emsp; permanently desynchronized and MUST be discarded immediately.
+- If `computed_tag ≠ tag` (constant-time comparison), discard `plaintext` and return ⊥. The protocol instance is
+  permanently desynchronized and MUST be discarded immediately.
 
 Return `plaintext`.
 
 ### 10.9 Utility Operations
 
-**Clone() → copy**
+**`Clone() → copy`**
 
 Returns an independent copy of the protocol state (transcript and, in sponge-based implementations, the full sponge
-state and Init label). The original and clone evolve independently. Clone does not append a frame to the transcript.
+state and `Init` label). The original and clone evolve independently. `Clone` does not append a frame to the transcript.
 
-*Warning:* Because Clone does not append a frame, applying identical operations to the original and the clone will
-produce identical transcripts, potentially leading to catastrophic key reuse in Mask or Seal. Callers SHOULD use Fork to
+*Warning:* Because `Clone` does not append a frame, applying identical operations to the original and the clone will
+produce identical transcripts, potentially leading to catastrophic key reuse in `Mask` or `Seal`. Callers SHOULD use
+`Fork` to
 create independent protocol branches unless they are explicitly managing transcript divergence (e.g., repeating an
 operation for benchmarking, or transferring state from sender to receiver).
 
-**Clear()**
+**`Clear()`**
 
 Overwrites the protocol state with zeros and invalidates the instance. Implementations MUST zero the sponge state, any
-buffered key material, and the stored Init label. After Clear, the instance MUST NOT be used.
+buffered key material, and the stored `Init` label. After `Clear`, the instance MUST NOT be used.
 
 ## 11. Recoverability
 
@@ -365,37 +367,37 @@ can unambiguously extract each operation:
 1. Read one byte: the operation code.
 2. Based on the operation code:
 
-- **INIT (0x10):** Parse `length_encode(label)`.
-- **MIX (0x11):** Parse `length_encode(label)`, then `length_encode(data)`.
-- **MIX_STREAM (0x12):** Parse `length_encode(label)`, then `length_encode(digest)`.
-- **FORK (0x13):** Parse `length_encode(label)`, then `left_encode(N)`, then `left_encode(ordinal)`, then
+- **`INIT` (`0x10`):** Parse `length_encode(label)`.
+- **`MIX` (`0x11`):** Parse `length_encode(label)`, then `length_encode(data)`.
+- **`MIX_STREAM` (`0x12`):** Parse `length_encode(label)`, then `length_encode(digest)`.
+- **`FORK` (`0x13`):** Parse `length_encode(label)`, then `left_encode(N)`, then `left_encode(ordinal)`, then
   `length_encode(value)`.
-- **DERIVE (0x14):** Parse `length_encode(label)`, then `left_encode(output_len)`.
-- **RATCHET (0x15):** Parse `length_encode(label)`.
-- **MASK (0x16):** Parse `length_encode(label)`.
-- **SEAL (0x17):** Parse `length_encode(label)`.
-- **CHAIN (0x18):** Read one byte: the origin operation code (0x14, 0x15, 0x16, or 0x17). Parse `left_encode(n)`, then
-  parse `n` instances of `length_encode(value)`.
+- **`DERIVE` (`0x14`):** Parse `length_encode(label)`, then `left_encode(output_len)`.
+- **`RATCHET` (`0x15`):** Parse `length_encode(label)`.
+- **`MASK` (`0x16`):** Parse `length_encode(label)`.
+- **`SEAL` (`0x17`):** Parse `length_encode(label)`.
+- **`CHAIN` (`0x18`):** Read one byte: the origin operation code (`0x14`, `0x15`, `0x16`, or `0x17`). Parse
+  `left_encode(n)`, then parse `n` instances of `length_encode(value)`.
 
 3. The next byte is the operation code of the subsequent operation, or the transcript ends.
 
 Since `left_encode` is self-delimiting and all variable-length fields are length-prefixed, the encoding is injective and
 recoverable. This satisfies the requirement of the RO-KDF construction.
 
-**Transcript validity.** A valid transcript MUST begin with either an INIT frame (0x10) for the first instance or a
-CHAIN frame (0x18) for subsequent instances after finalization. Implementations MUST reject any operation on an empty
-transcript other than Init. A CHAIN origin byte MUST be one of 0x14, 0x15, 0x16, 0x17. Any other leading byte or origin
-byte indicates a malformed transcript.
+**Transcript validity.** A valid transcript MUST begin with either an `INIT` frame (`0x10`) for the first instance or a
+`CHAIN` frame (`0x18`) for subsequent instances after finalization. Implementations MUST reject any operation on an
+empty transcript other than `Init`. A `CHAIN` origin byte MUST be one of `0x14`, `0x15`, `0x16`, `0x17`. Any other
+leading byte or origin byte indicates a malformed transcript.
 
 ## 12. Implementation Notes
 
 ### 12.1 Sponge State Reuse
 
 Although the transcript is described as a byte string that is hashed in its entirety at each finalization, an
-implementation SHOULD maintain a running TurboSHAKE128 sponge state. Non-finalizing operations (Init, Mix, Mix Stream,
-Fork) absorb their frames incrementally into the sponge without forcing permutation boundaries. Finalizing operations
-clone the sponge state and finalize the clones with their respective domain bytes. This avoids re-hashing the full
-transcript on each finalization.
+implementation SHOULD maintain a running TurboSHAKE128 sponge state. Non-finalizing operations (`Init`, `Mix`,
+`MixStream`, `Fork`) absorb their frames incrementally into the sponge without forcing permutation boundaries.
+Finalizing operations clone the sponge state and finalize the clones with their respective domain bytes. This avoids
+re-hashing the full transcript on each finalization.
 
 The two TurboSHAKE128 evaluations at each finalization (chain value + output/key) require one clone and two independent
 finalizations, which may execute in parallel on platforms with SIMD support for Keccak-p[1600,12].
@@ -404,25 +406,26 @@ finalizations, which may execute in parallel on platforms with SIMD support for 
 
 Multiple small Mix operations pack contiguously into the sponge rate (168 bytes for TurboSHAKE128) with no forced
 permutation boundaries. The sponge permutation occurs only when the rate buffer fills naturally. For a typical AEAD
-header — Init + Mix(key) + Mix(nonce) + Mix(ad) with a 32-byte key, 12-byte nonce, and 16-byte AD — the total frame size
-is approximately 80 bytes, fitting within a single rate block with zero permutation calls before encryption begins.
+header — `Init` + `Mix(key)` + `Mix(nonce)` + `Mix(ad)` with a 32-byte key, 12-byte nonce, and 16-byte AD — the total
+frame size is approximately 80 bytes, fitting within a single rate block with zero permutation calls before encryption
+begins.
 
 ### 12.3 Constant-Time Operation
 
-Implementations MUST ensure constant-time processing for all secret data. Tag verification in Open MUST use
+Implementations MUST ensure constant-time processing for all secret data. Tag verification in `Open` MUST use
 constant-time comparison. TreeWrap key derivation and encryption MUST not branch on secret values.
 
 ### 12.4 Memory Sanitization
 
-**Plaintext on failed Open.** Open decrypts ciphertext before verifying the tag. If verification fails, the plaintext
-buffer contains unauthenticated data that MUST be zeroed before returning. Implementations that decrypt in-place MUST
-overwrite the buffer with zeros (not with the original ciphertext, which may itself be attacker-controlled). Callers
-MUST NOT read or act on plaintext from a failed Open.
+**Plaintext on failed `Open`.** `Open` decrypts ciphertext before verifying the tag. If verification fails, the
+plaintext buffer contains unauthenticated data that MUST be zeroed before returning. Implementations that decrypt
+in-place MUST overwrite the buffer with zeros (not with the original ciphertext, which may itself be
+attacker-controlled). Callers MUST NOT read or act on plaintext from a failed `Open`.
 
-**Protocol state.** The Clear operation (§10.9) zeros the sponge state, buffered key material, and stored Init label.
-Implementations SHOULD also zero derived TreeWrap keys and intermediate chain values as soon as they are no longer
-needed. For forward secrecy to hold after Ratchet, the pre-Ratchet sponge state MUST be erased; retaining it in memory
-defeats the purpose of ratcheting.
+**Protocol state.** The `Clear` operation (§10.9) zeros the sponge state, buffered key material, and stored `Init`
+label. Implementations SHOULD also zero derived TreeWrap keys and intermediate chain values as soon as they are no
+longer needed. For forward secrecy to hold after `Ratchet`, the pre-`Ratchet` sponge state MUST be erased; retaining it
+in memory defeats the purpose of ratcheting.
 
 **Language-level considerations.** In languages with garbage collection or compiler optimizations that may elide stores
 to dead memory, implementations MUST use platform-specific secure-zeroing primitives (e.g., `explicit_bzero`,
@@ -443,8 +446,8 @@ from random as long as at least one input to the transcript instance is unpredic
 al., the recoverable encoding $\langle\cdot\rangle$ is the frame encoding defined in §§4–5 of this spec, and the source
 collection corresponds to the key material, nonces, and chain values absorbed into the instance.
 
-Two finalizations of the same transcript with different domain bytes (e.g., chain value with 0x20 and derived output
-with 0x21) produce independent outputs. This follows from modeling TurboSHAKE128 with distinct domain bytes as
+Two finalizations of the same transcript with different domain bytes (e.g., chain value with `0x20` and derived output
+with `0x21`) produce independent outputs. This follows from modeling TurboSHAKE128 with distinct domain bytes as
 independent random oracles, which is justified by TurboSHAKE128's domain separation mechanism: the domain byte is
 absorbed into the sponge state at a position that is unambiguously separated from the message,
 making $\mathrm{TurboSHAKE128}(M, D_1, \ell)$ and $\mathrm{TurboSHAKE128}(M, D_2, \ell)$ independent functions
@@ -453,7 +456,7 @@ when $D_1 \neq D_2$.
 **Sequential composition across chain boundaries.** The RO-KDF proof covers a single hash evaluation, not a chain of
 evaluations where one output feeds into the next instance's input. The composition argument is as follows.
 
-Consider Instance $k$, which finalizes with domain bytes 0x20 (chain) and some output domain byte $D$ (derive/key).
+Consider Instance $k$, which finalizes with domain bytes `0x20` (chain) and some output domain byte $D$ (derive/key).
 Let $\mathit{cv}_k$ denote the chain value and $\mathit{out}_k$ denote the derived output or key. Since these come from
 independent random oracles on the same transcript, $\mathit{cv}_k$ and $\mathit{out}_k$ are independent. In particular,
 an adversary who observes $\mathit{out}_k$ (or ciphertext encrypted under a key derived from $\mathit{out}_k$) gains no
@@ -483,43 +486,43 @@ concrete bound is given in §13.8.
 Each chain value is $H = 64$ bytes (512 bits). The birthday bound for chain value collisions across instances
 is $2^{256}$, far exceeding the 128-bit security target.
 
-Forward secrecy is achieved by Ratchet: after Ratchet, the transcript is reset to contain only the chain value. An
-adversary who compromises the post-Ratchet state learns the chain value but cannot invert TurboSHAKE128 to recover the
+Forward secrecy is achieved by `Ratchet`: after `Ratchet`, the transcript is reset to contain only the chain value. An
+adversary who compromises the post-`Ratchet` state learns the chain value but cannot invert TurboSHAKE128 to recover the
 prior transcript, and therefore cannot recover keys or outputs derived from earlier instances. Note that forward secrecy
 requires the prior transcript's sponge state to be erased from memory; this is an implementation obligation (see §12.4).
 
 ### 13.3 Pre-Hash Collision Resistance
 
 `MixStream` absorbs a KT128 digest rather than the raw data. The $H = 64$ byte digest provides 256-bit collision
-resistance under the Keccak sponge claim, exceeding the 128-bit security target. The Init label is used as the KT128
+resistance under the Keccak sponge claim, exceeding the 128-bit security target. The `Init` label is used as the KT128
 customization string, ensuring that `MixStream` digests are protocol-specific: two different protocols produce different
 digests for the same data.
 
 ### 13.4 Mask / Unmask Security
 
-Mask provides confidentiality but not authentication. The security argument relies on two properties of TreeWrap:
+`Mask` provides confidentiality but not authentication. The security argument relies on two properties of TreeWrap:
 
-**IND-CPA from key pseudorandomness.** The TreeWrap key is derived from TurboSHAKE128 with domain byte 0x22 on the
+**IND-CPA from key pseudorandomness.** The TreeWrap key is derived from TurboSHAKE128 with domain byte `0x22` on the
 current transcript. Under the per-instance RO-KDF argument (§13.1), this key is indistinguishable from random as long as
 the transcript contains at least one unpredictable input. TreeWrap's confidentiality under a random key follows from the
-leaf cipher's PRF security under the Keccak sponge claim (see TreeWrap specification §6.2). Therefore, Mask provides
+leaf cipher's PRF security under the Keccak sponge claim (see TreeWrap specification §6.2). Therefore, `Mask` provides
 IND-CPA confidentiality.
 
-**Tag as PRF output.** The full TreeWrap tag absorbed into the CHAIN frame is a deterministic function of the TreeWrap
+**Tag as PRF output.** The full TreeWrap tag absorbed into the `CHAIN` frame is a deterministic function of the TreeWrap
 key and the ciphertext. For the composition argument in §13.1 to hold, the tag must not leak information about the chain
 value $\mathit{cv}_k$. Since the tag is derived from a TreeWrap key that is independent of $\mathit{cv}_k$ (different
 domain bytes on the same transcript), and the tag is a PRF of the key applied to the ciphertext (see TreeWrap
 specification §6.3), the tag is pseudorandom and independent of $\mathit{cv}_k$. Therefore, absorbing the tag into the
-next instance's CHAIN frame does not compromise the chain value's unpredictability.
+next instance's `CHAIN` frame does not compromise the chain value's unpredictability.
 
 If the ciphertext is tampered with, the sender and receiver compute different tags. Their transcripts diverge, and all
-subsequent operations produce different results. However, Mask alone does not provide integrity guarantees. Applications
-requiring integrity should use Seal or authenticate the ciphertext externally.
+subsequent operations produce different results. However, `Mask` alone does not provide integrity guarantees.
+Applications requiring integrity should use `Seal` or authenticate the ciphertext externally.
 
 ### 13.5 Seal / Open Security
 
-Seal provides confidentiality and $8C = 256$ bits of authentication. The confidentiality and composition arguments are
-identical to Mask (§13.4), with domain byte 0x23 for key derivation instead of 0x22.
+`Seal` provides confidentiality and $8C = 256$ bits of authentication. The confidentiality and composition arguments are
+identical to `Mask` (§13.4), with domain byte `0x23` for key derivation instead of `0x22`.
 
 **Authentication.** The tag appended to the ciphertext is the full $C$-byte TreeWrap tag. Under a random key, the tag is
 a PRF of the ciphertext (TreeWrap specification §6.3). An adversary making $S$ forgery attempts therefore succeeds with
@@ -534,25 +537,26 @@ specification §6.3). For $C = 32$ bytes, the forgery bound is $S / 2^{256}$ plu
 TreeWrap's construction: the tag is a collision-resistant function of (key, ciphertext), and since TreeWrap encryption
 is invertible per-key, this commits to (key, plaintext). See the TreeWrap specification §6.5 for the detailed argument.
 
-**Failed Open.** Open advances the transcript unconditionally. On verification failure, the receiver's transcript
-diverges from the sender's (different `full_tag` values in the CHAIN frame), permanently desynchronizing the protocol
-state. After a failed Open, the protocol instance MUST be discarded.
+**Failed `Open`.** `Open` advances the transcript unconditionally. On verification failure, the receiver's transcript
+diverges from the sender's (different `full_tag` values in the `CHAIN` frame), permanently desynchronizing the protocol
+state. After a failed `Open`, the protocol instance MUST be discarded.
 
 ### 13.6 Fork Security
 
-Fork does not finalize. All $N{+}1$ branches share identical transcript up to the fork point and diverge via their
+`Fork` does not finalize. All $N{+}1$ branches share identical transcript up to the fork point and diverge via their
 ordinals and (for clones) branch-specific values. The ordinal alone ensures the base is distinct from all clones.
 Callers MUST ensure clone values are distinct from each other.
 
 ### 13.7 Domain Byte and Operation Code Separation
 
-All operation codes are in the range 0x10–0x18. All TurboSHAKE128 domain bytes used by this framework are in the range
-0x20–0x24 (protocol operations) and 0x60–0x64 (TreeWrap). KT128 uses domain byte 0x07. These ranges are disjoint,
-eliminating any possibility of confusion between operation codes and domain bytes.
+All operation codes are in the range `0x10` – `0x18`. All TurboSHAKE128 domain bytes used by this framework are in the
+range `0x20` – `0x24` (protocol operations) and `0x60` – `0x64` (TreeWrap). KT128 uses domain byte `0x07`. These ranges
+are disjoint, eliminating any possibility of confusion between operation codes and domain bytes.
 
-This provides a robust defense-in-depth layer against cross-operation state confusion. For example, in Mask and Seal,
-the operation codes (0x16 vs 0x17) force the transcripts to diverge *before* finalization, and the sponge finalizations
-use distinct domain bytes (0x22 vs 0x23) to derive the keys, providing redundant cryptographic separation.
+This provides a robust defense-in-depth layer against cross-operation state confusion. For example, in `Mask` and
+`Seal`, the operation codes (`0x16` vs `0x17`) force the transcripts to diverge *before* finalization, and the sponge
+finalizations use distinct domain bytes (`0x22` vs `0x23`) to derive the keys, providing redundant cryptographic
+separation.
 
 ### 13.8 Concrete Security Reduction
 
@@ -567,7 +571,7 @@ argument per instance with inductive composition, and reduce TreeWrap security u
 | $q$      | Total number of finalizing operations across the protocol lifetime            |
 | $\sigma$ | Total data complexity: number of Keccak-p[1600,12] calls made by the protocol |
 | $t$      | Adversary's offline computation budget in Keccak-p[1600,12] calls             |
-| $S$      | Number of forgery attempts against Seal/Open                                  |
+| $S$      | Number of forgery attempts against `Seal`/`Open`                              |
 | $c$      | TurboSHAKE128 capacity = 256 bits                                             |
 | $H$      | Chain value length = 512 bits                                                 |
 
@@ -583,10 +587,10 @@ bounded by:
 
 $$\varepsilon_{\mathrm{indiff}} \leq \frac{(\sigma + t)^2}{2^{c+1}} = \frac{(\sigma + t)^2}{2^{257}}$$
 
-This replacement covers all TurboSHAKE128 evaluations in the protocol: backbone finalizations (domain bytes 0x20–0x24),
-TreeWrap leaf ciphers (0x60–0x63), TreeWrap tag accumulation (0x64), and KT128 pre-hashing (0x07, which uses
-TurboSHAKE128 internally). After this step, each (message, domain_byte) pair maps to an independent uniformly random
-output.
+This replacement covers all TurboSHAKE128 evaluations in the protocol: backbone finalizations (domain bytes `0x20` –
+`0x24`), TreeWrap leaf ciphers (`0x60` – `0x63`), TreeWrap tag accumulation (`0x64`), and KT128 pre-hashing (`0x07`,
+which uses TurboSHAKE128 internally). After this step, each `(message, domain_byte)` pair maps to an independent
+uniformly random output.
 
 TurboSHAKE128 evaluations with distinct domain bytes are modeled as independent random oracles. This follows from the
 domain byte being absorbed at a structurally distinct position (the pad byte in the sponge finalization), which
@@ -603,7 +607,7 @@ where $\mathrm{Adv}^{\mathrm{up}}_{\Sigma}(k)$ is the unpredictability advantage
 Instance $k$.
 
 For Instance 0, the source collection is the key material and nonces absorbed via
-Mix. $\mathrm{Adv}^{\mathrm{up}}_{\Sigma}(0)$ is determined by the caller's key generation and nonce selection.
+`Mix`. $\mathrm{Adv}^{\mathrm{up}}_{\Sigma}(0)$ is determined by the caller's key generation and nonce selection.
 
 For Instance $k > 0$, the chain value $\mathit{cv}_{k-1}$ serves as an unpredictable source. In the random oracle
 model, $\mathit{cv}_{k-1} = \mathrm{RO}_{0\mathrm{x}20}(\mathit{transcript}_{k-1})$ is uniformly random and independent
@@ -616,11 +620,11 @@ about $\mathit{cv}_{k-1}$, because:
 - To query $\mathrm{RO}_{0\mathrm{x}20}$ on $\mathit{transcript}_{k-1}$, the adversary would need to construct the full
   transcript, which requires predicting the unpredictable inputs to Instance $k{-}1$.
 
-For Mask and Seal instances, the CHAIN frame also absorbs the TreeWrap tag. The tag is a deterministic function of the
-TreeWrap key (from $\mathrm{RO}_{0\mathrm{x}22}$ or $\mathrm{RO}_{0\mathrm{x}23}$) and the ciphertext. Since the key is
-independent of $\mathit{cv}_{k-1}$ (different domain byte) and the tag is a PRF of the key (see Step 4), the tag reveals
-no information about $\mathit{cv}_{k-1}$. The adversary who observes both the ciphertext and the derived key's effects
-still cannot predict $\mathit{cv}_{k-1}$.
+For `Mask` and `Seal` instances, the `CHAIN` frame also absorbs the TreeWrap tag. The tag is a deterministic function of
+the TreeWrap key (from $\mathrm{RO}_{0\mathrm{x}22}$ or $\mathrm{RO}_{0\mathrm{x}23}$) and the ciphertext. Since the key
+is independent of $\mathit{cv}_{k-1}$ (different domain byte) and the tag is a PRF of the key (see Step 4), the tag
+reveals no information about $\mathit{cv}_{k-1}$. The adversary who observes both the ciphertext and the derived key's
+effects still cannot predict $\mathit{cv}_{k-1}$.
 
 Therefore, $\mathit{cv}_{k-1}$ is unpredictable as a source for Instance $k$, and the RO-KDF bound applies:
 
@@ -639,15 +643,16 @@ requirement. This gives $q^2 / 2^{513}$.
 **Step 4: TreeWrap under derived keys.** After Steps 2–3, each TreeWrap key is indistinguishable from a uniform
 random $C$-byte string. TreeWrap's security under a random key reduces to the sponge claim via:
 
-- **Confidentiality (IND-CPA):** Each TreeWrap leaf cipher uses domain bytes 0x60–0x63, which are PRFs under the sponge
-  indifferentiability established in Step 2. The IND-CPA advantage is absorbed into $\varepsilon_{\mathrm{indiff}}$ via
-  the data complexity $\sigma$.
+- **Confidentiality (IND-CPA):** Each TreeWrap leaf cipher uses domain bytes `0x60` – `0x63`, which are PRFs under the
+  sponge indifferentiability established in Step 2. The IND-CPA advantage is absorbed
+  into $\varepsilon_{\mathrm{indiff}}$ via the data complexity $\sigma$.
 
-- **Tag PRF security:** The TreeWrap tag accumulation uses TurboSHAKE128 with domain byte 0x64. Under the random oracle
-  model, the tag is a pseudorandom function of the key and ciphertext. The PRF advantage is absorbed
+- **Tag PRF security:** The TreeWrap tag accumulation uses TurboSHAKE128 with domain byte `0x64`. Under the random
+  oracle model, the tag is a pseudorandom function of the key and ciphertext. The PRF advantage is absorbed
   into $\varepsilon_{\mathrm{indiff}}$.
 
-- **Forgery resistance:** An adversary making $S$ forgery attempts against Seal/Open succeeds with probability at most:
+- **Forgery resistance:** An adversary making $S$ forgery attempts against `Seal`/`Open` succeeds with probability at
+  most:
 
 $$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} = \frac{S}{2^{256}}$$
 
@@ -731,10 +736,11 @@ $$\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \fra
 
 **Ratcheting as mitigation.** The multi-user key recovery term $U \cdot \varepsilon_{\mathrm{kdf}}(0)$ reflects the
 adversary's ability to correlate offline computation with any of $U$ sessions over the session's entire lifetime.
-Ratcheting limits this exposure. After a Ratchet operation, the session state contains only a chain value — a 512-bit
+Ratcheting limits this exposure. After a `Ratchet` operation, the session state contains only a chain value — a 512-bit
 pseudorandom string with no algebraic structure that could be exploited in a multi-target search. An adversary who
-targets the pre-Ratchet key material must do so before the Ratchet occurs (or within the window of operations between
-Ratchets).
+targets the pre-`Ratchet` key material must do so before the `Ratchet` occurs (or within the window of operations
+between
+`Ratchet`s).
 
 If a session Ratchets every $W$ finalizing operations, the effective multi-target window is reduced: the adversary must
 target a specific epoch of $W$ operations rather than the full session lifetime. The key recovery term becomes:
@@ -746,7 +752,7 @@ strategy is to target the epoch with the weakest key material, which is typicall
 Ratcheting does not improve the initial key recovery bound, but it ensures that compromising any single epoch does not
 compromise the full session — this is the forward secrecy property (§13.2).
 
-For long-lived sessions (messaging protocols, persistent tunnels), periodic Ratcheting every few hundred operations is
+For long-lived sessions (messaging protocols, persistent tunnels), periodic ratcheting every few hundred operations is
 strongly recommended.
 
 ### 13.10 Practical Data Limits
@@ -757,12 +763,12 @@ section converts them to practical data volumes.
 **Sponge blocks per operation.** Each Keccak-p[1600,12] invocation processes one sponge block of $R = 168$ bytes. The
 data complexity $\sigma$ counts the total number of Keccak-p invocations across all protocol and TreeWrap operations:
 
-- A Mix operation absorbing $d$ bytes of data costs $\lceil(\text{frame overhead} + d) / 168\rceil$ blocks, but since
-  non-finalizing operations pack into the running sponge state, the cost is amortized. A typical AEAD header (Init +
-  Mix(key) + Mix(nonce) + Mix(ad)) costs 0 permutation calls if the total frame size fits in one rate block ($\leq 168$
-  bytes).
+- A `Mix` operation absorbing $d$ bytes of data costs $\lceil(\text{frame overhead} + d) / 168\rceil$ blocks, but since
+  non-finalizing operations pack into the running sponge state, the cost is amortized. A typical AEAD header (`Init` +
+  `Mix(key)` + `Mix(nonce)` + `Mix(ad)`) costs 0 permutation calls if the total frame size fits in one rate block
+  ($\leq 168$ bytes).
 
-- A finalizing operation (Derive, Ratchet, Mask, Seal) forces at least 2 Keccak-p calls (one per TurboSHAKE128
+- A finalizing operation (`Derive`, `Ratchet`, `Mask`, `Seal`) forces at least 2 Keccak-p calls (one per TurboSHAKE128
   evaluation for the two domain-byte clones), plus however many calls are needed to squeeze the output.
 
 - TreeWrap encryption of $m$ bytes costs $\lceil m / 167 \rceil$ Keccak-p calls per leaf (167 data bytes per block, with
@@ -793,10 +799,10 @@ In practice, this limit is unreachable. For reference:
 **Per-session recommendations.** Although the global data limit is enormous, implementations should enforce per-session
 limits as defense in depth:
 
-- **Maximum message size per Seal/Mask:** No inherent limit beyond available memory, but implementations MAY enforce a
-  limit of $2^{38}$ bytes (256 GB) per operation to bound per-invocation TreeWrap leaf count.
+- **Maximum message size per `Seal`/`Mask`:** No inherent limit beyond available memory, but implementations MAY enforce
+  a limit of $2^{38}$ bytes (256 GB) per operation to bound per-invocation TreeWrap leaf count.
 
-- **Maximum finalizations per session:** No inherent limit, but Ratchet at least every $2^{32}$ finalizations to limit
+- **Maximum finalizations per session:** No inherent limit, but `Ratchet` at least every $2^{32}$ finalizations to limit
   the chain collision term and provide forward secrecy.
 
 - **Session rekeying:** For sessions processing more than $2^{48}$ bytes cumulatively, rekey by establishing a new
@@ -841,13 +847,13 @@ plaintext or ⊥ ← Open("message", ciphertext, tag)
 
 Recommended test cases:
 
-- Init + Derive: Minimal protocol producing output.
-- Init + Mix(key) + Mix(nonce) + Derive: Multiple non-finalizing operations before Derive.
-- Init + Mix(key) + Seal(plaintext) + Derive: Full AEAD round-trip.
-- Init + Mix(key) + Mask(plaintext) + Seal(plaintext): Combined unauthenticated and authenticated encryption.
-- Init + Mix(key) + Ratchet + Derive: Forward secrecy — output differs from Derive without Ratchet.
-- Fork with two branches each producing Derive: Independent outputs.
-- Mix Stream with large input: Pre-hash commitment equivalence.
-- Seal + Open with valid tag: Successful round-trip.
-- Seal + Open with tampered ciphertext: Open returns ⊥, transcript still advances.
-- Multiple Seals in sequence: Each key differs (transcript advances via tag absorption).
+- `Init` + `Derive`: Minimal protocol producing output.
+- `Init` + `Mix(key)` + `Mix(nonce)` + `Derive`: Multiple non-finalizing operations before `Derive`.
+- `Init` + `Mix(key)` + `Seal(plaintext)` + `Derive`: Full AEAD round-trip.
+- `Init` + `Mix(key)` + `Mask(plaintext)` + `Seal(plaintext)`: Combined unauthenticated and authenticated encryption.
+- `Init` + `Mix(key)` + `Ratchet` + `Derive`: Forward secrecy — output differs from `Derive` without `Ratchet`.
+- `Fork` with two branches each producing `Derive`: Independent outputs.
+- `MixStream` with large input: Pre-hash commitment equivalence.
+- `Seal` + `Open` with valid tag: Successful round-trip.
+- `Seal` + `Open` with tampered ciphertext: `Open` returns ⊥, transcript still advances.
+- Multiple `Seal`s in sequence: Each key differs (transcript advances via tag absorption).

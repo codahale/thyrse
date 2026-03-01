@@ -13,7 +13,7 @@ standard Keccak sponge (using the overwrite duplex optimization), and leaf chain
 MAC tag via TurboSHAKE128.
 
 TreeWrap is not an AEAD scheme. It does not perform tag verification internally. Instead, it exposes two
-operations—**EncryptAndMAC** and **DecryptAndMAC**—which both return the computed tag to the caller. The caller is
+operations—**`EncryptAndMAC`** and **`DecryptAndMAC`**—which both return the computed tag to the caller. The caller is
 responsible for tag comparison, transmission, and any policy decisions around verification failure. This design supports
 protocol frameworks like Thyrse that need to absorb the tag into an ongoing state regardless of verification outcome, or
 that authenticate ciphertext through external mechanisms such as signatures.
@@ -31,17 +31,17 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 
 ## 3. Dependencies
 
-**TurboSHAKE128(M, D, $\ell$):** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D`
-(0x01 – 0x7F), and an output length $\ell$ in bytes.
+**`TurboSHAKE128(M, D, ℓ)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D`
+(0x01 – 0x7F), and an output length `ℓ` in bytes.
 
 ## 4. Leaf Cipher
 
 A leaf cipher implements the DWrap mode (using the overwrite duplex optimization) over a standard Keccak sponge, using
 the same permutation and rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes: `0x60` for
-init (key/index absorption), `0x61` for single-node tag squeezing (fast path), `0x62` for intermediate encrypt/decrypt
-blocks, `0x63` for the final block (chain value derivation), and `0x64` for tag accumulation.
+`init` (key/index absorption), `0x61` for single-node tag squeezing (fast path), `0x62` for intermediate `encrypt`/
+`decrypt` blocks, `0x63` for the final block (chain value derivation), and `0x64` for tag accumulation.
 
-The overwrite duplex (DWrap) differs from the traditional XOR-absorb duplex (SpongeWrap) in that the encrypt operation
+The overwrite duplex (DWrap) differs from the traditional XOR-absorb duplex (SpongeWrap) in that the `encrypt` operation
 overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it enables a
 clean security reduction to the standard Keccak sponge via the equivalence shown by Daemen et al. for the overwrite
 duplex construction; second, for full-rate blocks, overwrite is faster than XOR on most architectures (write-only vs.
@@ -64,7 +64,7 @@ A leaf cipher consists of a 200-byte state `S`, initialized to all zeros, and a 
   - Call `pad_permute(0x60)`.
 
 > [!NOTE]
-> `init` uses domain byte `0x60`, distinct from the intermediate encrypt/decrypt byte `0x62`. This ensures the key
+> `init` uses domain byte `0x60`, distinct from the intermediate `encrypt`/`decrypt` byte `0x62`. This ensures the key
 > absorption block is domain-separated from ciphertext blocks.
 
 After `init`, the cipher has absorbed the key and index and is ready for encryption.
@@ -128,25 +128,25 @@ has size $\ell_i = \min(B,\, \mathit{len}(\mathit{plaintext}) - i \cdot B)$. If 
 single chunk is empty.
 
 If `n = 1` (fast-path):
-&emsp; Create a leaf cipher `L`.  
-&emsp; `L.init(key, 0)`  
-&emsp; `ciphertext[0] ← L.encrypt(plaintext_chunk[0])`  
-&emsp; `tag ← L.single_node_tag()`
+
+- Create a leaf cipher `L`.
+- `L.init(key, 0)`
+- `ciphertext[0] ← L.encrypt(plaintext_chunk[0])`
+- `tag ← L.single_node_tag()`
 
 If `n > 1`:
-&emsp; For each chunk `i`:  
-&emsp; &emsp; Create a leaf cipher `L`.  
-&emsp; &emsp; `L.init(key, i)`  
-&emsp; &emsp; `ciphertext[i] ← L.encrypt(plaintext_chunk[i])`  
-&emsp; &emsp; `cv[i] ← L.chain_value()`
 
-&emsp; Compute the tag using the KangarooTwelve final node structure:
-
-&emsp; `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`  
-&emsp; `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`  
-&emsp; `final_input ← final_input ‖ length_encode(n−1)`  
-&emsp; `final_input ← final_input ‖ 0xFF 0xFF`  
-&emsp; `tag ← TurboSHAKE128(final_input, 0x64, C)`
+- For each chunk `i`:
+  - Create a leaf cipher `L`.
+  - `L.init(key, i)`
+  - `ciphertext[i] ← L.encrypt(plaintext_chunk[i])`
+  - `cv[i] ← L.chain_value()`
+- Compute the tag using the KangarooTwelve final node structure:
+  - `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
+  - `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`
+  - `final_input ← final_input ‖ length_encode(n−1)`
+  - `final_input ← final_input ‖ 0xFF 0xFF`
+  - `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
 Return `(ciphertext[0] ‖ ... ‖ ciphertext[n−1], tag)`.
 
@@ -169,28 +169,28 @@ available.
 
 *Procedure:*
 
-Partition `ciphertext` into chunks identically to EncryptAndMAC.
+Partition `ciphertext` into chunks identically to `EncryptAndMAC`.
 
 If `n = 1` (fast-path):
-&emsp; Create a leaf cipher `L`.  
-&emsp; `L.init(key, 0)`  
-&emsp; `plaintext[0] ← L.decrypt(ciphertext_chunk[0])`  
-&emsp; `tag ← L.single_node_tag()`
+
+- Create a leaf cipher `L`.
+- `L.init(key, 0)`
+- `plaintext[0] ← L.decrypt(ciphertext_chunk[0])`
+- `tag ← L.single_node_tag()`
 
 If `n > 1`:
-&emsp; For each chunk `i`:  
-&emsp; &emsp; Create a leaf cipher `L`.  
-&emsp; &emsp; `L.init(key, i)`  
-&emsp; &emsp; `plaintext[i] ← L.decrypt(ciphertext_chunk[i])`  
-&emsp; &emsp; `cv[i] ← L.chain_value()`
 
-&emsp; Compute the tag using the same final node structure as EncryptAndMAC:
-
-&emsp; `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`  
-&emsp; `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`  
-&emsp; `final_input ← final_input ‖ length_encode(n−1)`  
-&emsp; `final_input ← final_input ‖ 0xFF 0xFF`  
-&emsp; `tag ← TurboSHAKE128(final_input, 0x64, C)`
+- For each chunk `i`:
+  - Create a leaf cipher `L`.
+  - `L.init(key, i)`
+  - `plaintext[i] ← L.decrypt(ciphertext_chunk[i])`
+  - `cv[i] ← L.chain_value()`
+- Compute the tag using the same final node structure as `EncryptAndMAC`:
+  - `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
+  - `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`
+  - `final_input ← final_input ‖ length_encode(n−1)`
+  - `final_input ← final_input ‖ 0xFF 0xFF`
+  - `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
 Return `(plaintext[0] ‖ ... ‖ plaintext[n−1], tag)`.
 
@@ -273,8 +273,8 @@ protocol transcript does not compromise the independence of the chain value deri
 
 ### 6.4 Tag Collision Resistance
 
-For any two distinct (key, ciphertext) pairs, the probability that EncryptAndMAC (or DecryptAndMAC) produces the same
-tag is bounded by the collision resistance of TurboSHAKE128:
+For any two distinct (key, ciphertext) pairs, the probability that `EncryptAndMAC` (or `DecryptAndMAC`) produces the
+same tag is bounded by the collision resistance of TurboSHAKE128:
 
 $$\varepsilon_{\mathrm{coll}} \leq \frac{(\sigma + t)^2}{2^{c+1}}$$
 
@@ -293,7 +293,7 @@ Suppose an adversary produces two distinct tuples $(K, P)$ and $(K', P')$ that y
 are two cases:
 
 1. **Same key** ($K = K'$). Since $(K, P) \neq (K', P')$, we have $P \neq P'$. But encryption is a bijection for a fixed
-   key (the overwrite duplex encrypt/decrypt operations are inverses), so distinct plaintexts produce distinct
+   key (the overwrite duplex `encrypt`/`decrypt` operations are inverses), so distinct plaintexts produce distinct
    ciphertexts: $\mathit{CT} \neq \mathit{CT}'$. This contradicts $\mathit{CT} = \mathit{CT}'$.
 
 2. **Different keys** ($K \neq K'$). The pairs $(K, \mathit{CT})$ and $(K', \mathit{CT})$ are distinct (they differ in
@@ -413,8 +413,8 @@ The equivalence requires four preconditions, all of which TreeWrap satisfies:
    standard sponge absorption (not overwrite). The overwrite applies only during encryption/decryption.
 
 The injectivity of the encoding holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b)
-the distinct domain bytes (`0x60` for init, `0x61` for single-node tag, `0x62` for intermediate encrypt/decrypt blocks,
-`0x63` for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities.
+the distinct domain bytes (`0x60` for `init`, `0x61` for single-node tag, `0x62` for intermediate `encrypt`/`decrypt`
+blocks, `0x63` for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities.
 
 After this rewriting, all computations in a TreeWrap invocation — $n$ leaf sponge evaluations plus one optional tag
 accumulation (TurboSHAKE128 with domain byte `0x64`) — are standard sponge evaluations on distinct inputs. Leaf inputs
@@ -424,8 +424,8 @@ differ by index; the tag evaluation is separated by domain byte.
 evaluations simultaneously with random oracle evaluations in a single reduction. Under the random oracle, distinct
 inputs yield independent, uniformly random outputs: for $n > 1$, all $n$ chain values are simultaneously pseudorandom
 (i.e., independent across leaves due to distinct indices), and the tag is pseudorandom (independent of the leaves due to
-domain byte `0x64`). For $n = 1$, the single leaf directly outputs the pseudorandom tag (independent from other steps
-due to domain byte `0x61`).
+domain byte `0x64`). For $n = 1$, the single leaf directly outputs the pseudorandom tag (independent of other steps due
+to domain byte `0x61`).
 
 The advantage of this reduction is bounded by:
 
@@ -491,7 +491,7 @@ Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. 
 | ct    | (empty)                                                            |
 | tag   | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
 
-DecryptAndMAC with the same key and empty ciphertext produces the same tag.
+`DecryptAndMAC` with the same key and empty ciphertext produces the same tag.
 
 ### 9.2 One-Byte Plaintext ($n = 1$)
 
