@@ -225,6 +225,8 @@ for $S$ forgery attempts against the full $C$-byte tag. When the caller truncate
 
 Note that forgery resistance is a consequence of tag PRF security (§6.3): the tag on any ciphertext the adversary has not queried is indistinguishable from random, and guessing a random $C$-byte value succeeds with probability $1 / 2^{8C}$.
 
+**Tag truncation and committing security.** When the caller truncates the tag to $T < C$ bytes, the collision resistance bound (§6.4) degrades from $(\sigma + t)^2 / 2^{c+1}$ to the birthday bound on the truncated tag: $Q^2 / 2^{8T+1}$ for $Q$ distinct (key, ciphertext) evaluations. This weakens the CMT-4 committing property (§6.5), which is bounded by the collision resistance of the truncated tag. For $T = 16$ (128-bit truncated tags), collisions among honest sessions are expected at $Q \approx 2^{64}$. Callers that truncate the tag and rely on committing security must ensure that the total number of invocations remains well below $2^{4T}$.
+
 ### 6.7 Chunk Reordering
 
 Each leaf is initialized with `key ‖ [index]₆₄LE`, binding it to its position. Reordering ciphertext chunks changes which leaf decrypts which data, producing different chain values and a different tag. Additionally, since leaf indices are bound at initialization, an attacker cannot cause chunk $i$'s ciphertext to be decrypted as chunk $j$ — the decryption will produce garbage and the chain value will not match.
