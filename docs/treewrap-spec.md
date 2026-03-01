@@ -270,10 +270,11 @@ heuristic assumption (see §6 preamble).
 
 **Notation:**
 
-- $\sigma$: online Keccak-p calls per invocation (all leaves and tag computation combined). For a message of length
-  $L$ bytes with $n = \max(1, \lceil L / B \rceil)$ chunks, $\sigma = \sum_{i=0}^{n-1}(1 + \lceil \ell_i / (R-1) \rceil)
-  + \mathbb{1}_{n>1} \cdot \lceil |\mathit{final\_input}| / R \rceil$, where the first term counts each leaf's init and
-  ciphertext blocks, and the second counts the tag accumulation.
+- $\sigma$: total online Keccak-p calls across all queries in the security game (all leaves and tag computations
+  combined, summed over all encryption and decryption queries). For a single message of length $L$ bytes with
+  $n = \max(1, \lceil L / B \rceil)$ chunks, the per-query contribution is $\sum_{i=0}^{n-1}(1 + \lceil \ell_i /
+  (R-1) \rceil) + \mathbb{1}_{n>1} \cdot \lceil |\mathit{final\_input}| / R \rceil$, where the first term counts
+  each leaf's init and ciphertext blocks, and the second counts the tag accumulation.
 - $t$: adversary's total offline Keccak-p calls.
 - $c = 256$: capacity in bits.
 - $C = 32$: capacity in bytes; key, chain value, and tag size.
@@ -572,8 +573,10 @@ per-leaf hybrid argument.
 
 **Multi-invocation security.** Multi-invocation security follows from the notional AEAD's game definitions
 (§6.3–§6.5), which permit multiple oracle queries under the same key. Each query uses a fresh nonce, producing an
-independent TreeWrap key via the KDF. The per-query security is bounded by $\varepsilon_{\mathrm{indiff}}$ and the
-cross-query independence is guaranteed by KDF PRF security ($\varepsilon_{\mathrm{kdf}}$).
+independent TreeWrap key via the KDF. The indifferentiability reduction bounds the entire multi-query interaction at
+once: $\sigma$ counts the total online Keccak-p calls across all queries, and the sponge indifferentiability theorem
+replaces all sponge evaluations simultaneously. Cross-query independence of TreeWrap keys is guaranteed by KDF PRF
+security ($\varepsilon_{\mathrm{kdf}}$).
 
 **Multi-user security.** In the multi-user setting with $M$ users, each with an independent key, an adversary that
 targets *any one* user gains an advantage factor of at most $M$ (by a standard hybrid argument over users). The
