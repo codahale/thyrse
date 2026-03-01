@@ -81,7 +81,7 @@ Note: both encrypt and decrypt overwrite the rate with ciphertext. This ensures 
 **TreeWrap.EncryptAndMAC(key, plaintext) → (ciphertext, tag)**
 
 *Inputs:*
-- `key`: A C-byte key. MUST be unique per invocation (see §6.1).
+- `key`: A C-byte key. MUST be pseudorandom and unique per invocation (see §6.1).
 - `plaintext`: Plaintext of any length (may be empty).
 
 *Outputs:*
@@ -148,11 +148,17 @@ The caller is responsible for comparing the returned tag against an expected val
 
 ## 6. Security Properties
 
-TreeWrap provides the following security properties under the assumption that the key is unique per invocation and that Keccak-p[1600,12] is indistinguishable from a random permutation. Each property reduces to the Keccak sponge claim via TurboSHAKE128's indifferentiability from a random oracle.
+TreeWrap provides the following security properties under the assumptions stated in §6.1 and that Keccak-p[1600,12] is indistinguishable from a random permutation. Each property reduces to the Keccak sponge claim via TurboSHAKE128's indifferentiability from a random oracle.
 
-### 6.1 Key Uniqueness
+### 6.1 Key Requirements
 
-TreeWrap is a deterministic algorithm. Encrypting two different plaintexts with the same key produces ciphertext XOR differences equal to the plaintext XOR differences, fully compromising confidentiality. The key MUST be unique per invocation. When used within a protocol framework, this is typically ensured by deriving the key from transcript state that includes a nonce or counter.
+TreeWrap requires two properties of its key:
+
+1. **Pseudorandomness.** The key MUST be indistinguishable from a uniformly random C-byte string to any adversary. All security properties in §6.2–6.6 are proved under the assumption of a uniformly random key and degrade proportionally to the adversary's advantage in distinguishing the key from random.
+
+2. **Uniqueness.** The key MUST NOT be reused across invocations. TreeWrap is a deterministic algorithm with no nonce input. Encrypting two different plaintexts with the same key produces ciphertext XOR differences equal to the plaintext XOR differences, fully compromising confidentiality.
+
+When used within a protocol framework, both properties are typically ensured by deriving the key from transcript state (via a PRF such as TurboSHAKE128) that includes a nonce or counter. The pseudorandomness of the derived key then reduces to the PRF security of the derivation function.
 
 ### 6.2 Confidentiality (IND$ for a Single Invocation)
 
@@ -254,7 +260,7 @@ TreeWrap differs from traditional AEAD in several respects:
 
 **No internal tag verification.** Traditional AEAD schemes (AES-GCM, ChaCha20-Poly1305, etc.) perform tag comparison inside the Open/Decrypt function and return ⊥ on failure, ensuring plaintext is never released before authentication. TreeWrap's DecryptAndMAC always returns both plaintext and tag, leaving verification to the caller. This is intentional: Thyrse needs the tag for transcript state advancement regardless of verification outcome (see Thyrse specification §10.8).
 
-**Deterministic, no nonce input.** TreeWrap takes only a key and plaintext. It does not accept a nonce or associated data. These are Thyrse's responsibility. The key MUST be unique per invocation.
+**Deterministic, no nonce input.** TreeWrap takes only a key and plaintext. It does not accept a nonce or associated data. These are Thyrse's responsibility. The key MUST be pseudorandom and unique per invocation (see §6.1).
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs — they prove authenticity but are not necessarily pseudorandom. TreeWrap's tag is a full PRF: under a random key, the tag is indistinguishable from a random string. This stronger property is required by Thyrse's composition argument.
 
