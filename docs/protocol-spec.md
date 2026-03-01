@@ -60,16 +60,17 @@ This encoding is self-delimiting when parsed left-to-right: the `left_encode` pr
 
 Each TurboSHAKE128 evaluation uses a domain separation byte that identifies the purpose of the output:
 
-| Byte | Purpose | Used by |
-|------|---------|---------|
-| 0x07 | Standard TurboSHAKE128 / KT128 | KT128 pre-hashing |
-| 0x20 | Chain value derivation | Derive, Mask, Seal |
-| 0x21 | Derive output | Derive |
-| 0x22 | Mask key derivation | Mask / Unmask |
-| 0x23 | Seal key derivation | Seal / Open |
-| 0x24 | Ratchet chain derivation | Ratchet |
-| 0x60 | TreeWrap leaf cipher | TreeWrap (internal) |
-| 0x61 | TreeWrap tag accumulation | TreeWrap (internal) |
+| Byte | Purpose                        | Used by             |
+|------|--------------------------------|---------------------|
+| 0x07 | Standard TurboSHAKE128 / KT128 | KT128 pre-hashing   |
+| 0x20 | Chain value derivation         | Derive, Mask, Seal  |
+| 0x21 | Derive output                  | Derive              |
+| 0x22 | Mask key derivation            | Mask / Unmask       |
+| 0x23 | Seal key derivation            | Seal / Open         |
+| 0x24 | Ratchet chain derivation       | Ratchet             |
+| 0x60 | TreeWrap intermediate block    | TreeWrap (internal) |
+| 0x61 | TreeWrap final block           | TreeWrap (internal) |
+| 0x62 | TreeWrap tag accumulation      | TreeWrap (internal) |
 
 All domain bytes are in the range 0x01–0x7F as required by TurboSHAKE128.
 
