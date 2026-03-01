@@ -30,9 +30,10 @@ const (
 
 	cvSize         = 32                  // Chain value size (= capacity).
 	blockRate      = turboshake.Rate - 1 // 167: usable data bytes per sponge block.
-	intermediateDS = 0x60                // Domain separation byte for intermediate leaf sponges.
-	finalDS        = 0x61                // Domain separation byte for final leaf sponges.
-	tagDS          = 0x62                // Domain separation byte for tag computation.
+	initDS         = 0x60                // Domain separation byte for leaf init (key/index absorption).
+	intermediateDS = 0x61                // Domain separation byte for intermediate leaf sponges.
+	finalDS        = 0x62                // Domain separation byte for final leaf sponges.
+	tagDS          = 0x63                // Domain separation byte for tag computation.
 )
 
 // Encryptor incrementally encrypts data and computes the authentication tag. It implements a streaming interface where
@@ -383,7 +384,7 @@ func lengthEncode(x uint64) []byte {
 func leafPad(s *[200]byte, key *[KeySize]byte, index uint64) {
 	copy(s[:KeySize], key[:])
 	binary.LittleEndian.PutUint64(s[KeySize:KeySize+8], index)
-	s[KeySize+8] = intermediateDS
+	s[KeySize+8] = initDS
 	s[turboshake.Rate-1] = 0x80
 }
 

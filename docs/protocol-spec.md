@@ -67,9 +67,10 @@ Each TurboSHAKE128 evaluation uses a domain separation byte that identifies the 
 | 0x22 | Mask key derivation            | Mask / Unmask       |
 | 0x23 | Seal key derivation            | Seal / Open         |
 | 0x24 | Ratchet chain derivation       | Ratchet             |
-| 0x60 | TreeWrap intermediate block    | TreeWrap (internal) |
-| 0x61 | TreeWrap final block           | TreeWrap (internal) |
-| 0x62 | TreeWrap tag accumulation      | TreeWrap (internal) |
+| 0x60 | TreeWrap init (key absorption) | TreeWrap (internal) |
+| 0x61 | TreeWrap intermediate block    | TreeWrap (internal) |
+| 0x62 | TreeWrap final block           | TreeWrap (internal) |
+| 0x63 | TreeWrap tag accumulation      | TreeWrap (internal) |
 
 All domain bytes are in the range 0x01–0x7F as required by TurboSHAKE128.
 
@@ -418,7 +419,7 @@ Fork does not finalize. All $N{+}1$ branches share identical transcript up to th
 
 ### 13.7 Domain Byte and Operation Code Separation
 
-All operation codes are in the range 0x10–0x18. All TurboSHAKE128 domain bytes used by this framework are in the range 0x20–0x24 (protocol operations) and 0x60–0x61 (TreeWrap). KT128 uses domain byte 0x07. These ranges are disjoint, eliminating any possibility of confusion between operation codes and domain bytes.
+All operation codes are in the range 0x10–0x18. All TurboSHAKE128 domain bytes used by this framework are in the range 0x20–0x24 (protocol operations) and 0x60–0x63 (TreeWrap). KT128 uses domain byte 0x07. These ranges are disjoint, eliminating any possibility of confusion between operation codes and domain bytes.
 
 This provides a robust defense-in-depth layer against cross-operation state confusion. For example, in Mask and Seal, the operation codes (0x16 vs 0x17) force the transcripts to diverge *before* finalization, and the sponge finalizations use distinct domain bytes (0x22 vs 0x23) to derive the keys, providing redundant cryptographic separation.
 
@@ -443,7 +444,7 @@ This section gives the full reduction from protocol security to the Keccak spong
 
 $$\varepsilon_{\mathrm{indiff}} \leq \frac{(\sigma + t)^2}{2^{c+1}} = \frac{(\sigma + t)^2}{2^{257}}$$
 
-This replacement covers all TurboSHAKE128 evaluations in the protocol: backbone finalizations (domain bytes 0x20–0x24), TreeWrap leaf ciphers (0x60), TreeWrap tag accumulation (0x61), and KT128 pre-hashing (0x07, which uses TurboSHAKE128 internally). After this step, each (message, domain_byte) pair maps to an independent uniformly random output.
+This replacement covers all TurboSHAKE128 evaluations in the protocol: backbone finalizations (domain bytes 0x20–0x24), TreeWrap leaf ciphers (0x60–0x62), TreeWrap tag accumulation (0x63), and KT128 pre-hashing (0x07, which uses TurboSHAKE128 internally). After this step, each (message, domain_byte) pair maps to an independent uniformly random output.
 
 TurboSHAKE128 evaluations with distinct domain bytes are modeled as independent random oracles. This follows from the domain byte being absorbed at a structurally distinct position (the pad byte in the sponge finalization), which makes $\mathrm{TurboSHAKE128}(M, D_1, \ell)$ and $\mathrm{TurboSHAKE128}(M, D_2, \ell)$ evaluations of independent sponge instances for $D_1 \neq D_2$. No additional advantage term is incurred.
 
@@ -476,9 +477,9 @@ The second term bounds the probability of a chain value collision across any two
 
 **Step 4: TreeWrap under derived keys.** After Steps 2–3, each TreeWrap key is indistinguishable from a uniform random $C$-byte string. TreeWrap's security under a random key reduces to the sponge claim via:
 
-- **Confidentiality (IND-CPA):** Each TreeWrap leaf cipher is a TurboSHAKE128 evaluation with domain byte 0x60, which is a PRF under the sponge indifferentiability established in Step 2. The IND-CPA advantage is absorbed into $\varepsilon_{\mathrm{indiff}}$ via the data complexity $\sigma$.
+- **Confidentiality (IND-CPA):** Each TreeWrap leaf cipher uses domain bytes 0x60–0x62, which are PRFs under the sponge indifferentiability established in Step 2. The IND-CPA advantage is absorbed into $\varepsilon_{\mathrm{indiff}}$ via the data complexity $\sigma$.
 
-- **Tag PRF security:** The TreeWrap tag accumulation uses TurboSHAKE128 with domain byte 0x61. Under the random oracle model, the tag is a pseudorandom function of the key and ciphertext. The PRF advantage is absorbed into $\varepsilon_{\mathrm{indiff}}$.
+- **Tag PRF security:** The TreeWrap tag accumulation uses TurboSHAKE128 with domain byte 0x63. Under the random oracle model, the tag is a pseudorandom function of the key and ciphertext. The PRF advantage is absorbed into $\varepsilon_{\mathrm{indiff}}$.
 
 - **Forgery resistance:** An adversary making $S$ forgery attempts against Seal/Open succeeds with probability at most:
 

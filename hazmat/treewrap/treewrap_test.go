@@ -333,11 +333,11 @@ func TestEncryptAndMAC(t *testing.T) {
 		wantCT  string
 		wantTag string
 	}{
-		{"empty", 0, "", "b97e7c92fa2b21c99e6c5ac2d84851a2d1ad499e908966700cab0bd65dbd7446"},
-		{"1 byte", 1, "f1", "6fd28612971748f9dc92a521176ae87ab3ee9d5ab933b0a996c9cd4e7f68399d"},
-		{"one chunk", ChunkSize, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "92064ea90b27e976db3c26715241a0cd447a885bc0f2a62989df5712189b411c"},
-		{"one chunk plus one", ChunkSize + 1, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "5c2f1854515fa7b8d991d33fbc656fd3a4c2430cdc848f19bf1bab897980e977"},
-		{"four chunks", 4 * ChunkSize, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "38a1526fa79bcebeba91cbd04ca1bf09beb524918956cda9ce470a6f6b61d717"},
+		{"empty", 0, "", "d7cac817ce2e43eb21d29a694e21d6d9c6eb6ae8cd5d87d7ae9c382019908e72"},
+		{"1 byte", 1, "f1", "0a1aa945e1ae0b95ec57b1155272237b987457df9783a17234331d4c1e21459c"},
+		{"one chunk", ChunkSize, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "4580abcfebe3e1ef44c7a823c3c89dea20f5f38172827d5067983edb6bb836ef"},
+		{"one chunk plus one", ChunkSize + 1, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "f22ec68d3bd8ff22580e57ad6638f26cd05c73ad8011af0bc55cc1ac51be7cbc"},
+		{"four chunks", 4 * ChunkSize, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "159dd85c118d70fde96e72c62fa02aa10cc9ea9d4e0ca54aff340af92688219e"},
 	}
 
 	for _, tt := range tests {
