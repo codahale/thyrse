@@ -408,7 +408,7 @@ Seal provides confidentiality and $8C = 256$ bits of authentication. The confide
 
 $$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} + \varepsilon_{\mathrm{prf}}$$
 
-where $\varepsilon_{\mathrm{prf}}$ is the TreeWrap tag PRF advantage (bounded by $(n{+}1) \cdot (\sigma{+}t)^2 / 2^{257}$ per TreeWrap specification §6.11). For $C = 32$ bytes, the forgery bound is $S / 2^{256}$ plus a negligible term.
+where $\varepsilon_{\mathrm{prf}}$ is the TreeWrap tag PRF advantage (bounded by $(\sigma{+}t)^2 / 2^{257}$ per TreeWrap specification §6.3). For $C = 32$ bytes, the forgery bound is $S / 2^{256}$ plus a negligible term.
 
 **Committing security.** The full $C$-byte tag absorbed into the CHAIN frame provides CMT-4 committing security via TreeWrap's construction: the tag is a collision-resistant function of (key, ciphertext), and since TreeWrap encryption is invertible per-key, this commits to (key, plaintext). See the TreeWrap specification §6.5 for the detailed argument.
 
@@ -484,7 +484,7 @@ The second term bounds the probability of a chain value collision across any two
 
 - **Forgery resistance:** An adversary making $S$ forgery attempts against Seal/Open succeeds with probability at most:
 
-$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8T}} = \frac{S}{2^{128}}$$
+$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} = \frac{S}{2^{256}}$$
 
 - **Committing security (CMT-4):** Finding $(K_1, P_1) \neq (K_2, P_2)$ that produce the same full tag requires a collision in the tag accumulation function, bounded by the sponge collision resistance term already captured in $\varepsilon_{\mathrm{indiff}}$.
 
@@ -492,22 +492,22 @@ See the TreeWrap specification for the detailed per-primitive bounds.
 
 **Combined bound.** Summing all terms:
 
-$$\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma + t)^2}{2^{257}} + q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{q^2}{2^{513}} + \frac{S}{2^{128}}$$
+$$\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma + t)^2}{2^{257}} + q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{q^2}{2^{513}} + \frac{S}{2^{256}}$$
 
 where:
 - $\varepsilon_{\mathrm{perm}}$ is the advantage of distinguishing Keccak-p[1600,12] from a random permutation (conjectured negligible).
 - $(\sigma + t)^2 / 2^{257}$ is the sponge indifferentiability term, covering all TurboSHAKE128 evaluations globally (backbone, TreeWrap leaves, TreeWrap tags, KT128 pre-hashing).
 - $q \cdot \varepsilon_{\mathrm{kdf}}(0)$ is $q$ times the per-instance RO-KDF bound, which depends on the unpredictability of the caller's key material.
 - $q^2 / 2^{513}$ bounds chain value collisions.
-- $S / 2^{128}$ bounds Seal forgery.
+- $S / 2^{256}$ bounds Seal forgery.
 
 For typical parameters — $q \leq 2^{48}$ finalizations, $\sigma + t \leq 2^{64}$ total permutation queries (representing exabytes of data and computation), and $S \leq 2^{48}$ forgery attempts — the individual terms evaluate to:
 
 - Indifferentiability: $(2^{64})^2 / 2^{257} = 2^{-129}$
 - Chain collisions: $(2^{48})^2 / 2^{513} = 2^{-417}$
-- Forgery: $2^{48} / 2^{128} = 2^{-80}$
+- Forgery: $2^{48} / 2^{256} = 2^{-208}$
 
-The indifferentiability and forgery terms dominate. The 128-bit security target is met as long as the caller ensures $\varepsilon_{\mathrm{kdf}}(0) \leq 2^{-128}$ (i.e., the original key material has at least 128 bits of unpredictability) and the total data complexity satisfies $\sigma + t \leq 2^{64}$.
+The indifferentiability term dominates. The 128-bit security target is met as long as the caller ensures $\varepsilon_{\mathrm{kdf}}(0) \leq 2^{-128}$ (i.e., the original key material has at least 128 bits of unpredictability) and the total data complexity satisfies $\sigma + t \leq 2^{64}$.
 
 ### 13.9 Multi-User Security
 
@@ -527,7 +527,7 @@ For 128-bit keys, $\varepsilon_{\mathrm{kdf}}(0) \approx t / 2^{128}$, so $\vare
 
 **Multi-user forgery.** The adversary can attempt forgeries against any of the $U$ sessions. If each session processes at most $q$ Seal operations, the total forgery advantage is:
 
-$$\varepsilon_{\mathrm{mu\text{-}forge}} \leq \frac{S}{2^{128}}$$
+$$\varepsilon_{\mathrm{mu\text{-}forge}} \leq \frac{S}{2^{256}}$$
 
 where $S$ is the total number of forgery attempts across all sessions.
 
@@ -539,7 +539,7 @@ where $q$ is the maximum number of finalizations per session. For $U = 2^{32}$ s
 
 **Combined multi-user bound:**
 
-$$\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + U \cdot q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{(U \cdot q)^2}{2^{513}} + \frac{S}{2^{128}}$$
+$$\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + U \cdot q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{(U \cdot q)^2}{2^{513}} + \frac{S}{2^{256}}$$
 
 **Ratcheting as mitigation.** The multi-user key recovery term $U \cdot \varepsilon_{\mathrm{kdf}}(0)$ reflects the adversary's ability to correlate offline computation with any of $U$ sessions over the session's entire lifetime. Ratcheting limits this exposure. After a Ratchet operation, the session state contains only a chain value — a 512-bit pseudorandom string with no algebraic structure that could be exploited in a multi-target search. An adversary who targets the pre-Ratchet key material must do so before the Ratchet occurs (or within the window of operations between Ratchets).
 
