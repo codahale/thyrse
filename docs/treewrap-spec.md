@@ -285,16 +285,15 @@ budget $\sigma + t = 2^{128}$, this evaluates to $2^{256} / 2^{257} = 2^{-1}$, i
 $\approx 2^{128}$ work. "128-bit security" means $\approx 2^{128}$ work for constant advantage, following the
 KangarooTwelve/TurboSHAKE convention.
 
-### 6.3 Confidentiality (IND-CCA2)
+### 6.3 Confidentiality (IND-CPA)
 
-**Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The encryption oracle
-takes $(N, \mathit{AD}, M_0, M_1)$ with $|M_0| = |M_1|$ and fresh `N`, and returns `Encrypt(K, N, AD, M_b)`. The
-decryption oracle takes $(N, \mathit{AD}, C)$ not previously returned by `Encrypt`, and returns `M` or `⊥`. The
-adversary is nonce-respecting and guesses `b`.
+**Game.** The adversary has access to an `Encrypt` oracle under a random key `K`. The oracle takes
+$(N, \mathit{AD}, M_0, M_1)$ with $|M_0| = |M_1|$ and fresh `N`, and returns `Encrypt(K, N, AD, M_b)`. The adversary
+is nonce-respecting and guesses `b`.
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}}$$
+$$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}}$$
 
 **Proof sketch** (three game hops):
 
@@ -304,14 +303,29 @@ $$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \varepsilon_{\mathrm{kdf}} + \frac
 2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By sponge indifferentiability, replace all Keccak sponge
    evaluations with random oracle evaluations.
 
-3. **RO world.** The key is a 256-bit secret prefix absorbed into the sponge. The adversary guesses it with probability
-   $t / 2^{256}$. Conditioned on not guessing: each leaf's keystream is independent and uniform, so `CT` is uniform;
-   the tag is an independent RO call on pseudorandom input, so `(CT, tag)` is jointly uniform. The decryption oracle is
-   useless: a fresh nonce implies a fresh `tw_key` (after hop 1), so queries under other nonces use independent keys,
-   and queries under the challenge nonce cannot resubmit the challenge ciphertext.
+3. **RO world.** Each `tw_key` is a 256-bit secret prefix absorbed into the sponge. The adversary guesses it with
+   probability $t / 2^{256}$. Conditioned on not guessing: each leaf's keystream is a PRF of the ciphertext under
+   the secret key, so `CT` is indistinguishable from uniform; the tag is a PRF evaluation on a distinct domain
+   (byte `0x64` or `0x61`), so `(CT, tag)` is jointly indistinguishable from uniform. A fresh nonce implies a fresh
+   `tw_key` (after hop 1), so each encryption query uses an independent key.
 
 Since $t / 2^{256} \ll (\sigma + t)^2 / 2^{257}$, the key-guessing term is absorbed into the sponge term, giving the
 stated bound.
+
+### 6.3.1 CCA Security (IND-CCA2)
+
+IND-CCA2 security follows by composition. By the Bellare–Namprempre theorem (adapted to the encrypt-and-MAC setting
+with PRF tags):
+
+$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \varepsilon_{\mathrm{ind\text{-}cpa}} + \varepsilon_{\mathrm{int\text{-}ctxt}}$$
+
+Substituting the bounds from §6.3 and §6.4:
+
+$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq 2\varepsilon_{\mathrm{kdf}} + \frac{2(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
+
+The factor of 2 on the first two terms arises from combining two independent reductions that each pay the KDF and
+sponge costs. Since $2(\sigma + t)^2 / 2^{c+1} = (\sigma + t)^2 / 2^c$, this remains well within the 128-bit
+security budget.
 
 ### 6.4 Authenticity (INT-CTXT)
 
