@@ -88,16 +88,16 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 
 - **`single_node_tag() → tag`:**
   - Call `pad_permute(0x61)`.
-  - Output C bytes: for each byte, output `S[pos]` and increment `pos`.
+  - Output `S[0..C-1]` (C bytes starting at position 0).
 
 - **`chain_value() → cv`:**
   - Call `pad_permute(0x63)`.
-  - Output C bytes: for each byte, output `S[pos]` and increment `pos`. When `pos` reaches R−1 and more output remains,
-    call `pad_permute(0x63)`.
+  - Output `S[0..C-1]` (C bytes starting at position 0).
 
 > [!NOTE]
-> `chain_value()` always begins with `pad_permute(0x63)` to ensure all encrypted data is fully mixed and securely
-> domain-separated from intermediate permutations before the chain value is derived.
+> Both `single_node_tag()` and `chain_value()` begin with a `pad_permute` call to ensure all encrypted data is fully
+> mixed and domain-separated from intermediate permutations before output is derived. The output fits in a single
+> squeeze block because $C = 32 \ll R = 168$. This is a parameter constraint: $C < R$ must hold.
 
 ## 5. TreeWrap
 
@@ -398,9 +398,10 @@ syntactic rewriting with no computational cost.
 
 The equivalence requires four preconditions, all of which TreeWrap satisfies:
 
-1. **Proper padding rule.** Each `pad_permute` call applies standard TurboSHAKE padding (`pad10*1` with domain byte),
-   meaning each permutation call within the leaf precisely matches the behavior of a standard TurboSHAKE sponge
-   evaluation.
+1. **Proper padding rule.** Each `pad_permute` call applies `pad10*1` with a domain byte, producing a framed duplex
+   where every permutation call has its own domain separation. This is structurally different from a standard sponge
+   (which pads once at the end of absorption), but the Daemen et al. equivalence applies at the level of the full
+   duplex session: the complete sequence of duplex interactions maps to a single equivalent sponge input.
 
 2. **Capacity not directly accessed.** The construction never reads or writes the capacity portion of the state
    (bytes $R$ through 199). Key and index absorption (`init`), encryption, and decryption all operate on positions $0$
