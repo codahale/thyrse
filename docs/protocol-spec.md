@@ -246,6 +246,8 @@ Return `ciphertext`. The tag is not transmitted.
 
 Return `plaintext`.
 
+*Warning:* Any application-level processing of the unmasked plaintext MUST be treated as untrusted and safely buffered until an external authenticating operation (such as verifying a signature over a subsequent Derive output) has succeeded.
+
 ### 10.8 Seal / Open
 
 Encrypts (Seal) or decrypts (Open) with authentication. Use Seal when the ciphertext must be verified on receipt. A failed Open indicates tampering and permanently invalidates the protocol instance.
@@ -419,6 +421,8 @@ Fork does not finalize. All $N{+}1$ branches share identical transcript up to th
 ### 13.7 Domain Byte and Operation Code Separation
 
 All operation codes are in the range 0x10–0x18. All TurboSHAKE128 domain bytes used by this framework are in the range 0x20–0x24 (protocol operations) and 0x60–0x61 (TreeWrap). KT128 uses domain byte 0x07. These ranges are disjoint, eliminating any possibility of confusion between operation codes and domain bytes.
+
+This provides a robust defense-in-depth layer against cross-operation state confusion. For example, in Mask and Seal, the operation codes (0x16 vs 0x17) force the transcripts to diverge *before* finalization, and the sponge finalizations use distinct domain bytes (0x22 vs 0x23) to derive the keys, providing redundant cryptographic separation.
 
 ### 13.8 Concrete Security Reduction
 
