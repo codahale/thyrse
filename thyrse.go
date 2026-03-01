@@ -19,8 +19,8 @@ import (
 	"github.com/codahale/thyrse/internal/mem"
 )
 
-// TagSize is the truncated tag size appended by Seal (T).
-const TagSize = 16
+// TagSize is the tag size appended by Seal.
+const TagSize = treewrap.TagSize
 
 // ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. The protocol instance is permanently
 // desynchronized and must be discarded.
@@ -74,7 +74,7 @@ func (p *Protocol) MixStream(label string, r io.Reader) error {
 	_, _ = kh.Read(digest[:])
 
 	p.writeOpLabel(opMixStream, label)
-	_, _ = p.h.Write(digest[:]) // fixed H bytes, no length prefix
+	p.writeLengthEncode(digest[:])
 	return nil
 }
 
@@ -115,7 +115,7 @@ func (mw *MixWriter) Branch() *Protocol {
 
 	p := mw.p.Clone()
 	p.writeOpLabel(opMixStream, mw.label)
-	_, _ = p.h.Write(digest[:]) // fixed H bytes, no length prefix
+	p.writeLengthEncode(digest[:])
 	return p
 }
 
@@ -126,7 +126,7 @@ func (mw *MixWriter) Close() error {
 	_, _ = mw.kh.Read(digest[:])
 
 	mw.p.writeOpLabel(opMixStream, mw.label)
-	_, _ = mw.p.h.Write(digest[:]) // fixed H bytes, no length prefix
+	mw.p.writeLengthEncode(digest[:])
 	return nil
 }
 
@@ -317,7 +317,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 
 	p.resetChain(opSeal, cv[:], fullTag[:])
 
-	copy(tag, fullTag[:TagSize])
+	copy(tag, fullTag[:])
 	return ret
 }
 
@@ -344,7 +344,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 
 	p.resetChain(opSeal, cv[:], fullTag[:])
 
-	if subtle.ConstantTimeCompare(fullTag[:TagSize], tt) != 1 {
+	if subtle.ConstantTimeCompare(fullTag[:], tt) != 1 {
 		clear(plaintext)
 		return nil, ErrInvalidCiphertext
 	}

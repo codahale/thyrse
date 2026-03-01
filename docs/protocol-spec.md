@@ -1,8 +1,8 @@
 # Thyrse: A Transcript-Based Cryptographic Protocol Framework
 
 **Status:** Draft  
-**Version:** 0.2  
-**Date:** 2026-02-27  
+**Version:** 0.3
+**Date:** 2026-02-28
 **Security Target:** 128-bit
 
 ## 1. Introduction
@@ -28,7 +28,6 @@ All operations accept a label for domain separation. The full transcript is enco
 |--------|-------|-------------|
 | C | 32 | TreeWrap key and tag size (bytes) |
 | H | 64 | Chain value and pre-hash digest size (bytes) |
-| T | 16 | Truncated tag size for Seal/Open (bytes) |
 
 ## 3. Dependencies
 
@@ -131,7 +130,7 @@ Absorbs streaming data that may not fit in memory. The data is pre-hashed throug
 **MixStream(label, data)**
 
 &emsp; `digest ← KT128(data, init_label, H)`  
-&emsp; `transcript ← transcript ‖ 0x12 ‖ length_encode(label) ‖ digest`
+&emsp; `transcript ← transcript ‖ 0x12 ‖ length_encode(label) ‖ length_encode(digest)`
 
 Here `init_label` is the label passed to the Init operation that established this protocol instance. Implementations MUST retain this value for the lifetime of the instance.
 
@@ -252,7 +251,7 @@ Return `plaintext`.
 
 Encrypts (Seal) or decrypts (Open) with authentication. Use Seal when the ciphertext must be verified on receipt. A failed Open indicates tampering and permanently invalidates the protocol instance.
 
-**Seal(label, plaintext) → ciphertext ‖ truncated_tag**
+**Seal(label, plaintext) → ciphertext ‖ tag**
 
 1. Append the frame:
 
@@ -265,18 +264,17 @@ Encrypts (Seal) or decrypts (Open) with authentication. Use Seal when the cipher
 
 3. Encrypt:
 
-&emsp; `(ciphertext, full_tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`  
-&emsp; `truncated_tag ← full_tag[0..T-1]`
+&emsp; `(ciphertext, tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`  
 
 4. Reset the transcript:
 
-&emsp; `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(full_tag)`
+&emsp; `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
 
 The two TurboSHAKE128 evaluations are independent and may execute in parallel.
 
-Return `ciphertext ‖ truncated_tag`.
+Return `ciphertext ‖ tag`.
 
-**Open(label, ciphertext, truncated_tag) → plaintext or ⊥**
+**Open(label, ciphertext, tag) → plaintext or ⊥**
 
 1. Append the frame (identical to Seal):
 
@@ -289,15 +287,15 @@ Return `ciphertext ‖ truncated_tag`.
 
 3. Decrypt:
 
-&emsp; `(plaintext, full_tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
+&emsp; `(plaintext, computed_tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
 
 4. Reset the transcript (unconditionally):
 
-&emsp; `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(full_tag)`
+&emsp; `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(computed_tag)`
 
 5. Verify:
 
-&emsp; If `full_tag[0..T-1] ≠ truncated_tag` (constant-time comparison), discard `plaintext` and return ⊥. The protocol instance is permanently desynchronized and MUST be discarded immediately.
+&emsp; If `computed_tag ≠ tag` (constant-time comparison), discard `plaintext` and return ⊥. The protocol instance is permanently desynchronized and MUST be discarded immediately.
 
 Return `plaintext`.
 
@@ -321,7 +319,7 @@ The encoding of every operation frame is recoverable by left-to-right parsing. G
 2. Based on the operation code:
    - **INIT (0x10):** Parse `length_encode(label)`.
    - **MIX (0x11):** Parse `length_encode(label)`, then `length_encode(data)`.
-   - **MIX_STREAM (0x12):** Parse `length_encode(label)`, then read exactly H fixed bytes (the digest is not length-prefixed because its size is a protocol constant).
+   - **MIX_STREAM (0x12):** Parse `length_encode(label)`, then `length_encode(digest)`.
    - **FORK (0x13):** Parse `length_encode(label)`, then `left_encode(N)`, then `left_encode(ordinal)`, then `length_encode(value)`.
    - **DERIVE (0x14):** Parse `length_encode(label)`, then `left_encode(output_len)`.
    - **RATCHET (0x15):** Parse `length_encode(label)`.
@@ -402,13 +400,13 @@ If the ciphertext is tampered with, the sender and receiver compute different ta
 
 ### 13.5 Seal / Open Security
 
-Seal provides confidentiality and $8T = 128$ bits of authentication. The confidentiality and composition arguments are identical to Mask (§13.4), with domain byte 0x23 for key derivation instead of 0x22.
+Seal provides confidentiality and $8C = 256$ bits of authentication. The confidentiality and composition arguments are identical to Mask (§13.4), with domain byte 0x23 for key derivation instead of 0x22.
 
-**Authentication.** The truncated tag appended to the ciphertext is the first $T$ bytes of the full TreeWrap tag. Under a random key, the full tag is a PRF of the ciphertext (TreeWrap specification §6.3). The truncated tag inherits this property: for any ciphertext not previously queried, the truncated tag is indistinguishable from a uniformly random $T$-byte string. An adversary making $S$ forgery attempts therefore succeeds with probability at most:
+**Authentication.** The tag appended to the ciphertext is the full $C$-byte TreeWrap tag. Under a random key, the tag is a PRF of the ciphertext (TreeWrap specification §6.3). An adversary making $S$ forgery attempts therefore succeeds with probability at most:
 
-$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8T}} + \varepsilon_{\mathrm{prf}}$$
+$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} + \varepsilon_{\mathrm{prf}}$$
 
-where $\varepsilon_{\mathrm{prf}}$ is the TreeWrap tag PRF advantage (bounded by $(n{+}1) \cdot (\sigma{+}t)^2 / 2^{257}$ per TreeWrap specification §6.11). For $T = 16$ bytes, the forgery bound is $S / 2^{128}$ plus a negligible term.
+where $\varepsilon_{\mathrm{prf}}$ is the TreeWrap tag PRF advantage (bounded by $(n{+}1) \cdot (\sigma{+}t)^2 / 2^{257}$ per TreeWrap specification §6.11). For $C = 32$ bytes, the forgery bound is $S / 2^{256}$ plus a negligible term.
 
 **Committing security.** The full $C$-byte tag absorbed into the CHAIN frame provides CMT-4 committing security via TreeWrap's construction: the tag is a collision-resistant function of (key, ciphertext), and since TreeWrap encryption is invertible per-key, this commits to (key, plaintext). See the TreeWrap specification §6.5 for the detailed argument.
 
@@ -438,7 +436,6 @@ This section gives the full reduction from protocol security to the Keccak spong
 | $S$ | Number of forgery attempts against Seal/Open |
 | $c$ | TurboSHAKE128 capacity = 256 bits |
 | $H$ | Chain value length = 512 bits |
-| $T$ | Truncated tag length = 128 bits |
 
 **Step 1: Ideal permutation assumption.** The Keccak sponge claim asserts that Keccak-p[1600,12] is indistinguishable from a uniformly random permutation on $\{0,1\}^{1600}$. This is a computational assumption analogous to the assumption that AES is a pseudorandom permutation. All subsequent terms are conditional on this assumption. If an adversary distinguishes Keccak-p[1600,12] from a random permutation with advantage $\varepsilon_{\mathrm{perm}}$, this term propagates additively into the final bound.
 

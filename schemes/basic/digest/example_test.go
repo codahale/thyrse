@@ -16,7 +16,7 @@ func Example_unkeyed() {
 	fmt.Printf("%x\n", sum)
 
 	// Output:
-	// 692e1f5ab85105fbf485e9b82bdc775e55f7b22a8ade906d55dd893ab049f5d4
+	// 0b5f3dd8b4493e36715af997b3e6e4eab1bd9abdac4369b9e980bcea4d526382
 }
 
 func Example_keyed() {
@@ -28,5 +28,5 @@ func Example_keyed() {
 	fmt.Printf("%x\n", sum)
 
 	// Output:
-	// d34cc74c69ee2a271e01fd9abecce6b0
+	// 5b4d91cae39e7b4a5ab72885041b4804
 }
