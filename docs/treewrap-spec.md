@@ -272,9 +272,11 @@ heuristic assumption (see §6 preamble).
 
 - $\sigma$: total online Keccak-p calls across all queries in the security game (all leaves and tag computations
   combined, summed over all encryption and decryption queries). For a single message of length $L$ bytes with
-  $n = \max(1, \lceil L / B \rceil)$ chunks, the per-query contribution is $\sum_{i=0}^{n-1}(1 + \lceil \ell_i /
-  (R-1) \rceil) + \mathbb{1}_{n>1} \cdot \lceil |\mathit{final\_input}| / R \rceil$, where the first term counts
-  each leaf's init and ciphertext blocks, and the second counts the tag accumulation.
+  $n = \max(1, \lceil L / B \rceil)$ chunks, the per-query contribution is $\sum_{i=0}^{n-1}(1 + \max(1,\,
+  \lceil \ell_i / (R-1) \rceil)) + \mathbb{1}_{n>1} \cdot \lceil |\mathit{final\_input}| / R \rceil$, where the
+  first term counts each leaf's init permutation (the 1) and ciphertext/squeeze permutations (the $\max$ term —
+  at least one permutation for the tag or chain value squeeze, even when the chunk is empty), and the second term
+  counts the tag accumulation.
 - $t$: adversary's total offline Keccak-p calls.
 - $c = 256$: capacity in bits.
 - $C = 32$: capacity in bytes; key, chain value, and tag size.
