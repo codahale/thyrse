@@ -162,35 +162,32 @@ When used within a protocol framework, both properties are typically ensured by 
 
 ### 6.2 Confidentiality (IND$ for a Single Invocation)
 
-Under a uniformly random key, TreeWrap ciphertext is indistinguishable from a random string of the same length. The argument:
+Under a uniformly random key, TreeWrap ciphertext is indistinguishable from a random string of the same length. The argument follows from the monolithic sponge indifferentiability reduction (§6.11):
 
-Each leaf cipher, after `init(key, i)`, produces a keystream by squeezing the overwrite duplex. When the key is random, the `init` call is a TurboSHAKE128 evaluation on a random input, and the resulting sponge state is indistinguishable from random (by sponge indifferentiability). The keystream squeezed from this state is therefore pseudorandom.
-
-Since the ciphertext is `plaintext ⊕ keystream` (for each leaf independently), the ciphertext is indistinguishable from random under a random key. Different leaves use different indices, so their keystreams are independent.
+By the overwrite duplex equivalence (Daemen et al.), each leaf's computation can be expressed as a standard sponge evaluation on an injective encoding of its inputs. The sponge indifferentiability theorem then replaces all sponge evaluations — across all $n$ leaves simultaneously — with random oracle evaluations in a single reduction. Under the random oracle, each leaf receives a distinct input (due to the index), producing independent pseudorandom keystreams. The ciphertext is `plaintext ⊕ keystream` for each leaf independently, and is therefore indistinguishable from random.
 
 The IND$ advantage is bounded by:
 
-$$\varepsilon_{\mathrm{ind\$}} \leq \frac{n \cdot (\sigma + t)^2}{2^{c+1}}$$
+$$\varepsilon_{\mathrm{ind\$}} \leq \frac{(\sigma + t)^2}{2^{c+1}}$$
 
-where $n$ is the number of leaves, $t$ is the adversary's offline computation, $\sigma$ is the data complexity in Keccak-p blocks, and $c = 256$.
+where:
+- $\sigma$ is the total online data complexity across all sponge evaluations in the invocation (all leaves combined), measured in Keccak-p blocks,
+- $t$ is the adversary's total offline computational complexity, measured in Keccak-p evaluations, and
+- $c = 256$.
+
+The number of leaves does not appear as a separate factor because the indifferentiability reduction handles all sponge evaluations at once; the online queries from all leaves are already counted in $\sigma$.
 
 ### 6.3 Tag PRF Security
 
 Under a uniformly random key, the TreeWrap tag is a pseudorandom function of the ciphertext. Specifically, for any fixed ciphertext, the tag output of EncryptAndMAC (or DecryptAndMAC) is indistinguishable from a uniformly random $C$-byte string.
 
-The argument:
+The argument follows from the same monolithic reduction as §6.2. After replacing all sponge evaluations with random oracle evaluations, each leaf's chain value is an independent random oracle output (distinct inputs due to leaf indices). The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x62}, C)$ where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte 0x62 separates the tag computation from the leaf ciphers (0x60/0x61), so the tag evaluation is an independent random oracle call on a pseudorandom input, producing a pseudorandom output.
 
-1. Each leaf's chain value is the output of an overwrite duplex (a sponge evaluation) keyed by the random key and indexed by the leaf position. Under the sponge indifferentiability claim, each chain value is pseudorandom and independent across leaves.
+The tag PRF advantage shares the same bound as IND$:
 
-2. The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x62}, C)$ where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Since the chain values are pseudorandom, $\mathit{final\_input}$ is a pseudorandom input to an independent random oracle (domain byte 0x62 separates the tag computation from leaf ciphers at 0x60/0x61 and other uses of TurboSHAKE128).
+$$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}}$$
 
-3. A random oracle on a pseudorandom input produces a pseudorandom output.
-
-The tag PRF advantage is bounded by:
-
-$$\varepsilon_{\mathrm{prf}} \leq \frac{n \cdot (\sigma + t)^2}{2^{c+1}} + \frac{(\sigma + t)^2}{2^{c+1}}$$
-
-The first term covers the leaf chain value pseudorandomness; the second covers the tag accumulation TurboSHAKE128 evaluation.
+The tag accumulation does not introduce an additional term because it is covered by the same indifferentiability reduction — the TurboSHAKE128 tag evaluation is simply one more sponge call included in the total query count $\sigma$.
 
 This property is required by Thyrse (§13.4 of the Thyrse specification) to ensure that absorbing a TreeWrap tag into the protocol transcript does not compromise the independence of the chain value derived from the same transcript instance.
 
@@ -240,19 +237,23 @@ All leaves process the same key. Implementations MUST ensure constant-time proce
 
 ### 6.11 Concrete Security Reduction
 
-Each leaf cipher is an overwrite duplex operating on the Keccak-p[1600,12] permutation with capacity $c = 256$ bits. The security argument proceeds in three steps.
+Each leaf cipher is an overwrite duplex operating on the Keccak-p[1600,12] permutation with capacity $c = 256$ bits. The security argument proceeds in two steps: a syntactic rewriting that is information-theoretic, followed by a single application of the sponge indifferentiability theorem.
 
-**Step 1: Leaf PRF security.** The leaf cipher implements a DWrap mode over a standard Keccak sponge. It uses standard TurboSHAKE padding, meaning each permutation call within the leaf precisely matches the behavior of a standard TurboSHAKE sponge evaluation. The domain separation bytes `0x60` for intermediate blocks and `0x61` for the final block ensure that the block encoding is prefix-free and injective. The leaf's outputs can be expressed as evaluations of the $\mathrm{Keccak}[256]$ sponge function (with Keccak-p[1600,12]) on an injective encoding of the leaf's inputs, following the same overwrite-to-XOR equivalence used by Daemen et al. in Lemma 2 of the overwrite duplex construction. The injectivity holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 vs 0x61) securely separate intermediate blocks from the final block, eliminating any truncation vulnerabilities.
+**Step 1: Overwrite duplex equivalence.** Each leaf cipher implements DWrap mode over a standard Keccak sponge. It uses standard TurboSHAKE padding, meaning each permutation call within the leaf precisely matches the behavior of a standard TurboSHAKE sponge evaluation. By the overwrite-to-XOR equivalence (Daemen et al., Lemma 2), each leaf's computation can be expressed as a standard $\mathrm{Keccak}[256]$ sponge evaluation on an injective encoding of the leaf's inputs. The injectivity holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 for intermediate blocks, 0x61 for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities. This step is a syntactic rewriting with no computational cost.
 
-Assuming the Keccak sponge claim holds for Keccak-p[1600,12], the advantage of distinguishing a TreeWrap leaf from an ideal cipher is at most $(\sigma + t)^2 / 2^{c+1}$ where $t$ is the computational complexity and $\sigma$ is the data complexity in blocks. For $c = 256$, this term is negligible for practical workloads.
+After this rewriting, all computations in a TreeWrap invocation — $n$ leaf sponge evaluations plus one tag accumulation (TurboSHAKE128 with domain byte 0x62) — are standard sponge evaluations on distinct inputs. Leaf inputs differ by index; the tag evaluation is separated by domain byte.
 
-**Step 2: Tag PRF and collision resistance.** The tag is a TurboSHAKE128 evaluation (domain byte 0x62) over the concatenation of leaf chain values. Since each chain value is pseudorandom under the key (by Step 1), the tag inherits both the PRF security and the collision resistance of TurboSHAKE128. The tag computation adds one additional sponge indifferentiability term.
+**Step 2: Monolithic indifferentiability reduction.** The sponge indifferentiability theorem replaces all sponge evaluations simultaneously with random oracle evaluations in a single reduction. Under the random oracle, distinct inputs yield independent, uniformly random outputs: all $n$ chain values are simultaneously pseudorandom (independent across leaves due to distinct indices), and the tag is pseudorandom (independent of the leaves due to domain byte 0x62).
 
-**Step 3: Combined bound.** Summing all terms for a TreeWrap invocation with $n$ leaves:
+The advantage of this reduction is bounded by:
 
-$$\varepsilon_{\mathrm{treewrap}} \leq \frac{(n + 1) \cdot (\sigma + t)^2}{2^{c+1}}$$
+$$\varepsilon_{\mathrm{treewrap}} \leq \frac{(\sigma + t)^2}{2^{c+1}}$$
 
-where the $(n + 1)$ factor accounts for $n$ leaf cipher evaluations plus one tag accumulation evaluation. For typical parameters ($n \leq 2^{32}$ leaves, $\sigma + t \leq 2^{64}$), this is $(2^{32} + 1) \cdot 2^{128} / 2^{257} \approx 2^{-97}$, well within the 128-bit security target for any single invocation. Multi-invocation security is the responsibility of the calling protocol, which must ensure key uniqueness.
+where $\sigma$ is the total online data complexity across all sponge evaluations (all leaves and the tag computation combined), measured in Keccak-p blocks, and $t$ is the adversary's total offline computational complexity in Keccak-p evaluations. The number of leaves does not appear as a separate factor — the online queries from all leaves are already counted in $\sigma$, and the indifferentiability theorem handles all sponge evaluations at once rather than requiring a per-leaf hybrid argument.
+
+**Effective security level.** Setting the bound to 1 and solving for the adversary's total budget gives $\sigma + t \leq 2^{(c+1)/2} = 2^{128.5}$. Since $\sigma$ is determined by the message size and is negligible relative to $2^{128}$ for any practical message, the adversary's offline budget is effectively $t \leq 2^{128}$, matching the 128-bit security target regardless of the number of chunks.
+
+**Multi-invocation degradation.** The bounds above are per-invocation. A protocol performing $Q$ invocations under independent pseudorandom keys degrades by an additional union-bound factor: multiply $\varepsilon_{\mathrm{treewrap}}$ by $Q$, or equivalently subtract $\frac{1}{2}\log_2 Q$ bits from the effective security level. Bounding the total degradation is the calling protocol's responsibility.
 
 ## 7. Comparison with Traditional AEAD
 
