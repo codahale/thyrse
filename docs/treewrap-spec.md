@@ -237,7 +237,7 @@ An adversary who does not know the key and attempts to produce a valid (cipherte
 
 $$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} + \varepsilon_{\mathrm{prf}} \leq \frac{S}{2^{256}} + \frac{(\sigma + t)^2}{2^{c+1}}$$
 
-for $S$ forgery attempts against the full $C$-byte tag. When the caller truncates the tag to $T$ bytes (as in Thyrse's Seal/Open), the guessing probability increases and the bound becomes $S / 2^{8T} + \varepsilon_{\mathrm{prf}}$.
+for $S$ forgery attempts against the full $C$-byte tag. When the caller truncates the tag to $T$ bytes, the guessing probability increases and the bound becomes $S / 2^{8T} + \varepsilon_{\mathrm{prf}}$.
 
 Note that forgery resistance is a consequence of tag PRF security (§6.3): the tag on any ciphertext the adversary has not queried is indistinguishable from random up to the PRF advantage. Guessing a truly random $T$-byte value succeeds with probability $S / 2^{8T}$, and this is additive with the adversary's advantage in breaking the PRF.
 
