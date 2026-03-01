@@ -333,8 +333,11 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 	return ret, d.Finalize()
 }
 
-// kt12Marker is the 8-byte KangarooTwelve marker written after cv[0].
-var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+// sakuraGeometry is The Sakura chaining hop indicator. The byte `0x03` (`0b00000011`) encodes two flags: bit 0
+// signals that inner-node chain values follow, and bit 1 signals a single-level tree (chain values feed directly into
+// the final node without further tree reduction). The seven zero bytes encode default tree parameters (i.e., no
+// subtree interleaving).
+var sakuraGeometry = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 // feedCVs writes chain values into the hasher with KT12 final-node framing. After the first CV, it inserts the KT12
 // marker. cvCount tracks how many CVs have been written so far.
@@ -344,7 +347,7 @@ func feedCVs(h *turboshake.Hasher, cvs []byte, cvCount *int) {
 		cvs = cvs[cvSize:]
 		*cvCount++
 		if *cvCount == 1 {
-			_, _ = h.Write(kt12Marker[:])
+			_, _ = h.Write(sakuraGeometry[:])
 		}
 	}
 }

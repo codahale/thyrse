@@ -237,9 +237,27 @@ When plaintext is empty, a single leaf is still created. The chain value is deri
 
 ### 6.9 Tag Accumulation Structure
 
-Chain values are accumulated using the KangarooTwelve final node structure: `cv[0]` is absorbed as the "first chunk" of the final node, followed by the 8-byte marker `0x03 0x00...`, then chain values `cv[1]` through `cv[n−1]` as "leaf" contributions, followed by `length_encode(n−1)` and the terminator `0xFF 0xFF`. This is processed by TurboSHAKE128 with domain separation byte 0x63, separating TreeWrap tag computation from both KT128 hashing (0x07) and TreeWrap leaf ciphers (0x60–0x62).
+Chain values are accumulated using the Sakura tree hash coding (Guido Bertoni et al., "Sakura: a flexible coding for tree hashing"), the same framing used by KangarooTwelve (RFC 9861). TreeWrap reuses this encoding because its tree topology — a flat single-level tree with the first chunk interleaved into the final node — is identical to KangarooTwelve's.
 
-The structure is unambiguous: chain values are fixed-size ($C$ bytes each), `length_encode` encodes the number of leaf chain values, and the terminator marks the end. The number of chunks is determined by the ciphertext length, which is assumed to be public.
+The final node input is constructed as:
+
+&emsp; `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ cv[1] ‖ ... ‖ cv[n−1] ‖ length_encode(n−1) ‖ 0xFF 0xFF`
+
+The components of this encoding are:
+
+- **`cv[0]`** (32 bytes): The first chunk's chain value, interleaved directly into the final node rather than being processed as a separate inner node.
+
+- **`0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`** (8 bytes): The Sakura chaining hop indicator. The byte `0x03` (`0b00000011`) encodes two flags: bit 0 signals that inner-node chain values follow, and bit 1 signals a single-level tree (chain values feed directly into the final node without further tree reduction). The seven zero bytes encode default tree parameters (no sub-tree interleaving).
+
+- **`cv[1] ‖ ... ‖ cv[n−1]`**: Chain values from the remaining chunks, produced by independent leaf cipher evaluations.
+
+- **`length_encode(n−1)`**: The number of inner-node chain values, encoded per KangarooTwelve's convention (big-endian with no leading zeros, followed by a byte giving the encoding length).
+
+- **`0xFF 0xFF`**: The Sakura tree hash terminator, signaling the end of the final node input.
+
+This is processed by TurboSHAKE128 with domain separation byte 0x63, separating TreeWrap tag computation from both KT128 hashing (0x07) and TreeWrap leaf ciphers (0x60–0x62).
+
+The encoding is injective: chain values are fixed-size ($C$ bytes each), the chaining hop indicator and terminator are fixed constants, and `length_encode` uniquely determines $n$. The number of chunks is also determined by the ciphertext length, which is assumed to be public.
 
 ### 6.10 Side Channels
 
@@ -277,6 +295,7 @@ TreeWrap differs from traditional AEAD in several respects:
 
 ## 8. References
 
+- Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint 2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
 - Daemen, J., Hoffert, S., Mella, S., Van Assche, G., and Van Keer, R. "Shaking up authenticated encryption." IACR ePrint 2024/1618. Defines the overwrite duplex (OD) construction and proves its security equivalence to (Turbo)SHAKE.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing security notion.
