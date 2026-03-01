@@ -2,17 +2,16 @@
 
 <table>
   <tr><th>Status</th><td>Draft</td></tr>
-  <tr><th>Version</th><td>0.6</td></tr>
-  <tr><th>Date</th><td>2026-02-28</td></tr>
+  <tr><th>Version</th><td>0.7</td></tr>
+  <tr><th>Date</th><td>2026-03-01</td></tr>
   <tr><th>Security Target</th><td>128-bit</td></tr>
 </table>
 
 ## 1. Introduction
 
-TreeWrap is a deterministic stream cipher with a MAC tag, using a tree-parallel topology based on KangarooTwelve to
-enable SIMD acceleration (NEON, AVX2, AVX-512) on large inputs. Each leaf operates as a DWrap mode instance over a
-standard Keccak sponge (using the overwrite duplex optimization), and leaf chain values are accumulated into a single
-MAC tag via TurboSHAKE128.
+TreeWrap is a deterministic stream cipher with a MAC tag, using a Sakura flat-tree topology to enable SIMD acceleration
+(NEON, AVX2, AVX-512) on large inputs. Each leaf operates as a DWrap mode instance over a standard Keccak sponge (using
+the overwrite duplex optimization), and leaf chain values are accumulated into a single MAC tag via TurboSHAKE128.
 
 TreeWrap is not an AEAD scheme. It does not perform tag verification internally. Instead, it exposes two
 operations—**`EncryptAndMAC`** and **`DecryptAndMAC`**—which both return the computed tag to the caller. The caller is
@@ -143,10 +142,10 @@ If `n > 1`:
   - `L.init(key, i)`
   - `ciphertext[i] ← L.encrypt(plaintext_chunk[i])`
   - `cv[i] ← L.chain_value()`
-- Compute the tag using the KangarooTwelve final node structure:
-  - `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
-  - `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`
-  - `final_input ← final_input ‖ length_encode(n−1)`
+- Compute the tag using the Sakura final node structure:
+  - `final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
+  - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
+  - `final_input ← final_input ‖ length_encode(n)`
   - `final_input ← final_input ‖ 0xFF 0xFF`
   - `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
@@ -188,9 +187,9 @@ If `n > 1`:
   - `plaintext[i] ← L.decrypt(ciphertext_chunk[i])`
   - `cv[i] ← L.chain_value()`
 - Compute the tag using the same final node structure as `EncryptAndMAC`:
-  - `final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
-  - `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`
-  - `final_input ← final_input ‖ length_encode(n−1)`
+  - `final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
+  - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
+  - `final_input ← final_input ‖ length_encode(n)`
   - `final_input ← final_input ‖ 0xFF 0xFF`
   - `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
@@ -347,30 +346,30 @@ ensures `DecryptAndMAC` with an empty ciphertext computes the same tag as `Encry
 ### 6.9 Tag Accumulation Structure
 
 Chain values are accumulated using the Sakura tree hash coding (Guido Bertoni et al., "Sakura: a flexible coding for
-tree hashing"), the same framing used by KangarooTwelve (RFC 9861). TreeWrap reuses this encoding because its tree
-topology — a flat single-level tree with the first chunk interleaved into the final node — is identical to
-KangarooTwelve's.
+tree hashing"), the same framing used by KangarooTwelve (RFC 9861). TreeWrap uses a symmetric flat tree where all $n$
+chunks are processed as inner nodes producing chain values. This differs from KangarooTwelve's asymmetric topology
+(kangaroo hopping), where the first chunk's data is interleaved directly into the final node as native payload and only
+$n-1$ CVs follow. In TreeWrap, the final node is a pure chaining hop with no native payload — all $n$ chain values
+appear after the hop indicator, and `length_encode(n)` encodes the total number of CVs.
 
 The final node input is constructed as:
 
 ```text
-final_input ← cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ cv[1] ‖ ... ‖ cv[n−1] ‖ length_encode(n−1) ‖ 0xFF 0xFF
+final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1] ‖ length_encode(n) ‖ 0xFF 0xFF
 ```
 
 The components of this encoding are:
-
-- **`cv[0]`** (32 bytes): The first chunk's chain value, interleaved directly into the final node rather than being
-  processed as a separate inner node.
 
 - **`0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`** (8 bytes): The Sakura chaining hop indicator. The byte `0x03`
   (`0b00000011`) encodes two flags: bit 0 signals that inner-node chain values follow, and bit 1 signals a single-level
   tree (chain values feed directly into the final node without further tree reduction). The seven zero bytes encode
   default tree parameters (no sub-tree interleaving).
 
-- **`cv[1] ‖ ... ‖ cv[n−1]`**: Chain values from the remaining chunks, produced by independent leaf cipher evaluations.
+- **`cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`**: Chain values from all $n$ chunks, produced by independent leaf cipher
+  evaluations. Unlike KangarooTwelve, the first chunk is not interleaved — all chunks are treated symmetrically.
 
-- **`length_encode(n−1)`**: The number of inner-node chain values, encoded per KangarooTwelve's convention (big-endian
-  with no leading zeros, followed by a byte giving the encoding length).
+- **`length_encode(n)`**: The total number of inner-node chain values, encoded per KangarooTwelve's convention
+  (big-endian with no leading zeros, followed by a byte giving the encoding length).
 
 - **`0xFF 0xFF`**: The Sakura tree hash terminator, signaling the end of the final node input.
 
@@ -523,10 +522,10 @@ Flipping bit 0 of `ct[0]` yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 8193                                                               |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `b55dda0960670702b54d962a06a4dc526126c56a57d517eb527be1dfe2352460` |
+| tag     | `334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`2717135bb6939213dedd2c5e1c90d30c221aa594d9bbde36893f43ec4c590961`.
+`76398352ca9c7594808135f297f085bda06bb1ccd0f328246e22cedc7ecfdf65`.
 
 ### 9.5 4B-Byte Plaintext (four full chunks, $n = 4$)
 
@@ -534,13 +533,13 @@ Flipping bit 0 of `ct[0]` yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 32768                                                              |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `41d1028f4f36dca68308b5549f5990e840b6d2a594db74e455cc57b6330ac748` |
+| tag     | `0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`49489e8fc13e06832ae9c5fd98492f649f96df49846fb2e50423864367ace4fa`.
+`579b5003e457831607da1ac382aea6cda97b0dcd2fd8fbbbe0c5124b0ce36260`.
 
 Swapping chunks 0 and 1 (bytes 0–8,191 and 8,192–16,383) yields tag
-`c17214c699fa94d820dcd7c86aca4fdf2229e896e47609aa702c6abbf937be8a`.
+`e1d0c423874fec642ad161b2700209c74a74b41451cc70f8cc1c6b894cd0aa98`.
 
 ### 9.6 Round-Trip Consistency
 

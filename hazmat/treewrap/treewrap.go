@@ -1,5 +1,5 @@
-// Package treewrap implements TreeWrap, a tree-parallel authenticated encryption algorithm that uses a
-// KangarooTwelve-like topology to enable SIMD acceleration on large inputs.
+// Package treewrap implements TreeWrap, a tree-parallel authenticated encryption algorithm that uses a Sakura flat-tree
+// topology to enable SIMD acceleration on large inputs.
 //
 // Each leaf operates as an independent SpongeWrap instance using Keccak-p[1600,12], and leaf chain values are
 // accumulated into a single authentication tag via TurboSHAKE128. All leaf operations are independent and executed in
@@ -398,28 +398,28 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 	return ret, d.Finalize()
 }
 
-// sakuraGeometry is The Sakura chaining hop indicator. The byte `0x03` (`0b00000011`) encodes two flags: bit 0
+// sakuraTopology is The Sakura chaining hop indicator. The byte `0x03` (`0b00000011`) encodes two flags: bit 0
 // signals that inner-node chain values follow, and bit 1 signals a single-level tree (chain values feed directly into
 // the final node without further tree reduction). The seven zero bytes encode default tree parameters (i.e., no
 // subtree interleaving).
-var sakuraGeometry = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+var sakuraTopology = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-// feedCVs writes chain values into the hasher with KT12 final-node framing. After the first CV, it inserts the KT12
-// marker. cvCount tracks how many CVs have been written so far.
+// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the Sakura
+// chaining hop indicator. cvCount tracks how many CVs have been written so far.
 func feedCVs(h *turboshake.Hasher, cvs []byte, cvCount *int) {
+	if *cvCount == 0 {
+		_, _ = h.Write(sakuraTopology[:])
+	}
 	for len(cvs) >= cvSize {
 		_, _ = h.Write(cvs[:cvSize])
 		cvs = cvs[cvSize:]
 		*cvCount++
-		if *cvCount == 1 {
-			_, _ = h.Write(sakuraGeometry[:])
-		}
 	}
 }
 
-// finalizeTag writes the KT12 terminator and squeezes the tag.
+// finalizeTag writes the Sakura terminator and squeezes the tag.
 func finalizeTag(h *turboshake.Hasher, n int) (tag [TagSize]byte) {
-	_, _ = h.Write(lengthEncode(uint64(n - 1)))
+	_, _ = h.Write(lengthEncode(uint64(n)))
 	_, _ = h.Write([]byte{0xFF, 0xFF})
 	_, _ = h.Read(tag[:])
 	return tag
