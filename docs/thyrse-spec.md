@@ -514,14 +514,14 @@ digests for the same data.
 **IND-CPA from key pseudorandomness.** The TreeWrap key is derived from TurboSHAKE128 with domain byte `0x22` on the
 current transcript. Under the per-instance RO-KDF argument (§13.1), this key is indistinguishable from random as long as
 the transcript contains at least one unpredictable input. TreeWrap's confidentiality under a random key follows from the
-leaf cipher's PRF security under the Keccak sponge claim (see TreeWrap specification §6.2). Therefore, `Mask` provides
+leaf cipher's PRF security under the Keccak sponge claim (see TreeWrap specification §6.3). Therefore, `Mask` provides
 IND-CPA confidentiality.
 
 **Tag as PRF output.** The full TreeWrap tag absorbed into the `CHAIN` frame is a deterministic function of the TreeWrap
 key and the ciphertext. For the composition argument in §13.1 to hold, the tag must not leak information about the chain
 value $\mathit{cv}_k$. Since the tag is derived from a TreeWrap key that is independent of $\mathit{cv}_k$ (different
 domain bytes on the same transcript), and the tag is a PRF of the key applied to the ciphertext (see TreeWrap
-specification §6.3), the tag is pseudorandom and independent of $\mathit{cv}_k$. Therefore, absorbing the tag into the
+specification §6.7), the tag is pseudorandom and independent of $\mathit{cv}_k$. Therefore, absorbing the tag into the
 next instance's `CHAIN` frame does not compromise the chain value's unpredictability.
 
 If the ciphertext is tampered with, the sender and receiver compute different tags. Their transcripts diverge, and all
@@ -534,17 +534,18 @@ Applications requiring integrity should use `Seal` or authenticate the ciphertex
 identical to `Mask` (§13.4), with domain byte `0x23` for key derivation instead of `0x22`.
 
 **Authentication.** The tag appended to the ciphertext is the full $C$-byte TreeWrap tag. Under a random key, the tag is
-a PRF of the ciphertext (TreeWrap specification §6.3). An adversary making $S$ forgery attempts therefore succeeds with
+a PRF of the ciphertext (TreeWrap specification §6.7). An adversary making $S$ forgery attempts therefore succeeds with
 probability at most:
 
 $$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} + \varepsilon_{\mathrm{prf}}$$
 
 where $\varepsilon_{\mathrm{prf}}$ is the TreeWrap tag PRF advantage (bounded by $(\sigma{+}t)^2 / 2^{257}$ per TreeWrap
-specification §6.3). For $C = 32$ bytes, the forgery bound is $S / 2^{256}$ plus a negligible term.
+specification §6.7). For $C = 32$ bytes, the forgery bound is $S / 2^{256}$ plus a negligible term.
 
 **Committing security.** The full $C$-byte tag absorbed into the CHAIN frame provides CMT-4 committing security via
 TreeWrap's construction: the tag is a collision-resistant function of (key, ciphertext), and since TreeWrap encryption
-is invertible per-key, this commits to (key, plaintext). See the TreeWrap specification §6.5 for the detailed argument.
+is invertible per-key, this commits to (key, plaintext). See the TreeWrap specification §6.5 for the detailed CMT-4
+argument.
 
 **Failed `Open`.** `Open` advances the transcript unconditionally. On verification failure, the receiver's transcript
 diverges from the sender's (different `full_tag` values in the `CHAIN` frame), permanently desynchronizing the protocol
