@@ -557,11 +557,16 @@ accumulation (TurboSHAKE128 with domain byte `0x64`) — are standard sponge eva
 differ by index; the tag evaluation is separated by domain byte.
 
 **Step 2: Monolithic indifferentiability reduction.** The sponge indifferentiability theorem replaces all sponge
-evaluations simultaneously with random oracle evaluations in a single reduction. Under the random oracle, distinct
-inputs yield independent, uniformly random outputs: for $n > 1$, all $n$ chain values are simultaneously pseudorandom
-(i.e., independent across leaves due to distinct indices), and the tag is pseudorandom (independent of the leaves due to
-domain byte `0x64`). For $n = 1$, the single leaf directly outputs the pseudorandom tag (independent of other steps due
-to domain byte `0x61`).
+evaluations simultaneously with random oracle evaluations in a single reduction. After this replacement, each leaf
+computes $\mathrm{cv}[i] = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$ where $\mathcal{O}$ is the random oracle
+and $K$ is the secret key. Because $K$ is a 256-bit secret prefix unknown to the adversary, each leaf defines a
+keyed PRF: $F_K(i, C_i) = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$. Distinct leaf indices produce distinct
+oracle inputs (and thus independent outputs), so for $n > 1$ all $n$ chain values are simultaneously pseudorandom.
+The tag is then $G_K(\mathit{CT}) = \mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where
+$\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64` separates
+tag accumulation from leaf evaluations (`0x60`–`0x63`), so the tag is an independent random oracle call on
+pseudorandom input — a PRF composition that remains pseudorandom. For $n = 1$, the single leaf directly outputs the
+tag via domain byte `0x61`, which is again a PRF of the ciphertext under the secret key.
 
 The advantage of this reduction is bounded by:
 
