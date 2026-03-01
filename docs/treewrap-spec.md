@@ -36,12 +36,11 @@ A leaf cipher consists of a 200-byte state `S`, initialized to all zeros, and a 
 
 **`pad_permute(domain_byte)`:**  
 &emsp; `S[pos] ^= domain_byte`  
-&emsp; `S[pos+1] ^= 0x01`  
 &emsp; `S[R-1] ^= 0x80`  
 &emsp; `S ← f(S)`  
 &emsp; `pos ← 0`
 
-Note: If `pos == R-1` when `pad_permute` is called, `S[R-1] ^= domain_byte`, `S ← f(S)`, `S[0] ^= 0x01`, `S[R-1] ^= 0x80`, `S ← f(S)`, and `pos ← 0`. This matches standard Keccak `pad10*1` padding semantics.
+Note: This matches standard TurboSHAKE padding, where the domain byte includes the first bit of the `pad10*1` sequence.
 
 **init(key, index):**  
 &emsp; For each byte of `key ‖ [index]₆₄LE`, XOR it into `S[pos]` and increment `pos`. When `pos` reaches R−1 and more input remains, call `pad_permute(0x60)`.  
@@ -237,7 +236,7 @@ All leaves process the same key. Implementations MUST ensure constant-time proce
 
 Each leaf cipher is an overwrite duplex operating on the Keccak-p[1600,12] permutation with capacity $c = 256$ bits. The security argument proceeds in three steps.
 
-**Step 1: Leaf PRF security.** The leaf cipher implements a DWrap mode over a standard Keccak sponge. It uses standard Keccak padding (`pad10*1`), meaning each permutation call within the leaf precisely matches the behavior of a standard Keccak sponge evaluation. The domain separation bytes `0x60` for intermediate blocks and `0x61` for the final block ensure that the block encoding is prefix-free and injective. The leaf's outputs can be expressed as evaluations of the $\mathrm{Keccak}[256]$ sponge function (with Keccak-p[1600,12]) on an injective encoding of the leaf's inputs, following the same overwrite-to-XOR equivalence used by Daemen et al. in Lemma 2 of the overwrite duplex construction. The injectivity holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 vs 0x61) securely separate intermediate blocks from the final block, eliminating any truncation vulnerabilities.
+**Step 1: Leaf PRF security.** The leaf cipher implements a DWrap mode over a standard Keccak sponge. It uses standard TurboSHAKE padding, meaning each permutation call within the leaf precisely matches the behavior of a standard TurboSHAKE sponge evaluation. The domain separation bytes `0x60` for intermediate blocks and `0x61` for the final block ensure that the block encoding is prefix-free and injective. The leaf's outputs can be expressed as evaluations of the $\mathrm{Keccak}[256]$ sponge function (with Keccak-p[1600,12]) on an injective encoding of the leaf's inputs, following the same overwrite-to-XOR equivalence used by Daemen et al. in Lemma 2 of the overwrite duplex construction. The injectivity holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 vs 0x61) securely separate intermediate blocks from the final block, eliminating any truncation vulnerabilities.
 
 Assuming the Keccak sponge claim holds for Keccak-p[1600,12], the advantage of distinguishing a TreeWrap leaf from an ideal cipher is at most $(\sigma + t)^2 / 2^{c+1}$ where $t$ is the computational complexity and $\sigma$ is the data complexity in blocks. For $c = 256$, this term is negligible for practical workloads.
 
@@ -279,7 +278,7 @@ Ciphertext prefix shows the first min(32, len) bytes. Tags are full 32 bytes. Al
 |-------|--------------------------------------------------------------------|
 | len   | 0                                                                  |
 | ct    | (empty)                                                            |
-| tag   | `4d74e724544a5498eb490e22778f990b91f4881abadf52aab863144ca037ee2d` |
+| tag   | `b97e7c92fa2b21c99e6c5ac2d84851a2d1ad499e908966700cab0bd65dbd7446` |
 
 DecryptAndMAC with the same key and empty ciphertext produces the same tag.
 
@@ -289,10 +288,10 @@ DecryptAndMAC with the same key and empty ciphertext produces the same tag.
 |-------|--------------------------------------------------------------------|
 | len   | 1                                                                  |
 | ct    | `f1`                                                               |
-| tag   | `11c7e612c89abd32f4f3421557b2e29614eda613b2bcb316a15d02099a867769` |
+| tag   | `6fd28612971748f9dc92a521176ae87ab3ee9d5ab933b0a996c9cd4e7f68399d` |
 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
-`9cb439ff6ca083f3656d8fef165dabe0aec3871ef2f8330bfffed17abae1ee53`.
+`ea8f064c8279832bb0b4807c86249c24f7dcc5cefa1753fcc83b99ba9fd4411c`.
 
 ### 9.3 B-Byte Plaintext (exactly one chunk, $n = 1$)
 
@@ -300,10 +299,10 @@ Flipping bit 0 of the ciphertext (`f0`) yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 8192                                                               |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `2550a32191dfa145cadc8364812821be06fd566472804df57be019629b911385` |
+| tag     | `92064ea90b27e976db3c26715241a0cd447a885bc0f2a62989df5712189b411c` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`f242cf24ef7376071cf5f0bf3e960c3c148ed39966ee1ff3542036cc1cf5e4d3`.
+`9f7ac08d739f2240ff1ca9a8e71f8fddfe62d72d1f1e0d37f5dd4bab41125c19`.
 
 ### 9.4 B+1-Byte Plaintext (two chunks, minimal second, $n = 2$)
 
@@ -311,10 +310,10 @@ Flipping bit 0 of `ct[0]` yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 8193                                                               |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `9ed701f2d71ab47bc8e2819e256cb922a46f05497c292c383663fdcf2d6c9877` |
+| tag     | `5c2f1854515fa7b8d991d33fbc656fd3a4c2430cdc848f19bf1bab897980e977` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`658b13c422b23ab28a5e9ea801fba9526803a5e2a465834a83b3ae06a4caabd5`.
+`a11efae07fce8d7171c6578f734e0ff2b08b4a4dd51284a8f45f4e64e4461ad4`.
 
 ### 9.5 4B-Byte Plaintext (four full chunks, $n = 4$)
 
@@ -322,13 +321,13 @@ Flipping bit 0 of `ct[0]` yields tag
 |---------|--------------------------------------------------------------------|
 | len     | 32768                                                              |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `ae07f24e71e77ee3bc3247bfb87b897cede60b35186a95f00ba089391cf668c0` |
+| tag     | `38a1526fa79bcebeba91cbd04ca1bf09beb524918956cda9ce470a6f6b61d717` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`4616ecd2b16e75b37a4a56dc2617be6a831483ce0eb9c340d4e05015d8f0ef95`.
+`7dc8ebe96eed2005977ee41115a9cfa16644e5ebdd9eefcc162186f8b3312ea8`.
 
 Swapping chunks 0 and 1 (bytes 0–8191 and 8192–16383) yields tag
-`196883af6fc7d63d123dbcda66c33b4af97b649792288bcbbaa17a23717afae1`.
+`4fb8bb5abd9cd81ca661d0092b69f57691374034f5ec03f57cd61c2fd8cc8ff9`.
 
 ### 9.6 Round-Trip Consistency
 
