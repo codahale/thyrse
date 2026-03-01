@@ -351,7 +351,7 @@ with probability $1/2^{8C}$; a union bound gives $S/2^{8C}$.
 
 ### 6.5 Committing Security (CMT-4)
 
-**Game.** The adversary produces $(K, N, \mathit{AD}, M)$ and $(K', N', \mathit{AD}', M')$ such that
+**Game.** The adversary produces $(K, N, \mathit{AD}, M) \neq (K', N', \mathit{AD}', M')$ such that
 `Encrypt(K, N, AD, M) = Encrypt(K', N', AD', M')`.
 
 **Theorem.**
