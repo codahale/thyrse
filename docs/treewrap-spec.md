@@ -267,7 +267,19 @@ All leaves process the same key. Implementations MUST ensure constant-time proce
 
 Each leaf cipher is an overwrite duplex operating on the Keccak-p[1600,12] permutation with capacity $c = 256$ bits. The security argument proceeds in two steps: a syntactic rewriting that is information-theoretic, followed by a single application of the sponge indifferentiability theorem.
 
-**Step 1: Overwrite duplex equivalence.** Each leaf cipher implements DWrap mode over a standard Keccak sponge. It uses standard TurboSHAKE padding, meaning each permutation call within the leaf precisely matches the behavior of a standard TurboSHAKE sponge evaluation. By the overwrite-to-XOR equivalence (Daemen et al., Lemma 2), each leaf's computation can be expressed as a standard $\mathrm{Keccak}[256]$ sponge evaluation on an injective encoding of the leaf's inputs. The injectivity holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 for init, 0x61 for intermediate encrypt/decrypt blocks, 0x62 for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities. This step is a syntactic rewriting with no computational cost.
+**Step 1: Overwrite duplex equivalence.** Each leaf cipher implements DWrap mode over a standard Keccak sponge. By the overwrite-to-XOR equivalence (Daemen et al., Lemma 2), each leaf's computation can be expressed as a standard $\mathrm{Keccak}[256]$ sponge evaluation on an injective encoding of the leaf's inputs. This step is a syntactic rewriting with no computational cost.
+
+The equivalence requires four preconditions, all of which TreeWrap satisfies:
+
+1. **Proper padding rule.** Each `pad_permute` call applies standard TurboSHAKE padding (`pad10*1` with domain byte), meaning each permutation call within the leaf precisely matches the behavior of a standard TurboSHAKE sponge evaluation.
+
+2. **Capacity not directly accessed.** The construction never reads or writes the capacity portion of the state (bytes $R$ through 199). Key and index absorption (`init`), encryption, and decryption all operate on positions 0 through $R - 2$, within the rate. Chain value squeezing reads positions 0 through $C - 1$ after a permutation, which is also within the rate ($C = 32 < R = 168$).
+
+3. **Overwrite restricted to the rate.** During encryption and decryption, the ciphertext overwrite (`S[pos] ← Cⱼ`) operates at positions 0 through $R - 2$, strictly within the outer (rate) portion of the state.
+
+4. **Key absorption via XOR.** The `init` procedure absorbs key and index material by XORing it into the rate, which is standard sponge absorption (not overwrite). The overwrite applies only during encryption/decryption.
+
+The injectivity of the encoding holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 for init, 0x61 for intermediate encrypt/decrypt blocks, 0x62 for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities.
 
 After this rewriting, all computations in a TreeWrap invocation — $n$ leaf sponge evaluations plus one tag accumulation (TurboSHAKE128 with domain byte 0x63) — are standard sponge evaluations on distinct inputs. Leaf inputs differ by index; the tag evaluation is separated by domain byte.
 
