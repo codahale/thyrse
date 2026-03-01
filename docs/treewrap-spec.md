@@ -1,8 +1,8 @@
 # TreeWrap: Tree-Parallel Stream Cipher and MAC
 
-**Status:** Draft  
-**Version:** 0.2  
-**Date:** 2026-02-27  
+**Status:** Draft
+**Version:** 0.3
+**Date:** 2026-02-28
 **Security Target:** 128-bit
 
 ## 1. Introduction
@@ -152,7 +152,7 @@ TreeWrap provides the following security properties under the assumption that th
 
 TreeWrap is a deterministic algorithm. Encrypting two different plaintexts with the same key produces ciphertext XOR differences equal to the plaintext XOR differences, fully compromising confidentiality. The key MUST be unique per invocation. When used within a protocol framework, this is typically ensured by deriving the key from transcript state that includes a nonce or counter.
 
-### 6.2 Confidentiality (IND-CPA under a Random Key)
+### 6.2 Confidentiality (IND$ for a Single Invocation)
 
 Under a uniformly random key, TreeWrap ciphertext is indistinguishable from a random string of the same length. The argument:
 
@@ -160,9 +160,9 @@ Each leaf cipher, after `init(key, i)`, produces a keystream by squeezing the ov
 
 Since the ciphertext is `plaintext ⊕ keystream` (for each leaf independently), the ciphertext is indistinguishable from random under a random key. Different leaves use different indices, so their keystreams are independent.
 
-The IND-CPA advantage is bounded by:
+The IND$ advantage is bounded by:
 
-$$\varepsilon_{\mathrm{cpa}} \leq \frac{n \cdot (\sigma + t)^2}{2^{c+1}}$$
+$$\varepsilon_{\mathrm{ind\$}} \leq \frac{n \cdot (\sigma + t)^2}{2^{c+1}}$$
 
 where $n$ is the number of leaves, $t$ is the adversary's offline computation, $\sigma$ is the data complexity in Keccak-p blocks, and $c = 256$.
 
