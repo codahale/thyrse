@@ -1,9 +1,11 @@
 # TreeWrap: Tree-Parallel Stream Cipher and MAC
 
-**Status:** Draft
-**Version:** 0.6
-**Date:** 2026-02-28
-**Security Target:** 128-bit
+<table>
+  <tr><th>Status</th><td>Draft</td></tr>
+  <tr><th>Version</th><td>0.6</td></tr>
+  <tr><th>Date</th><td>2026-02-28</td></tr>
+  <tr><th>Security Target</th><td>128-bit</td></tr>
+</table>
 
 ## 1. Introduction
 
