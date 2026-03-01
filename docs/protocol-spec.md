@@ -843,17 +843,187 @@ plaintext or ⊥ ← Open("message", ciphertext, tag)
 
 ## 16. Test Vectors
 
-(To be generated from a reference implementation.)
+All values are hex-encoded. All test vectors use `Init` label `"test.vector"`. Byte string literals are shown in hex as
+`(hex)`.
 
-Recommended test cases:
+### 16.1 Init + Derive
 
-- `Init` + `Derive`: Minimal protocol producing output.
-- `Init` + `Mix(key)` + `Mix(nonce)` + `Derive`: Multiple non-finalizing operations before `Derive`.
-- `Init` + `Mix(key)` + `Seal(plaintext)` + `Derive`: Full AEAD round-trip.
-- `Init` + `Mix(key)` + `Mask(plaintext)` + `Seal(plaintext)`: Combined unauthenticated and authenticated encryption.
-- `Init` + `Mix(key)` + `Ratchet` + `Derive`: Forward secrecy — output differs from `Derive` without `Ratchet`.
-- `Fork` with two branches each producing `Derive`: Independent outputs.
-- `MixStream` with large input: Pre-hash commitment equivalence.
-- `Seal` + `Open` with valid tag: Successful round-trip.
-- `Seal` + `Open` with tampered ciphertext: `Open` returns ⊥, transcript still advances.
-- Multiple `Seal`s in sequence: Each key differs (transcript advances via tag absorption).
+Minimal protocol producing output.
+
+```
+Init("test.vector")
+Derive("output", 32)
+```
+
+| Field         | Value                                                              |
+|---------------|--------------------------------------------------------------------|
+| Derive output | `91a9244784060174970bbbe8395f7f7e4d055c16be368594c0707413dcdfcc58` |
+
+### 16.2 Init + Mix + Mix + Derive
+
+Multiple non-finalizing operations before `Derive`.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Mix("nonce", "test-nonce-value")
+Derive("output", 32)
+```
+
+| Field         | Value                                                              |
+|---------------|--------------------------------------------------------------------|
+| key data      | `746573742d6b65792d6d6174657269616c`                               |
+| nonce data    | `746573742d6e6f6e63652d76616c7565`                                 |
+| Derive output | `fcac8c24985876bdd4e034552fdbeedca786fb7689a196a3acaf643f1c1c2a6a` |
+
+### 16.3 Init + Mix + Seal + Derive
+
+Full AEAD followed by `Derive`.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Seal("message", "hello, world!")
+Derive("output", 32)
+```
+
+| Field                  | Value                                                                                        |
+|------------------------|----------------------------------------------------------------------------------------------|
+| key data               | `746573742d6b65792d6d6174657269616c`                                                         |
+| plaintext              | `68656c6c6f2c20776f726c6421`                                                                 |
+| Seal output (ct ‖ tag) | `645c4ee5330811bf8f8a2070651ea3c503c78d7ef8f2c03fce2f7f2493a95fd299c4743a56048c4b8beccf2eeb` |
+| Derive output          | `3d0207b0f8e5238cadfb589172fffe8059827243b0b602c27f2cb2814031879b`                           |
+
+### 16.4 Init + Mix + Mask + Seal
+
+Combined unauthenticated and authenticated encryption.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Mask("unauthenticated", "mask this data")
+Seal("authenticated", "seal this data")
+```
+
+| Field                  | Value                                                                                          |
+|------------------------|------------------------------------------------------------------------------------------------|
+| key data               | `746573742d6b65792d6d6174657269616c`                                                           |
+| Mask plaintext         | `6d61736b20746869732064617461`                                                                 |
+| Mask output (ct)       | `260ea77cc6b8ee60b060cac87e6f`                                                                 |
+| Seal plaintext         | `7365616c20746869732064617461`                                                                 |
+| Seal output (ct ‖ tag) | `d3d859139486f7f39dd9228fac735abf9b1719ab161559cc834993b17296f801389aabdfcc52c659fcb2feeb48cb` |
+
+### 16.5 Init + Mix + Ratchet + Derive
+
+Forward secrecy: output differs from `Derive` without `Ratchet`.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Derive("output", 32)                     # without Ratchet
+
+Init("test.vector")
+Mix("key", "test-key-material")
+Ratchet("forward-secrecy")
+Derive("output", 32)                     # with Ratchet
+```
+
+| Field                  | Value                                                              |
+|------------------------|--------------------------------------------------------------------|
+| key data               | `746573742d6b65792d6d6174657269616c`                               |
+| Derive (no Ratchet)    | `7533c628ab03a2be92718588568284f73f467a54f173d8aaa2035ae3d2672945` |
+| Derive (after Ratchet) | `e1af44127866b8588c68e10f17ff7d1d37f12a4e3526a69d8cb220f241fefd31` |
+
+### 16.6 Fork + Derive
+
+`Fork` with two branches, each producing `Derive`. All three outputs are independent.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Fork("role", "prover", "verifier")       # base = ordinal 0, clone 1 = "prover", clone 2 = "verifier"
+Derive("output", 32)                     # on each branch
+```
+
+| Branch                       | Derive output                                                      |
+|------------------------------|--------------------------------------------------------------------|
+| Base (ordinal 0)             | `b5b07c94401b4d6e6b9a9289c1ad858327822f7cbe1e459e8d58ccc5b5f40b5d` |
+| Clone 1 / "prover" (ord 1)   | `ab999f91045ddeb4b743a03c9256b9fd7a913e1ebb3fcd28bed9680534292d63` |
+| Clone 2 / "verifier" (ord 2) | `09236bba933c0d9937c93d2bc8ac77f65a87b380a88ad34ffec206e76892c0eb` |
+
+### 16.7 MixStream
+
+Pre-hash of a 10 000-byte input via KT128.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+MixStream("stream-data", <10000 bytes where byte[i] = i mod 251>)
+Derive("output", 32)
+```
+
+| Field         | Value                                                              |
+|---------------|--------------------------------------------------------------------|
+| Derive output | `7e7a81e3d8c4dd701883430697e1aa956b0ad990a1b0823bc3eaca1f9078d768` |
+
+### 16.8 Seal + Open Round-Trip
+
+Successful authenticated encryption and decryption. Post-operation `Derive` outputs match.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Mix("nonce", "test-nonce-value")
+Mix("ad", "associated data")
+Seal("message", "hello, world!")         # sender
+Open("message", <sealed>)               # receiver
+Derive("confirm", 32)                   # both sides
+```
+
+| Field                          | Value                                                                                        |
+|--------------------------------|----------------------------------------------------------------------------------------------|
+| ad data                        | `6173736f6369617465642064617461`                                                             |
+| plaintext                      | `68656c6c6f2c20776f726c6421`                                                                 |
+| Seal output (ct ‖ tag)         | `667911010907507537fa5ab3a8345d769cbc1167e26edaaa4a38f38a6430f09be3b7917b1ec1f30d667c811612` |
+| Open plaintext                 | `68656c6c6f2c20776f726c6421`                                                                 |
+| Derive("confirm") — both sides | `1cf32253d292ddb3c3b5ccca4c20daa63f45da40cc47b4598c9643b347035bb9`                           |
+
+### 16.9 Seal + Open with Tampered Ciphertext
+
+`Open` returns ⊥. Transcripts desynchronize: subsequent `Derive` outputs diverge.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Mix("nonce", "test-nonce-value")
+Seal("message", "hello, world!")         # sender
+Open("message", <tampered>)             # receiver — tampered[0] ^= 0xff
+Derive("after", 32)                     # both sides
+```
+
+| Field                                | Value                                                                                        |
+|--------------------------------------|----------------------------------------------------------------------------------------------|
+| Seal output                          | `179a9f4f36547f4ea60a196e670fc58051fc3cdd6ecc8f08a0a10256c7b443a402b852a75f1c38b1fffe3ec7f3` |
+| Tampered (first byte XOR 0xff)       | `e89a9f4f36547f4ea60a196e670fc58051fc3cdd6ecc8f08a0a10256c7b443a402b852a75f1c38b1fffe3ec7f3` |
+| Open result                          | ⊥ (authentication failed)                                                                    |
+| Seal-side Derive("after")            | `658908d1d91755d5fb37ed7c6dce9d3710d34a5ec539510ab64b8a5b31ea0355`                           |
+| Open-side Derive("after") [desynced] | `a978e9131f73341787f605755deeebd76e94999933717117bdb5f2aa56ac15e9`                           |
+
+### 16.10 Multiple Seals in Sequence
+
+Each `Seal` derives a different key because the transcript advances via tag absorption.
+
+```
+Init("test.vector")
+Mix("key", "test-key-material")
+Mix("nonce", "test-nonce-value")
+Seal("msg", "first message")
+Seal("msg", "second message")
+Seal("msg", "third message")
+```
+
+| Seal | Plaintext (hex)                | Output (ct ‖ tag)                                                                              |
+|------|--------------------------------|------------------------------------------------------------------------------------------------|
+| 1    | `6669727374206d657373616765`   | `d681dd5ad476651843c17f3cfbc54763223f105b8d47366467f7f73cbc4be367b26ad6a6ae04fc3bd49d14ee45`   |
+| 2    | `7365636f6e64206d657373616765` | `2299b98eb976cf08820419f18f29f50fbf47cca91aa263faed9b18f7780a65166b19a9753b6ffc9c5bb93de6b736` |
+| 3    | `7468697264206d657373616765`   | `a20c4d8f8eb687a8da1eeb5d6ddb8ca054c6d022bc0d0d4cbe97928e2928beaede3810f480c413abff9255d69f`   |
