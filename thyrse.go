@@ -321,8 +321,8 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	return ret
 }
 
-// Open decrypts and authenticates sealed data produced by Seal. The sealed input must be ciphertext with the truncated
-// tag appended (as returned by Seal).
+// Open decrypts and authenticates sealed data produced by Seal. The sealed input must be ciphertext with the tag
+// appended (as returned by Seal).
 //
 // On success, returns the plaintext. On failure, returns ErrInvalidCiphertext, and the protocol instance is permanently
 // desynchronized and must be discarded.
