@@ -305,6 +305,8 @@ Return `plaintext`.
 
 Returns an independent copy of the protocol state (transcript and, in sponge-based implementations, the full sponge state and Init label). The original and clone evolve independently. Clone does not append a frame to the transcript.
 
+*Warning:* Because Clone does not append a frame, applying identical operations to the original and the clone will produce identical transcripts, potentially leading to catastrophic key reuse in Mask or Seal. Callers SHOULD use Fork to create independent protocol branches unless they are explicitly managing transcript divergence (e.g., repeating an operation for benchmarking, or transferring state from sender to receiver).
+
 **Clear()**
 
 Overwrites the protocol state with zeros and invalidates the instance. Implementations MUST zero the sponge state, any buffered key material, and the stored Init label. After Clear, the instance MUST NOT be used.
@@ -522,7 +524,7 @@ For 128-bit keys, $\varepsilon_{\mathrm{kdf}}(0) \approx t / 2^{128}$, so $\vare
 
 **Multi-user forgery.** The adversary can attempt forgeries against any of the $U$ sessions. If each session processes at most $q$ Seal operations, the total forgery advantage is:
 
-$$\varepsilon_{\mathrm{mu\text{-}forge}} \leq \frac{U \cdot S}{2^{128}}$$
+$$\varepsilon_{\mathrm{mu\text{-}forge}} \leq \frac{S}{2^{128}}$$
 
 where $S$ is the total number of forgery attempts across all sessions.
 
@@ -534,7 +536,7 @@ where $q$ is the maximum number of finalizations per session. For $U = 2^{32}$ s
 
 **Combined multi-user bound:**
 
-$$\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + U \cdot q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{(U \cdot q)^2}{2^{513}} + \frac{U \cdot S}{2^{128}}$$
+$$\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + U \cdot q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{(U \cdot q)^2}{2^{513}} + \frac{S}{2^{128}}$$
 
 **Ratcheting as mitigation.** The multi-user key recovery term $U \cdot \varepsilon_{\mathrm{kdf}}(0)$ reflects the adversary's ability to correlate offline computation with any of $U$ sessions over the session's entire lifetime. Ratcheting limits this exposure. After a Ratchet operation, the session state contains only a chain value — a 512-bit pseudorandom string with no algebraic structure that could be exploited in a multi-target search. An adversary who targets the pre-Ratchet key material must do so before the Ratchet occurs (or within the window of operations between Ratchets).
 
