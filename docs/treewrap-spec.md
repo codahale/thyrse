@@ -38,9 +38,22 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 ## 4. Leaf Cipher
 
 A leaf cipher implements the DWrap mode (using the overwrite duplex optimization) over a standard Keccak sponge, using
-the same permutation and rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes: `0x60` for
-`init` (key/index absorption), `0x61` for single-node tag squeezing (fast path), `0x62` for intermediate `encrypt`/
-`decrypt` blocks, `0x63` for the final block (chain value derivation), and `0x64` for tag accumulation.
+the same permutation and rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes, reserved for
+TreeWrap:
+
+| Byte   | Usage                        | Procedure(s)             |
+|--------|------------------------------|--------------------------|
+| `0x60` | Init (key/index absorption)  | `init`                   |
+| `0x61` | Single-node tag squeeze      | `single_node_tag`        |
+| `0x62` | Intermediate encrypt/decrypt | `encrypt`, `decrypt`     |
+| `0x63` | Final block (chain value)    | `chain_value`            |
+| `0x64` | Tag accumulation             | `TreeWrap`, `TreeUnwrap` |
+
+> [!WARNING]
+> Bytes `0x60`–`0x64` are reserved for TreeWrap. Other callers of TurboSHAKE128 in the same system must avoid these
+> domain bytes. After the duplex-to-sponge rewriting (§6.12), a leaf cipher evaluation with domain byte `0x63` is
+> structurally identical to a `TurboSHAKE128(M, 0x63, ℓ)` call; domain byte collision would break the distinct-input
+> guarantee that the security reduction relies on.
 
 The overwrite duplex (DWrap) differs from the traditional XOR-absorb duplex (SpongeWrap) in that the `encrypt` operation
 overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it enables a
