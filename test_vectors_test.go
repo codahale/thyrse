@@ -108,8 +108,8 @@ func TestVectors(t *testing.T) {
 		}
 	})
 
-	t.Run("MixStream", func(t *testing.T) {
-		// §16.7: MixStream — pre-hash of a 10000-byte input via KT128.
+	t.Run("MixDigest", func(t *testing.T) {
+		// §16.7: MixDigest — pre-hash of a 10000-byte input via KT128.
 		data := make([]byte, 10000)
 		for i := range data {
 			data[i] = byte(i % 251)
@@ -117,7 +117,7 @@ func TestVectors(t *testing.T) {
 
 		p := thyrse.New("test.vector")
 		p.Mix("key", []byte("test-key-material"))
-		if err := p.MixStream("stream-data", bytes.NewReader(data)); err != nil {
+		if err := p.MixDigest("stream-data", bytes.NewReader(data)); err != nil {
 			t.Fatal(err)
 		}
 		derive := p.Derive("output", nil, 32)

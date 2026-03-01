@@ -43,7 +43,7 @@ func FuzzProtocolDivergence(f *testing.F) {
 				t.Skip(err)
 			}
 
-			const opTypeCount = 6 // Mix, MixStream, Derive, Ratchet, Mask, Seal
+			const opTypeCount = 6 // Mix, MixDigest, Derive, Ratchet, Mask, Seal
 			switch opType := opTypeRaw % opTypeCount; opType {
 			case 0: // Mix
 				input, err := tp.GetBytes()
@@ -53,14 +53,14 @@ func FuzzProtocolDivergence(f *testing.F) {
 
 				p1.Mix(label, input)
 				p2.Mix(label, input)
-			case 1: // MixStream
+			case 1: // MixDigest
 				input, err := tp.GetBytes()
 				if err != nil {
 					t.Skip(err)
 				}
 
-				_ = p1.MixStream(label, bytes.NewReader(input))
-				_ = p2.MixStream(label, bytes.NewReader(input))
+				_ = p1.MixDigest(label, bytes.NewReader(input))
+				_ = p2.MixDigest(label, bytes.NewReader(input))
 			case 2: // Derive
 				n, err := tp.GetUint16()
 				if err != nil || n == 0 {
@@ -139,7 +139,7 @@ func FuzzProtocolReversibility(f *testing.F) {
 				t.Skip(err)
 			}
 
-			const opTypeCount = 6 // Mix, MixStream, Derive, Ratchet, Mask, Seal
+			const opTypeCount = 6 // Mix, MixDigest, Derive, Ratchet, Mask, Seal
 			switch opType := opTypeRaw % opTypeCount; opType {
 			case 0: // Mix
 				input, err := tp.GetBytes()
@@ -154,13 +154,13 @@ func FuzzProtocolReversibility(f *testing.F) {
 					label:  label,
 					input:  input,
 				})
-			case 1: // MixStream
+			case 1: // MixDigest
 				input, err := tp.GetBytes()
 				if err != nil {
 					t.Skip(err)
 				}
 
-				_ = p1.MixStream(label, bytes.NewReader(input))
+				_ = p1.MixDigest(label, bytes.NewReader(input))
 
 				operations = append(operations, operation{
 					opType: 1,
@@ -226,8 +226,8 @@ func FuzzProtocolReversibility(f *testing.F) {
 			switch op.opType {
 			case 0: // Mix
 				p2.Mix(op.label, op.input)
-			case 1: // MixStream
-				_ = p2.MixStream(op.label, bytes.NewReader(op.input))
+			case 1: // MixDigest
+				_ = p2.MixDigest(op.label, bytes.NewReader(op.input))
 			case 2: // Derive
 				output := p2.Derive(op.label, nil, op.n)
 				if !bytes.Equal(output, op.output) {

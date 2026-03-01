@@ -332,7 +332,7 @@ func computeGroupCommitment(commitments []Commitment, bindingFactors map[uint16]
 func computeChallenge(domain string, groupKey *ristretto255.Element, message []byte, groupCommitment *ristretto255.Element) *ristretto255.Scalar {
 	p := thyrse.New(domain)
 	p.Mix("signer", groupKey.Bytes())
-	_ = p.MixStream("message", bytes.NewReader(message))
+	_ = p.MixDigest("message", bytes.NewReader(message))
 	_, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))
 	verifier.Mix("commitment", groupCommitment.Bytes())
 	c, _ := ristretto255.NewScalar().SetUniformBytes(verifier.Derive("challenge", nil, 64))

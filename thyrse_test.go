@@ -639,7 +639,7 @@ func TestFork(t *testing.T) {
 	})
 }
 
-func TestMixStream(t *testing.T) {
+func TestMixDigest(t *testing.T) {
 	t.Run("deterministic", func(t *testing.T) {
 		data := make([]byte, 100000)
 		for i := range data {
@@ -647,13 +647,13 @@ func TestMixStream(t *testing.T) {
 		}
 
 		p := New("test")
-		if err := p.MixStream("large-data", bytes.NewReader(data)); err != nil {
+		if err := p.MixDigest("large-data", bytes.NewReader(data)); err != nil {
 			t.Fatal(err)
 		}
 		out := p.Derive("output", nil, 32)
 
 		p2 := New("test")
-		if err := p2.MixStream("large-data", bytes.NewReader(data)); err != nil {
+		if err := p2.MixDigest("large-data", bytes.NewReader(data)); err != nil {
 			t.Fatal(err)
 		}
 		out2 := p2.Derive("output", nil, 32)
@@ -670,14 +670,14 @@ func TestMixWriter(t *testing.T) {
 		data[i] = byte(i)
 	}
 
-	// Reference output via MixStream.
+	// Reference output via MixDigest.
 	ref := New("test")
-	if err := ref.MixStream("large-data", bytes.NewReader(data)); err != nil {
+	if err := ref.MixDigest("large-data", bytes.NewReader(data)); err != nil {
 		t.Fatal(err)
 	}
 	want := ref.Derive("output", nil, 32)
 
-	t.Run("one-shot write matches MixStream", func(t *testing.T) {
+	t.Run("one-shot write matches MixDigest", func(t *testing.T) {
 		p := New("test")
 		mw := p.MixWriter("large-data")
 		if _, err := mw.Write(data); err != nil {
@@ -693,7 +693,7 @@ func TestMixWriter(t *testing.T) {
 		}
 	})
 
-	t.Run("incremental writes match MixStream", func(t *testing.T) {
+	t.Run("incremental writes match MixDigest", func(t *testing.T) {
 		p := New("test")
 		mw := p.MixWriter("large-data")
 		for i := 0; i < len(data); i += 1000 {
@@ -719,12 +719,12 @@ func TestMixWriterBranch(t *testing.T) {
 		data[i] = byte(i)
 	}
 
-	t.Run("matches MixStream at snapshot point", func(t *testing.T) {
-		// Write partial data, branch, then verify the branch matches MixStream with the same partial data.
+	t.Run("matches MixDigest at snapshot point", func(t *testing.T) {
+		// Write partial data, branch, then verify the branch matches MixDigest with the same partial data.
 		partial := data[:50000]
 
 		ref := New("test")
-		if err := ref.MixStream("large-data", bytes.NewReader(partial)); err != nil {
+		if err := ref.MixDigest("large-data", bytes.NewReader(partial)); err != nil {
 			t.Fatal(err)
 		}
 		want := ref.Derive("output", nil, 32)
@@ -738,15 +738,15 @@ func TestMixWriterBranch(t *testing.T) {
 		branch := mw.Branch()
 		got := branch.Derive("output", nil, 32)
 		if !bytes.Equal(got, want) {
-			t.Error("branch output does not match MixStream with same data")
+			t.Error("branch output does not match MixDigest with same data")
 		}
 	})
 
 	t.Run("original protocol unchanged after branch", func(t *testing.T) {
 		// Branch should not affect the original protocol. Closing the MixWriter and deriving
-		// from the original should match the full MixStream reference.
+		// from the original should match the full MixDigest reference.
 		ref := New("test")
-		if err := ref.MixStream("large-data", bytes.NewReader(data)); err != nil {
+		if err := ref.MixDigest("large-data", bytes.NewReader(data)); err != nil {
 			t.Fatal(err)
 		}
 		want := ref.Derive("output", nil, 32)

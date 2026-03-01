@@ -11,7 +11,7 @@ import (
 func BenchmarkSchemeHash(b *testing.B) {
 	hash := func(message, dst []byte) []byte {
 		protocol := thyrse.New("hash")
-		_ = protocol.MixStream("message", bytes.NewReader(message))
+		_ = protocol.MixDigest("message", bytes.NewReader(message))
 		return protocol.Derive("digest", dst, 32)
 	}
 

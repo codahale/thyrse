@@ -2,7 +2,7 @@
 
 <table>
   <tr><th>Status</th><td>Draft</td></tr>
-  <tr><th>Version</th><td>0.3</td></tr>
+  <tr><th>Version</th><td>0.4</td></tr>
   <tr><th>Date</th><td>2026-02-28</td></tr>
   <tr><th>Security Target</th><td>128-bit</td></tr>
 </table>
@@ -19,7 +19,8 @@ The framework provides the following operations:
 
 - **`Init`**: Establish a protocol identity.
 - **`Mix`**: Absorb key material, nonces, or associated data.
-- **`MixStream`**: Absorb streaming data too large to fit in memory, via KT128 pre-hashing.
+- **`MixDigest`**: Absorb data too large to fit in memory, via KT128 pre-hashing. Suitable only for inputs that may
+  exceed 8 KiB; if the input length is known in advance and is less than 8 KiB, use `Mix` instead.
 - **`Derive`**: Produce pseudorandom output that is a function of the full transcript.
 - **`Ratchet`**: Irreversibly advance the protocol state for forward secrecy.
 - **`Mask`** / **`Unmask`**: Encrypt or decrypt without authentication. The caller is responsible for authenticating the
@@ -99,7 +100,7 @@ All domain bytes are in the range 0x01–0x7F as required by TurboSHAKE128.
 |------|------------|------------|
 | 0x10 | INIT       | No         |
 | 0x11 | MIX        | No         |
-| 0x12 | MIX_STREAM | No         |
+| 0x12 | MIX_DIGEST | No         |
 | 0x13 | FORK       | No         |
 | 0x14 | DERIVE     | Yes        |
 | 0x15 | RATCHET    | Yes        |
@@ -149,19 +150,25 @@ identical. See §11 for transcript validity requirements.
 
 ### 10.2 Mix
 
-Absorbs data into the protocol transcript. Used for key material, nonces, associated data, and any protocol input that
-fits in memory.
+Absorbs data into the protocol transcript. This is the default and preferred absorption operation for the vast majority
+of inputs, including key material, nonces, associated data, and any protocol input whose length is known in advance to
+be less than 8 KiB. `Mix` absorbs data directly into the running sponge state with no pre-hashing overhead.
 
 **`Mix(label, data)`**
 
 - `transcript ← transcript ‖ 0x11 ‖ length_encode(label) ‖ length_encode(data)`
 
-### 10.3 Mix Stream
+### 10.3 Mix Digest
 
-Absorbs streaming data that may not fit in memory. The data is pre-hashed through KT128 to produce a fixed-size
-commitment. The `Init` label is used as the KT128 customization string, binding the digest to the protocol identity.
+Absorbs data that may not fit in memory by pre-hashing it through KT128 to produce a fixed-size commitment. The `Init`
+label is used as the KT128 customization string, binding the digest to the protocol identity.
 
-**`MixStream(label, data)`**
+`MixDigest` is suitable only for inputs that may exceed 8 KiB in size. KT128 pre-hashing incurs significant overhead
+compared to direct absorption: it requires a full KT128 evaluation over the input data before the digest can be
+absorbed, roughly doubling the cost per byte relative to `Mix`. If the input length is known in advance and is less than
+8 KiB, callers SHOULD use `Mix` instead, which absorbs data directly into the sponge state with no pre-hashing overhead.
+
+**`MixDigest(label, data)`**
 
 - `digest ← KT128(data, init_label, H)`
 - `transcript ← transcript ‖ 0x12 ‖ length_encode(label) ‖ length_encode(digest)`
@@ -371,7 +378,7 @@ can unambiguously extract each operation:
 
 - **`INIT` (`0x10`):** Parse `length_encode(label)`.
 - **`MIX` (`0x11`):** Parse `length_encode(label)`, then `length_encode(data)`.
-- **`MIX_STREAM` (`0x12`):** Parse `length_encode(label)`, then `length_encode(digest)`.
+- **`MIX_DIGEST` (`0x12`):** Parse `length_encode(label)`, then `length_encode(digest)`.
 - **`FORK` (`0x13`):** Parse `length_encode(label)`, then `left_encode(N)`, then `left_encode(ordinal)`, then
   `length_encode(value)`.
 - **`DERIVE` (`0x14`):** Parse `length_encode(label)`, then `left_encode(output_len)`.
@@ -397,7 +404,7 @@ leading byte or origin byte indicates a malformed transcript.
 
 Although the transcript is described as a byte string that is hashed in its entirety at each finalization, an
 implementation SHOULD maintain a running TurboSHAKE128 sponge state. Non-finalizing operations (`Init`, `Mix`,
-`MixStream`, `Fork`) absorb their frames incrementally into the sponge without forcing permutation boundaries.
+`MixDigest`, `Fork`) absorb their frames incrementally into the sponge without forcing permutation boundaries.
 Finalizing operations clone the sponge state and finalize the clones with their respective domain bytes. This avoids
 re-hashing the full transcript on each finalization.
 
@@ -495,9 +502,9 @@ requires the prior transcript's sponge state to be erased from memory; this is a
 
 ### 13.3 Pre-Hash Collision Resistance
 
-`MixStream` absorbs a KT128 digest rather than the raw data. The $H = 64$ byte digest provides 256-bit collision
+`MixDigest` absorbs a KT128 digest rather than the raw data. The $H = 64$ byte digest provides 256-bit collision
 resistance under the Keccak sponge claim, exceeding the 128-bit security target. The `Init` label is used as the KT128
-customization string, ensuring that `MixStream` digests are protocol-specific: two different protocols produce different
+customization string, ensuring that `MixDigest` digests are protocol-specific: two different protocols produce different
 digests for the same data.
 
 ### 13.4 Mask / Unmask Security
@@ -953,14 +960,14 @@ Derive("output", 32)                     # on each branch
 | Clone 1 / "prover" (ord 1)   | `ab999f91045ddeb4b743a03c9256b9fd7a913e1ebb3fcd28bed9680534292d63` |
 | Clone 2 / "verifier" (ord 2) | `09236bba933c0d9937c93d2bc8ac77f65a87b380a88ad34ffec206e76892c0eb` |
 
-### 16.7 MixStream
+### 16.7 MixDigest
 
 Pre-hash of a 10 000-byte input via KT128.
 
 ```
 Init("test.vector")
 Mix("key", "test-key-material")
-MixStream("stream-data", <10000 bytes where byte[i] = i mod 251>)
+MixDigest("stream-data", <10000 bytes where byte[i] = i mod 251>)
 Derive("output", 32)
 ```
 

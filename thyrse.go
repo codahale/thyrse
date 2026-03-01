@@ -62,9 +62,9 @@ func (p *Protocol) Mix(label string, data []byte) {
 	p.writeLengthEncode(data)
 }
 
-// MixStream absorbs streaming data by pre-hashing through KT128. The Init label is used as the KT128 customization
+// MixDigest absorbs streaming data by pre-hashing through KT128. The Init label is used as the KT128 customization
 // string, binding the digest to the protocol identity.
-func (p *Protocol) MixStream(label string, r io.Reader) error {
+func (p *Protocol) MixDigest(label string, r io.Reader) error {
 	kh := kt128.NewCustom([]byte(p.initLabel))
 	if _, err := io.Copy(kh, r); err != nil {
 		return err
@@ -73,12 +73,12 @@ func (p *Protocol) MixStream(label string, r io.Reader) error {
 	var digest [chainValueSize]byte
 	_, _ = kh.Read(digest[:])
 
-	p.writeOpLabel(opMixStream, label)
+	p.writeOpLabel(opMixDigest, label)
 	p.writeLengthEncode(digest[:])
 	return nil
 }
 
-// MixWriter returns a [MixWriter] for incrementally supplying the input of a MixStream operation. Write data to it in
+// MixWriter returns a [MixWriter] for incrementally supplying the input of a MixDigest operation. Write data to it in
 // any number of calls, then Close it to complete the operation.
 //
 // To simultaneously route written data to another destination, wrap the MixWriter and the other destination in an
@@ -92,7 +92,7 @@ func (p *Protocol) MixWriter(label string) *MixWriter {
 	}
 }
 
-// MixWriter incrementally accumulates the input of a MixStream operation. Call [MixWriter.Close] to complete the
+// MixWriter incrementally accumulates the input of a MixDigest operation. Call [MixWriter.Close] to complete the
 // operation on the associated [Protocol].
 type MixWriter struct {
 	p     *Protocol
@@ -100,12 +100,12 @@ type MixWriter struct {
 	kh    *kt128.Hasher
 }
 
-// Write adds p to the MixStream input.
+// Write adds p to the MixDigest input.
 func (mw *MixWriter) Write(p []byte) (int, error) {
 	return mw.kh.Write(p)
 }
 
-// Branch returns a clone of the associated [Protocol] with the MixStream operation completed using the input
+// Branch returns a clone of the associated [Protocol] with the MixDigest operation completed using the input
 // accumulated so far. The original Protocol and MixWriter remain unchanged and can continue to accumulate input.
 func (mw *MixWriter) Branch() *Protocol {
 	kh := mw.kh.Clone()
@@ -114,18 +114,18 @@ func (mw *MixWriter) Branch() *Protocol {
 	_, _ = kh.Read(digest[:])
 
 	p := mw.p.Clone()
-	p.writeOpLabel(opMixStream, mw.label)
+	p.writeOpLabel(opMixDigest, mw.label)
 	p.writeLengthEncode(digest[:])
 	return p
 }
 
-// Close completes the MixStream operation, mixing the accumulated input into the protocol transcript. Close must be
+// Close completes the MixDigest operation, mixing the accumulated input into the protocol transcript. Close must be
 // called exactly once.
 func (mw *MixWriter) Close() error {
 	var digest [chainValueSize]byte
 	_, _ = mw.kh.Read(digest[:])
 
-	mw.p.writeOpLabel(opMixStream, mw.label)
+	mw.p.writeOpLabel(opMixDigest, mw.label)
 	mw.p.writeLengthEncode(digest[:])
 	return nil
 }
@@ -492,7 +492,7 @@ const (
 	// Operation codes.
 	opInit      = 0x10
 	opMix       = 0x11
-	opMixStream = 0x12
+	opMixDigest = 0x12
 	opFork      = 0x13
 	opDerive    = 0x14
 	opRatchet   = 0x15

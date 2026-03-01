@@ -101,7 +101,7 @@ func BenchmarkMix(b *testing.B) {
 	}
 }
 
-func BenchmarkMixStream(b *testing.B) {
+func BenchmarkMixDigest(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -109,7 +109,7 @@ func BenchmarkMixStream(b *testing.B) {
 			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
-				_ = p.MixStream("data", bytes.NewReader(data))
+				_ = p.MixDigest("data", bytes.NewReader(data))
 			}
 		})
 	}
