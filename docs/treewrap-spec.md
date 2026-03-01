@@ -150,7 +150,7 @@ The caller is responsible for comparing the returned tag against an expected val
 
 ## 6. Security Properties
 
-TreeWrap provides the following security properties under the assumptions stated in §6.1 and that Keccak-p[1600,12] is indistinguishable from a random permutation. Each property reduces to the Keccak sponge claim via TurboSHAKE128's indifferentiability from a random oracle.
+TreeWrap provides the following security properties under the assumptions stated in §6.1. The formal security reductions model the underlying Keccak-p[1600,12] permutation as a random permutation. In reality, 12-round Keccak is known to have permutation-level distinguishers (e.g., zero-sum distinguishers) and is therefore not perfectly indistinguishable from random. However, TreeWrap relies on the same heuristic assumption as KangarooTwelve and TurboSHAKE: that these permutation-level properties do not translate into structural breaks of the sponge construction, and that the sponge indifferentiability claim holds up to the 128-bit target security level. Each property reduces to the Keccak sponge claim via TurboSHAKE128's indifferentiability from a random oracle.
 
 ### 6.1 Key Requirements
 
