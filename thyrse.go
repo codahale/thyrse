@@ -130,10 +130,16 @@ func (mw *MixWriter) Close() error {
 	return nil
 }
 
-// Fork clones the protocol state into N independent branches and modifies the base. The base receives ordinal 0 with an
+// Fork calls ForkN with the given label and values and returns the two branches.
+func (p *Protocol) Fork(label string, left, right []byte) (*Protocol, *Protocol) {
+	branches := p.ForkN(label, left, right)
+	return branches[0], branches[1]
+}
+
+// ForkN clones the protocol state into N independent branches and modifies the base. The base receives ordinal 0 with an
 // empty value. Each clone receives ordinals 1 through N with the corresponding value. Callers must ensure clone values
 // are distinct from each other.
-func (p *Protocol) Fork(label string, values ...[]byte) []*Protocol {
+func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 	n := len(values)
 
 	// Write the common prefix.

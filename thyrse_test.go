@@ -599,7 +599,7 @@ func TestFork(t *testing.T) {
 		p := New("test")
 		p.Mix("key", []byte("shared-key"))
 
-		clones := p.Fork("role", []byte("alice"), []byte("bob"))
+		clones := p.ForkN("role", []byte("alice"), []byte("bob"))
 		if len(clones) != 2 {
 			t.Fatalf("got %d clones, want 2", len(clones))
 		}
@@ -623,7 +623,7 @@ func TestFork(t *testing.T) {
 		fork := func() ([]byte, []byte) {
 			p := New("test")
 			p.Mix("key", []byte("key"))
-			clones := p.Fork("role", []byte("a"))
+			clones := p.ForkN("role", []byte("a"))
 			return p.Derive("out", nil, 32), clones[0].Derive("out", nil, 32)
 		}
 

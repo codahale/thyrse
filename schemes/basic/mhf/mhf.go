@@ -37,8 +37,7 @@ func Hash(domain string, cost uint8, salt, password, dst []byte, n int) []byte {
 	root.Mix("salt", salt)
 
 	// Fork into data-independent and data-dependent branches.
-	branches := root.Fork("data", []byte("independent"), []byte("dependent"))
-	id, dd := branches[0], branches[1]
+	id, dd := root.Fork("data", []byte("independent"), []byte("dependent"))
 
 	// Mix the password into the data-dependent branch.
 	dd.Mix("password", password)

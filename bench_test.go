@@ -180,6 +180,6 @@ func BenchmarkFork(b *testing.B) {
 	values := [][]byte{[]byte("alice"), []byte("bob")}
 	b.ReportAllocs()
 	for b.Loop() {
-		p.Fork("role", values...)
+		p.ForkN("role", values...)
 	}
 }

@@ -91,8 +91,7 @@ func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto25
 
 	// Derive polynomial coefficients deterministically from the seed.
 	p := thyrse.New(domain)
-	branches := p.Fork("process", []byte("keygen"), []byte("commitment"))
-	keygen := branches[0]
+	keygen, _ := p.Fork("process", []byte("keygen"), []byte("commitment"))
 	keygen.Mix("seed", rand)
 
 	coeffs := make([]*ristretto255.Scalar, threshold)
@@ -129,8 +128,7 @@ func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto25
 func (s *Signer) Commit(rand []byte) (Nonce, Commitment) {
 	x := thyrse.New(s.domain)
 
-	branches := x.Fork("process", []byte("keygen"), []byte("commitment"))
-	c := branches[1]
+	_, c := x.Fork("process", []byte("keygen"), []byte("commitment"))
 	c.Mix("signing-share", s.signingShare.Bytes())
 	c.Mix("rand", rand)
 
@@ -335,8 +333,7 @@ func computeChallenge(domain string, groupKey *ristretto255.Element, message []b
 	p := thyrse.New(domain)
 	p.Mix("signer", groupKey.Bytes())
 	_ = p.MixStream("message", bytes.NewReader(message))
-	branches := p.Fork("role", []byte("prover"), []byte("verifier"))
-	verifier := branches[1]
+	_, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))
 	verifier.Mix("commitment", groupCommitment.Bytes())
 	c, _ := ristretto255.NewScalar().SetUniformBytes(verifier.Derive("challenge", nil, 64))
 

@@ -15,8 +15,7 @@ func Blind(domain string, input []byte) (blind *ristretto255.Scalar, blindedElem
 	// Derive an element from the input.
 	p := thyrse.New(domain)
 	p.Mix("input", input)
-	branches := p.Fork("output", []byte("element"), []byte("prf"))
-	element := branches[0]
+	element, _ := p.Fork("output", []byte("element"), []byte("prf"))
 	inputElement, _ := ristretto255.NewIdentityElement().SetUniformBytes(element.Derive("element", nil, 64))
 	if inputElement.Equal(ristretto255.NewIdentityElement()) == 1 {
 		return nil, nil, errors.New("oprf: input maps to identity element")
@@ -68,8 +67,7 @@ func Finalize(domain string, input []byte, blind *ristretto255.Scalar, evaluated
 	// Derive a bytestring from the input and the unblinded element.
 	p := thyrse.New(domain)
 	p.Mix("input", input)
-	branches := p.Fork("output", []byte("element"), []byte("prf"))
-	prf := branches[1]
+	_, prf := p.Fork("output", []byte("element"), []byte("prf"))
 	prf.Mix("unblinded-element", unblindedElement.Bytes())
 	return prf.Derive("prf", nil, n), nil
 }
@@ -82,8 +80,7 @@ func Evaluate(domain string, d *ristretto255.Scalar, input []byte, n int) ([]byt
 	// Derive an element from the input.
 	p := thyrse.New(domain)
 	p.Mix("input", input)
-	branches := p.Fork("output", []byte("element"), []byte("prf"))
-	element, prf := branches[0], branches[1]
+	element, prf := p.Fork("output", []byte("element"), []byte("prf"))
 
 	inputElement, _ := ristretto255.NewIdentityElement().SetUniformBytes(element.Derive("element", nil, 64))
 	if inputElement.Equal(ristretto255.NewIdentityElement()) == 1 {

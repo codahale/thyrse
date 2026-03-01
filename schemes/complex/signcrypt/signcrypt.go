@@ -20,8 +20,7 @@ func Seal(domain string, dS *ristretto255.Scalar, qR *ristretto255.Element, rand
 	p.Mix("sender", ristretto255.NewIdentityElement().ScalarBaseMult(dS).Bytes())
 
 	// Fork the protocol into sender and receiver roles.
-	branches := p.Fork("role", []byte("sender"), []byte("receiver"))
-	sender, receiver := branches[0], branches[1]
+	sender, receiver := p.Fork("role", []byte("sender"), []byte("receiver"))
 
 	// Mix the sender's private key, the user-supplied randomness, and the message into the sender. Use the sender to
 	// derive an ephemeral private key and commitment scalar which are unique to the inputs.
@@ -66,8 +65,7 @@ func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciph
 	p.Mix("sender", qS.Bytes())
 
 	// Fork the protocol into sender and receiver roles.
-	branches := p.Fork("role", []byte("sender"), []byte("receiver"))
-	receiver := branches[1]
+	_, receiver := p.Fork("role", []byte("sender"), []byte("receiver"))
 
 	// Mix in the ephemeral public key and decode it.
 	receiver.Mix("ephemeral", ciphertext[:32])

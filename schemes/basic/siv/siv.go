@@ -54,8 +54,7 @@ func (a *aead) Seal(dst, nonce, plaintext, additionalData []byte) []byte {
 	p.Mix("nonce", nonce)
 	p.Mix("ad", additionalData)
 
-	branches := p.Fork("role", []byte("auth"), []byte("conf"))
-	auth, conf := branches[0], branches[1]
+	auth, conf := p.Fork("role", []byte("auth"), []byte("conf"))
 	auth.Mix("message", plaintext)
 	tag := auth.Derive("tag", nil, thyrse.TagSize)
 
@@ -84,8 +83,7 @@ func (a *aead) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, erro
 	p.Mix("nonce", nonce)
 	p.Mix("ad", additionalData)
 
-	branches := p.Fork("role", []byte("auth"), []byte("conf"))
-	auth, conf := branches[0], branches[1]
+	auth, conf := p.Fork("role", []byte("auth"), []byte("conf"))
 
 	conf.Mix("tag", receivedTag)
 

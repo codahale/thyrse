@@ -33,8 +33,7 @@ const (
 // NewInitiator creates a new double ratchet state for the initiating party with the given base protocol, local private
 // key, and peer public key. It automatically performs an initial DH ratchet step.
 func NewInitiator(p *thyrse.Protocol, local *ristretto255.Scalar, remote *ristretto255.Element) *State {
-	branches := p.Fork("role", []byte("initiator"), []byte("responder"))
-	send, recv := branches[0], branches[1]
+	send, recv := p.Fork("role", []byte("initiator"), []byte("responder"))
 	s := &State{
 		localPriv: local,
 		localPub:  ristretto255.NewIdentityElement().ScalarBaseMult(local),
@@ -53,8 +52,7 @@ func NewInitiator(p *thyrse.Protocol, local *ristretto255.Scalar, remote *ristre
 // NewResponder creates a new double ratchet state for the responding party with the given base protocol, local private
 // key, and peer public key.
 func NewResponder(p *thyrse.Protocol, local *ristretto255.Scalar, remote *ristretto255.Element) *State {
-	branches := p.Fork("role", []byte("initiator"), []byte("responder"))
-	recv, send := branches[0], branches[1]
+	recv, send := p.Fork("role", []byte("initiator"), []byte("responder"))
 	s := &State{
 		localPriv: local,
 		localPub:  ristretto255.NewIdentityElement().ScalarBaseMult(local),
