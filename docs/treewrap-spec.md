@@ -203,7 +203,13 @@ This is because distinct (key, ciphertext) pairs produce distinct sequences of l
 
 TreeWrap provides CMT-4 committing security: the ciphertext and tag together commit to the key and plaintext. This is the strongest committing security notion defined by Bellare and Hoang.
 
-The argument is as follows. The tag is a collision-resistant function of (key, ciphertext) (§6.4). Since the encryption within each leaf is invertible for a given key (the overwrite duplex encrypt/decrypt operations are inverses), committing to (key, ciphertext) is equivalent to committing to (key, plaintext). An adversary who produces two distinct tuples $(K, P)$ and $(K', P')$ that yield the same (ciphertext, tag) has found a collision in the tag computation.
+Suppose an adversary produces two distinct tuples $(K, P)$ and $(K', P')$ that yield the same $(C, T)$. There are two cases:
+
+1. **Same key** ($K = K'$). Since $(K, P) \neq (K', P')$, we have $P \neq P'$. But encryption is a bijection for a fixed key (the overwrite duplex encrypt/decrypt operations are inverses), so distinct plaintexts produce distinct ciphertexts: $C \neq C'$. This contradicts $C = C'$.
+
+2. **Different keys** ($K \neq K'$). The pairs $(K, C)$ and $(K', C)$ are distinct (they differ in the key). By tag collision resistance (§6.4), distinct (key, ciphertext) pairs produce distinct tags except with probability $\varepsilon_{\mathrm{coll}}$. This contradicts $T = T'$ except with negligible probability.
+
+In both cases the adversary has either derived a contradiction or broken tag collision resistance. The CMT-4 advantage is therefore bounded by $\varepsilon_{\mathrm{coll}}$.
 
 This committing property is inherent to the construction — it does not require any additional processing or a second pass over the data, unlike generic CMT-4 transforms applied to non-committing AE schemes.
 
