@@ -1,13 +1,13 @@
 # TreeWrap: Tree-Parallel Stream Cipher and MAC
 
 **Status:** Draft
-**Version:** 0.3
+**Version:** 0.4
 **Date:** 2026-02-28
 **Security Target:** 128-bit
 
 ## 1. Introduction
 
-TreeWrap is a deterministic stream cipher with a MAC tag, using a tree-parallel topology based on KangarooTwelve to enable SIMD acceleration (NEON, AVX2, AVX-512) on large inputs. Each leaf operates as an independent overwrite duplex cipher in the style of Daemen et al.'s DWrap mode, and leaf chain values are accumulated into a single MAC tag via TurboSHAKE128.
+TreeWrap is a deterministic stream cipher with a MAC tag, using a tree-parallel topology based on KangarooTwelve to enable SIMD acceleration (NEON, AVX2, AVX-512) on large inputs. Each leaf operates as a DWrap mode instance over a standard Keccak sponge (using the overwrite duplex optimization), and leaf chain values are accumulated into a single MAC tag via TurboSHAKE128.
 
 TreeWrap is not an AEAD scheme. It does not perform tag verification internally. Instead, it exposes two operations — **EncryptAndMAC** and **DecryptAndMAC** — which both return the computed tag to the caller. The caller is responsible for tag comparison, transmission, and any policy decisions around verification failure. This design supports protocol frameworks like Thyrse that need to absorb the tag into ongoing state regardless of verification outcome, or that authenticate ciphertext through external mechanisms such as signatures.
 
@@ -28,43 +28,46 @@ TreeWrap is a pure function with no internal state. Key uniqueness and associate
 
 ## 4. Leaf Cipher
 
-A leaf cipher is an overwrite duplex cipher using the same permutation and rate/capacity parameters as TurboSHAKE128. It uses domain separation byte `0x60` in place of TurboSHAKE128's caller-specified byte.
+A leaf cipher implements the DWrap mode (using the overwrite duplex optimization) over a standard Keccak sponge, using the same permutation and rate/capacity parameters as TurboSHAKE128. It uses domain separation byte `0x60` for intermediate blocks and `0x61` for the final block.
 
-The overwrite duplex differs from the traditional XOR-absorb duplex (SpongeWrap) in that the encrypt operation overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it enables a clean security reduction to TurboSHAKE128 via the equivalence shown by Daemen et al. for the overwrite duplex construction; second, for full-rate blocks, overwrite is faster than XOR on most architectures (write-only vs. read-XOR-write).
+The overwrite duplex differs from the traditional XOR-absorb duplex (SpongeWrap) in that the encrypt operation overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it enables a clean security reduction to the standard Keccak sponge via the equivalence shown by Daemen et al. for the overwrite duplex construction; second, for full-rate blocks, overwrite is faster than XOR on most architectures (write-only vs. read-XOR-write).
 
 A leaf cipher consists of a 200-byte state `S`, initialized to all zeros, and a rate index `pos`, initialized to zero.
 
-**`pad_permute()`:**  
-&emsp; `S[pos] ^= 0x60`  
+**`pad_permute(domain_byte)`:**  
+&emsp; `S[pos] ^= domain_byte`  
+&emsp; `S[pos+1] ^= 0x01`  
 &emsp; `S[R-1] ^= 0x80`  
 &emsp; `S ← f(S)`  
 &emsp; `pos ← 0`
 
+Note: If `pos == R-1` when `pad_permute` is called, `S[R-1] ^= domain_byte`, `S ← f(S)`, `S[0] ^= 0x01`, `S[R-1] ^= 0x80`, `S ← f(S)`, and `pos ← 0`. This matches standard Keccak `pad10*1` padding semantics.
+
 **init(key, index):**  
-&emsp; For each byte of `key ‖ [index]₆₄LE`, XOR it into `S[pos]` and increment `pos`. When `pos` reaches R−1 and more input remains, call `pad_permute()`.  
-&emsp; Call `pad_permute()`.
+&emsp; For each byte of `key ‖ [index]₆₄LE`, XOR it into `S[pos]` and increment `pos`. When `pos` reaches R−1 and more input remains, call `pad_permute(0x60)`.  
+&emsp; Call `pad_permute(0x60)`.
 
 After `init`, the cipher has absorbed the key and index and is ready for encryption.
 
 **encrypt(P) → C:** For each plaintext byte `Pⱼ`:  
 &emsp; `Cⱼ ← Pⱼ ⊕ S[pos]`  
 &emsp; `S[pos] ← Cⱼ` (overwrite with ciphertext)  
-&emsp; Increment `pos`. When `pos` reaches R−1 and more plaintext remains, call `pad_permute()`.  
+&emsp; Increment `pos`. When `pos` reaches R−1 and more plaintext remains, call `pad_permute(0x60)`.  
 Return concatenated ciphertext bytes.
 
 **decrypt(C) → P:** For each ciphertext byte `Cⱼ`:  
 &emsp; `Pⱼ ← Cⱼ ⊕ S[pos]`  
 &emsp; `S[pos] ← Cⱼ` (overwrite with ciphertext)  
-&emsp; Increment `pos`. When `pos` reaches R−1 and more ciphertext remains, call `pad_permute()`.  
+&emsp; Increment `pos`. When `pos` reaches R−1 and more ciphertext remains, call `pad_permute(0x60)`.  
 Return concatenated plaintext bytes.
 
 Note: both encrypt and decrypt overwrite the rate with ciphertext. This ensures the state evolution is identical regardless of direction, which is required for EncryptAndMAC/DecryptAndMAC consistency.
 
 **chain_value() → cv:**  
-&emsp; Call `pad_permute()`.  
-&emsp; Output C bytes: for each byte, output `S[pos]` and increment `pos`. When `pos` reaches R−1 and more output remains, call `pad_permute()`.
+&emsp; Call `pad_permute(0x61)`.  
+&emsp; Output C bytes: for each byte, output `S[pos]` and increment `pos`. When `pos` reaches R−1 and more output remains, call `pad_permute(0x61)`.
 
-`chain_value()` always begins with `pad_permute()` to ensure all encrypted data is fully mixed before the chain value is derived.
+`chain_value()` always begins with `pad_permute(0x61)` to ensure all encrypted data is fully mixed and securely domain-separated from intermediate permutations before the chain value is derived.
 
 ## 5. TreeWrap
 
@@ -102,7 +105,7 @@ Compute the tag using the KangarooTwelve final node structure:
 &emsp; `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`  
 &emsp; `final_input ← final_input ‖ length_encode(n−1)`  
 &emsp; `final_input ← final_input ‖ 0xFF 0xFF`  
-&emsp; `tag ← TurboSHAKE128(final_input, 0x61, C)`
+&emsp; `tag ← TurboSHAKE128(final_input, 0x62, C)`
 
 When `n = 1`, the final input reduces to `cv[0] ‖ 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ length_encode(0) ‖ 0xFF 0xFF`.
 
@@ -138,7 +141,7 @@ Compute the tag using the same final node structure as EncryptAndMAC:
 &emsp; `final_input ← final_input ‖ cv[1] ‖ ... ‖ cv[n−1]`  
 &emsp; `final_input ← final_input ‖ length_encode(n−1)`  
 &emsp; `final_input ← final_input ‖ 0xFF 0xFF`  
-&emsp; `tag ← TurboSHAKE128(final_input, 0x61, C)`
+&emsp; `tag ← TurboSHAKE128(final_input, 0x62, C)`
 
 Return `(plaintext[0] ‖ ... ‖ plaintext[n−1], tag)`.
 
@@ -174,7 +177,7 @@ The argument:
 
 1. Each leaf's chain value is the output of an overwrite duplex (a sponge evaluation) keyed by the random key and indexed by the leaf position. Under the sponge indifferentiability claim, each chain value is pseudorandom and independent across leaves.
 
-2. The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x61}, C)$ where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Since the chain values are pseudorandom, $\mathit{final\_input}$ is a pseudorandom input to an independent random oracle (domain byte 0x61 separates the tag computation from leaf ciphers at 0x60 and other uses of TurboSHAKE128).
+2. The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x62}, C)$ where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Since the chain values are pseudorandom, $\mathit{final\_input}$ is a pseudorandom input to an independent random oracle (domain byte 0x62 separates the tag computation from leaf ciphers at 0x60/0x61 and other uses of TurboSHAKE128).
 
 3. A random oracle on a pseudorandom input produces a pseudorandom output.
 
@@ -222,7 +225,7 @@ When plaintext is empty, a single leaf is still created. The chain value is deri
 
 ### 6.9 Tag Accumulation Structure
 
-Chain values are accumulated using the KangarooTwelve final node structure: `cv[0]` is absorbed as the "first chunk" of the final node, followed by the 8-byte marker `0x03 0x00...`, then chain values `cv[1]` through `cv[n−1]` as "leaf" contributions, followed by `length_encode(n−1)` and the terminator `0xFF 0xFF`. This is processed by TurboSHAKE128 with domain separation byte 0x61, separating TreeWrap tag computation from both KT128 hashing (0x07) and TreeWrap leaf ciphers (0x60).
+Chain values are accumulated using the KangarooTwelve final node structure: `cv[0]` is absorbed as the "first chunk" of the final node, followed by the 8-byte marker `0x03 0x00...`, then chain values `cv[1]` through `cv[n−1]` as "leaf" contributions, followed by `length_encode(n−1)` and the terminator `0xFF 0xFF`. This is processed by TurboSHAKE128 with domain separation byte 0x62, separating TreeWrap tag computation from both KT128 hashing (0x07) and TreeWrap leaf ciphers (0x60/0x61).
 
 The structure is unambiguous: chain values are fixed-size ($C$ bytes each), `length_encode` encodes the number of leaf chain values, and the terminator marks the end. The number of chunks is determined by the ciphertext length, which is assumed to be public.
 
@@ -234,11 +237,11 @@ All leaves process the same key. Implementations MUST ensure constant-time proce
 
 Each leaf cipher is an overwrite duplex operating on the Keccak-p[1600,12] permutation with capacity $c = 256$ bits. The security argument proceeds in three steps.
 
-**Step 1: Leaf PRF security.** The `init` call is exactly a TurboSHAKE128 evaluation: $\mathrm{TurboSHAKE128}(\mathit{key} \mathbin\| [\mathit{index}]_{\mathrm{64LE}},\, \texttt{0x60})$, since the 40-byte input fits within one sponge block and TreeWrap's padding (domain byte after data, 0x80 at position $R{-}1$) matches TurboSHAKE128's padding format. Subsequent encrypt blocks use a simplified padding (domain byte 0x60 and frame byte 0x80 both at position $R{-}1$, collapsing to 0xE0) that does not correspond to TurboSHAKE128's multi-block structure. However, the leaf's outputs can be expressed as evaluations of the $\mathrm{Keccak}[256]$ sponge function (with Keccak-p[1600,12]) on an injective encoding of the leaf's inputs, following the same overwrite-to-XOR equivalence used by Daemen et al. in Lemma 2 of the overwrite duplex construction. The injectivity holds because: (a) the ciphertext overwrite is injective for a given keystream, (b) block boundaries are determined by the public plaintext length, and (c) the `pad_permute` domain byte position distinguishes blocks of different lengths.
+**Step 1: Leaf PRF security.** The leaf cipher implements a DWrap mode over a standard Keccak sponge. It uses standard Keccak padding (`pad10*1`), meaning each permutation call within the leaf precisely matches the behavior of a standard Keccak sponge evaluation. The domain separation bytes `0x60` for intermediate blocks and `0x61` for the final block ensure that the block encoding is prefix-free and injective. The leaf's outputs can be expressed as evaluations of the $\mathrm{Keccak}[256]$ sponge function (with Keccak-p[1600,12]) on an injective encoding of the leaf's inputs, following the same overwrite-to-XOR equivalence used by Daemen et al. in Lemma 2 of the overwrite duplex construction. The injectivity holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b) the distinct domain bytes (0x60 vs 0x61) securely separate intermediate blocks from the final block, eliminating any truncation vulnerabilities.
 
 Assuming the Keccak sponge claim holds for Keccak-p[1600,12], the advantage of distinguishing a TreeWrap leaf from an ideal cipher is at most $(\sigma + t)^2 / 2^{c+1}$ where $t$ is the computational complexity and $\sigma$ is the data complexity in blocks. For $c = 256$, this term is negligible for practical workloads.
 
-**Step 2: Tag PRF and collision resistance.** The tag is a TurboSHAKE128 evaluation (domain byte 0x61) over the concatenation of leaf chain values. Since each chain value is pseudorandom under the key (by Step 1), the tag inherits both the PRF security and the collision resistance of TurboSHAKE128. The tag computation adds one additional sponge indifferentiability term.
+**Step 2: Tag PRF and collision resistance.** The tag is a TurboSHAKE128 evaluation (domain byte 0x62) over the concatenation of leaf chain values. Since each chain value is pseudorandom under the key (by Step 1), the tag inherits both the PRF security and the collision resistance of TurboSHAKE128. The tag computation adds one additional sponge indifferentiability term.
 
 **Step 3: Combined bound.** Summing all terms for a TreeWrap invocation with $n$ leaves:
 
