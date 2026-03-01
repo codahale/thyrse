@@ -461,9 +461,33 @@ The equivalence requires four preconditions, all of which TreeWrap satisfies:
 4. **Key absorption via XOR.** The `init` procedure absorbs key and index material by XORing it into the rate, which is
    standard sponge absorption (not overwrite). The overwrite applies only during encryption/decryption.
 
-The injectivity of the encoding holds because: (a) the ciphertext overwrite is injective for a given keystream, and (b)
-the distinct domain bytes (`0x60` for `init`, `0x61` for single-node tag, `0x62` for intermediate `encrypt`/`decrypt`
-blocks, `0x63` for the final block) ensure that the block encoding is injective, eliminating any truncation ambiguities.
+**Equivalent sponge input.** After applying the overwrite-to-XOR equivalence, each leaf is a standard
+$\mathrm{Keccak}[256]$ sponge evaluation on an input assembled from the rate-sized blocks absorbed before each
+permutation call. For a leaf with key $K$, index $i$, and ciphertext $C = C_1 \| C_2 \| \cdots \| C_m$, the equivalent
+sponge input consists of the following blocks (each padded to $R = 168$ bytes via `pad10*1`):
+
+- **Init block:** $K \| [i]_{\mathrm{64LE}}$ (40 bytes), padded with domain byte `0x60`.
+- **Intermediate ciphertext blocks:** Each full $(R - 1)$-byte segment of ciphertext, padded with domain byte `0x62`.
+- **Final block:** The remaining ciphertext bytes (possibly zero length), padded with domain byte `0x63` (chain value
+  output) or `0x61` (single-node tag output).
+
+This equivalent sponge input is a function of $(K, i, C)$ — the **ciphertext**, not the plaintext. The overwrite-to-XOR
+equivalence rewrites the overwrite duplex (which absorbs ciphertext by overwriting state bytes) into an equivalent XOR
+duplex (which absorbs the same ciphertext by XORing into the state). The plaintext does not appear in the equivalent
+sponge input.
+
+**Injectivity of the encoding.** The encoding $(K, i, C) \mapsto \text{sponge input}$ is injective because:
+
+1. **Fixed-size prefix.** $K \| [i]_{\mathrm{64LE}}$ is always exactly 40 bytes, so the boundary between init material
+   and ciphertext is unambiguous.
+2. **Unambiguous block boundaries.** `pad10*1` after each block ensures no block can be a suffix or prefix of another.
+3. **Distinct domain bytes.** `0x60` (init), `0x62` (intermediate), `0x61`/`0x63` (final) prevent init blocks from
+   being confused with ciphertext blocks.
+4. **Ciphertext determines content.** For a fixed key and index, distinct ciphertexts trivially produce distinct sponge
+   inputs — the ciphertext bytes differ in the corresponding blocks.
+
+The injectivity is a property of the encoding format, not of the encrypt operation. (The encrypt/decrypt bijection is a
+separate property, used in the CMT-4 proof §6.5 to show that distinct plaintexts produce distinct ciphertexts.)
 
 After this rewriting, all computations in a TreeWrap invocation — $n$ leaf sponge evaluations plus one optional tag
 accumulation (TurboSHAKE128 with domain byte `0x64`) — are standard sponge evaluations on distinct inputs. Leaf inputs
