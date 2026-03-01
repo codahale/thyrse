@@ -246,8 +246,10 @@ produce distinct `tw_key` values (except with negligible probability).
 1. **PRF security.** `KDF(K, ·, ·)` is indistinguishable from a random function for uniform `K`.
    Advantage: $\varepsilon_{\mathrm{kdf}}$.
 
-2. **Collision resistance.** For distinct $(K, N, \mathit{AD}) \neq (K', N', \mathit{AD}')$,
-   $\Pr[\mathrm{KDF}(K, N, \mathit{AD}) = \mathrm{KDF}(K', N', \mathit{AD}')] \leq \varepsilon_{\mathrm{kdf\text{-}coll}}$.
+2. **Collision resistance.** $\mathrm{Adv}^{\mathrm{coll}}_{\mathrm{KDF}}(t) \leq
+   \varepsilon_{\mathrm{kdf\text{-}coll}}$, where the advantage is the maximum probability over all adversaries
+   running in time $t$ of outputting distinct $(K, N, \mathit{AD}) \neq (K', N', \mathit{AD}')$ such that
+   $\mathrm{KDF}(K, N, \mathit{AD}) = \mathrm{KDF}(K', N', \mathit{AD}')$.
 
 > [!WARNING]
 > **Key reuse damage.** If the KDF produces the same `tw_key` for two different plaintexts $M \neq M'$, the overwrite
