@@ -587,11 +587,12 @@ once: $\sigma$ counts the total online Keccak-p calls across all queries, and th
 replaces all sponge evaluations simultaneously. Cross-query independence of TreeWrap keys is guaranteed by KDF PRF
 security ($\varepsilon_{\mathrm{kdf}}$).
 
-**Multi-user security.** In the multi-user setting with $M$ users, each with an independent key, an adversary that
-targets *any one* user gains an advantage factor of at most $M$ (by a standard hybrid argument over users). The
-per-user bounds above apply unchanged; the overall advantage is at most $M$ times the single-user advantage. For
-$M \leq 2^{32}$ users, this costs 32 bits of security margin — well within the 128-bit budget at
-$\sigma + t \leq 2^{128}$.
+**Multi-user security.** In the multi-user setting with $M$ users, each with an independent key, the sponge
+indifferentiability term scales naturally with the total data complexity: $\sigma$ counts all online Keccak-p calls
+across all users, and the indifferentiability theorem handles them in a single reduction. The $M$ factor only
+affects key-guessing: an adversary making $t$ offline calls can target any of $M$ independent 256-bit keys, giving
+a key-guessing advantage of $M \cdot t / 2^{256}$. For $M \leq 2^{32}$ users, this remains negligible relative to
+the sponge indifferentiability term at $\sigma + t \leq 2^{128}$.
 
 ## 7. Comparison with Traditional AEAD
 
