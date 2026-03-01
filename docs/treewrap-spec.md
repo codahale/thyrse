@@ -359,11 +359,17 @@ with probability $1/2^{8C}$; a union bound gives $S/2^{8C}$.
 ### 6.5 Committing Security (CMT-4)
 
 **Game.** The adversary produces $(K, N, \mathit{AD}, M) \neq (K', N', \mathit{AD}', M')$ such that
-`Encrypt(K, N, AD, M) = Encrypt(K', N', AD', M')`.
+`Encrypt(K, N, AD, M) = Encrypt(K', N', AD', M')`. This is a non-oracle game: the adversary chooses all inputs
+(including keys) and performs all computation itself. Consequently, the adversary's ability to search for collisions
+is bounded by its total computational budget, not by a count of online queries.
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{cmt4}} \leq \varepsilon_{\mathrm{kdf\text{-}coll}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{Q^2}{2^{8C+1}}$$
+$$\varepsilon_{\mathrm{cmt4}} \leq \varepsilon_{\mathrm{kdf\text{-}coll}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{(\sigma + t)^2}{2^{8C+1}}$$
+
+where $\sigma + t$ is the adversary's total Keccak-p evaluation budget (construction evaluations and direct
+primitive queries combined). For $C = 32$ (so $8C + 1 = c + 1 = 257$), the last two terms are equal and the bound
+simplifies to $\varepsilon_{\mathrm{kdf\text{-}coll}} + (\sigma + t)^2 / 2^c$.
 
 **Proof sketch.** Two cases:
 
@@ -376,20 +382,23 @@ $$\varepsilon_{\mathrm{cmt4}} \leq \varepsilon_{\mathrm{kdf\text{-}coll}} + \fra
    bijection for a fixed key (the overwrite duplex `encrypt`/`decrypt` operations are inverses), so $M \neq M'$ implies
    $\mathit{CT} \neq \mathit{CT}'$. This contradicts the equal-ciphertext requirement.
 
-In Case 1, after the sponge→RO hop, distinct (key, ciphertext) pairs produce independent, uniformly random tags
-(by the tag collision resistance argument in §6.6). The collision probability is the standard birthday bound on the
-$8C = 256$-bit tag output: $Q^2 / 2^{8C+1}$.
+In Case 1, after the sponge→RO hop (cost $(\sigma + t)^2 / 2^{c+1}$), distinct (key, ciphertext) pairs produce
+independent, uniformly random tags (by the tag collision resistance argument in §6.6). Since CMT-4 is a non-oracle
+game, the adversary can evaluate at most $\sigma + t$ distinct (key, ciphertext) pairs (each evaluation costs at
+least one Keccak-p call). The collision probability among these evaluations is the standard birthday bound on the
+$8C = 256$-bit tag output: $(\sigma + t)^2 / 2^{8C+1}$.
 
 This committing property is inherent to the construction — it does not require any additional processing or a second
 pass over the data, unlike generic CMT-4 transforms applied to non-committing AE schemes.
 
 > [!WARNING]
-> **Tag truncation and committing security.** When the caller truncates the tag to $T < C$ bytes, the collision
-> resistance bound becomes $(\sigma + t)^2 / 2^{c+1} + Q^2 / 2^{8T+1}$: the sponge-vs-RO indifferentiability term is
-> unchanged, but the RO-world birthday term is governed by the truncated output length $8T$ bits rather than the full
-> $8C$ bits. For $T = 16$ (128-bit truncated tags), collisions among honest sessions are expected at
-> $Q \approx 2^{64}$. Callers that truncate the tag and rely on committing security MUST ensure that the total number
-> of invocations remains well below $2^{4T}$ to maintain a safe cryptographic margin.
+> **Tag truncation and committing security.** When the caller truncates the tag to $T < C$ bytes, the birthday
+> term becomes $(\sigma + t)^2 / 2^{8T+1}$, governed by the truncated output length $8T$ bits rather than the full
+> $8C$ bits. Since the adversary controls the keys in the CMT-4 game, this term reflects offline collision search,
+> not online query count. For $T = 16$ (128-bit truncated tags), the birthday term is $(\sigma + t)^2 / 2^{129}$,
+> giving constant advantage at $\sigma + t \approx 2^{64}$: a 128-bit truncated tag provides only $\approx$64-bit
+> committing security. Callers that truncate the tag and rely on committing security MUST ensure that the
+> adversary's computational budget remains well below $2^{4T}$ Keccak-p evaluations.
 
 ### 6.6 Tag Collision Resistance
 
