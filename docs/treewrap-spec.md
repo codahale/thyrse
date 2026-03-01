@@ -23,12 +23,12 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 
 ## 2. Parameters
 
-| Symbol | Value             | Description                                        |
-|--------|-------------------|----------------------------------------------------|
-| f      | Keccak-p[1600,12] | Underlying permutation (1600-bit state, 12 rounds) |
-| R      | 168               | Rate (bytes)                                       |
-| C      | 32                | Capacity (bytes); key, chain value, and tag size   |
-| B      | 8192              | Chunk size (bytes), matching KangarooTwelve        |
+| Symbol | Value             | Description                                           |
+|--------|-------------------|-------------------------------------------------------|
+| f      | Keccak-p[1600,12] | Underlying permutation (1600-bit state, 12 rounds)    |
+| R      | 168               | Sponge rate (bytes); data rate is R−1 = 167 per block |
+| C      | 32                | Capacity (bytes); key, chain value, and tag size      |
+| B      | 8192              | Chunk size (bytes), matching KangarooTwelve           |
 
 ## 3. Dependencies
 
