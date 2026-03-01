@@ -425,8 +425,9 @@ inputs due to leaf indices). The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_i
 where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values (or just the single leaf output
 squeezed with domain byte `0x61` if $n=1$). Domain byte `0x64` separates the tag accumulation from the leaf ciphers
 (`0x60` – `0x63`), so the tag evaluation is an independent random oracle call on a pseudorandom input, producing a
-pseudorandom output. The $t / 2^{8C}$ term accounts for the adversary's probability of guessing the tag output by
-offline evaluation.
+pseudorandom output. The $t / 2^{8C}$ term (equivalently $t / 2^{256}$, since $8C = 256$) accounts for the
+adversary's probability of guessing the secret key by offline evaluation of the random oracle: each of $t$ offline
+permutation calls hits the correct 256-bit key prefix with probability $1 / 2^{256}$.
 
 Protocols that use the tag as a contribution to ongoing state (rather than solely for authentication) require this
 stronger property.
