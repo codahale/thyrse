@@ -249,6 +249,20 @@ produce distinct `tw_key` values (except with negligible probability).
 2. **Collision resistance.** For distinct $(K, N, \mathit{AD}) \neq (K', N', \mathit{AD}')$,
    $\Pr[\mathrm{KDF}(K, N, \mathit{AD}) = \mathrm{KDF}(K', N', \mathit{AD}')] \leq \varepsilon_{\mathrm{kdf\text{-}coll}}$.
 
+> [!WARNING]
+> **Key reuse damage.** If the KDF produces the same `tw_key` for two different plaintexts $M \neq M'$, the overwrite
+> duplex leaks plaintext XOR differences within each block. At each byte position $j$ within a block, the keystream byte
+> $S[j]$ is the same for both encryptions because the overwrite at positions $0, \ldots, j-1$ does not affect the state
+> at position $j$ until the next permutation. Therefore $\mathit{CT}_j \oplus \mathit{CT}'_j = P_j \oplus P'_j$ for all
+> positions within the first block where the plaintexts differ. After `pad_permute` at the block boundary, the
+> permutation mixes the entire state, and the two state evolutions diverge — no further XOR relationship is exploitable
+> in subsequent blocks.
+>
+> Integrity is also affected: an attacker who knows one plaintext–ciphertext pair under the reused key can XOR-flip
+> ciphertext bytes within the same block and predict the resulting plaintext, though the effect on the tag is not
+> straightforward to predict (the tag computation mixes the full state through additional permutations). Key reuse
+> therefore compromises both confidentiality and integrity, and callers MUST ensure key uniqueness via the KDF.
+
 ### 6.2 Security Model
 
 **Random permutation model.** All bounds in this section model Keccak-p[1600,12] as a random permutation. This is a
