@@ -259,9 +259,12 @@ produce distinct `tw_key` values (except with negligible probability).
 > in subsequent blocks.
 >
 > Integrity is also affected: an attacker who knows one plaintext–ciphertext pair under the reused key can XOR-flip
-> ciphertext bytes within the same block and predict the resulting plaintext, though the effect on the tag is not
-> straightforward to predict (the tag computation mixes the full state through additional permutations). Key reuse
-> therefore compromises both confidentiality and integrity, and callers MUST ensure key uniqueness via the KDF.
+> ciphertext bytes within the same block and predict the resulting plaintext. However, unlike polynomial-MAC AEADs
+> (e.g., AES-GCM), where nonce reuse leaks the MAC key and enables universal forgery, TreeWrap's sponge-based tag
+> remains a computationally unpredictable PRF output for novel ciphertexts even under key reuse — the attacker
+> cannot predict the tag for a modified ciphertext without evaluating the full sponge construction. Key reuse
+> therefore compromises confidentiality and weakens integrity (known-plaintext bit-flipping within the first block),
+> but does not enable universal forgery. Callers MUST still ensure key uniqueness via the KDF.
 
 ### 6.2 Security Model
 
