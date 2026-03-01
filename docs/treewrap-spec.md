@@ -539,6 +539,12 @@ per-leaf hybrid argument.
 independent TreeWrap key via the KDF. The per-query security is bounded by $\varepsilon_{\mathrm{indiff}}$ and the
 cross-query independence is guaranteed by KDF PRF security ($\varepsilon_{\mathrm{kdf}}$).
 
+**Multi-user security.** In the multi-user setting with $M$ users, each with an independent key, an adversary that
+targets *any one* user gains an advantage factor of at most $M$ (by a standard hybrid argument over users). The
+per-user bounds above apply unchanged; the overall advantage is at most $M$ times the single-user advantage. For
+$M \leq 2^{32}$ users, this costs 32 bits of security margin — well within the 128-bit budget at
+$\sigma + t \leq 2^{128}$.
+
 ## 7. Comparison with Traditional AEAD
 
 TreeWrap differs from traditional AEAD in several respects. This document describes a notional AEAD wrapper (
