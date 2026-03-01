@@ -286,7 +286,9 @@ heuristic assumption (see §6 preamble).
 **Security convention.** The sponge indifferentiability advantage is $(\sigma + t)^2 / 2^{c+1}$. At adversarial
 budget $\sigma + t = 2^{128}$, this evaluates to $2^{256} / 2^{257} = 2^{-1}$, i.e., constant advantage requires
 $\approx 2^{128}$ work. "128-bit security" means $\approx 2^{128}$ work for constant advantage, following the
-KangarooTwelve/TurboSHAKE convention.
+KangarooTwelve/TurboSHAKE convention. More generally, to achieve advantage $\leq 2^{-k}$, the adversarial budget
+must satisfy $\sigma + t \leq 2^{(c+1-k)/2}$. For $c = 256$: advantage $\leq 2^{-1}$ at $\sigma + t = 2^{128}$,
+or advantage $\leq 2^{-128}$ at $\sigma + t = 2^{64}$.
 
 ### 6.3 Confidentiality (IND-CPA)
 
