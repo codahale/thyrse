@@ -10,8 +10,8 @@
 ## 1. Introduction
 
 TreeWrap is a deterministic stream cipher with a MAC tag, using a Sakura flat-tree topology to enable SIMD acceleration
-(NEON, AVX2, AVX-512) on large inputs. Each leaf operates as a DWrap mode instance over a standard Keccak sponge (using
-the overwrite duplex optimization), and leaf chain values are accumulated into a single MAC tag via TurboSHAKE128.
+(NEON, AVX2, AVX-512) on large inputs. Each leaf uses the overwrite duplex technique over a standard Keccak sponge, and
+leaf chain values are accumulated into a single MAC tag via TurboSHAKE128.
 
 TreeWrap is not an AEAD scheme. It does not perform tag verification internally. Instead, it exposes two
 operations—**`EncryptAndMAC`** and **`DecryptAndMAC`**—which both return the computed tag to the caller. The caller is
@@ -37,9 +37,8 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 
 ## 4. Leaf Cipher
 
-A leaf cipher implements the DWrap mode (using the overwrite duplex optimization) over a standard Keccak sponge, using
-the same permutation and rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes, reserved for
-TreeWrap:
+A leaf cipher uses the overwrite duplex technique over a standard Keccak sponge, with the same permutation and
+rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap:
 
 | Byte   | Usage                        | Procedure(s)             |
 |--------|------------------------------|--------------------------|
@@ -51,17 +50,16 @@ TreeWrap:
 
 > [!WARNING]
 > Bytes `0x60`–`0x64` are reserved for TreeWrap. Other callers of TurboSHAKE128 in the same system MUST NOT use
-> these domain bytes. This is a security precondition, not merely a recommendation: after the duplex-to-sponge
+> these domain bytes. This is a security precondition, not merely a recommendation: after the overwrite-to-XOR
 > rewriting (§6.12), a leaf cipher evaluation with domain byte `0x63` is structurally identical to a
 > `TurboSHAKE128(M, 0x63, ℓ)` call. If another component in the same system uses any of these domain bytes, the
 > distinct-input guarantee that the security reduction (§6.12) relies on is broken, and the security theorems in
 > §6.3–§6.7 no longer hold.
 
-The overwrite duplex (DWrap) differs from the traditional XOR-absorb duplex (SpongeWrap) in that the `encrypt` operation
-overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it enables a
-clean security reduction to the standard Keccak sponge via the equivalence shown by Daemen et al. for the overwrite
-duplex construction; second, for full-rate blocks, overwrite is faster than XOR on most architectures (write-only vs.
-read-XOR-write).
+The overwrite duplex technique differs from the traditional XOR-absorb duplex (SpongeWrap) in that the `encrypt`
+operation overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it
+enables a clean security reduction to the standard Keccak sponge via a per-byte algebraic identity (§6.12, Step 1);
+second, for full-rate blocks, overwrite is faster than XOR on most architectures (write-only vs. read-XOR-write).
 
 A leaf cipher consists of a 200-byte state `S`, initialized to all zeros, and a rate index `pos`, initialized to zero.
 
@@ -367,7 +365,7 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    least one Keccak-p call, so $Q \leq \sigma \leq \sigma + t$, giving
    $Q^2 / 2^{257} \leq (\sigma + t)^2 / 2^{c+1}$. It does not appear in the final bound as a separate term.
 
-2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the overwrite duplex equivalence (§6.12, Step 1), each
+2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the overwrite-to-XOR equivalence (§6.12, Step 1), each
    leaf's interactive computation is expressible as a single standard sponge evaluation on an injective encoding
    of its inputs. The sponge indifferentiability theorem then replaces all such evaluations — across all leaves
    and the tag accumulation — with random oracle evaluations in a single reduction.
