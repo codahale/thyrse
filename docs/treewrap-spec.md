@@ -21,6 +21,11 @@ that authenticate ciphertext through external mechanisms such as signatures.
 
 TreeWrap is a pure function with no internal state. The caller manages key uniqueness and associated data.
 
+> [!WARNING]
+> **Safe default.** If you want nonce-based authenticated-encryption semantics, use `TreeWrap-AEAD` (§5.2).
+> The bare `EncryptAndMAC`/`DecryptAndMAC` interface is intended for protocols that explicitly manage per-invocation
+> key uniqueness and tag-verification policy.
+
 ## 2. Parameters
 
 | Symbol | Value             | Description                                           |
