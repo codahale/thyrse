@@ -557,9 +557,11 @@ The RO-world term is negligible for practical $Q$.
 Simplified: $\varepsilon_{\mathrm{coll}} \leq (\sigma + t)^2 / 2^{c+1}$.
 
 Distinct (key, ciphertext) pairs produce distinct sequences of leaf inputs (key, index, ciphertext chunk). The leaf
-cipher's injective encoding ensures distinct sponge inputs, producing distinct chain values (except with probability
-bounded by the sponge claim). Distinct chain value sequences produce distinct $\mathit{final\_input}$ values (the
-encoding is injective). Distinct inputs to TurboSHAKE128 collide with probability bounded by the birthday term.
+cipher's injective encoding (§6.12, Step 3) ensures distinct sponge inputs — this relies on the domain byte
+exclusivity precondition (§6.2) to guarantee no external caller duplicates a leaf evaluation — producing distinct
+chain values (except with probability bounded by the sponge claim). Distinct chain value sequences produce distinct
+$\mathit{final\_input}$ values (the encoding is injective). Distinct inputs to TurboSHAKE128 collide with
+probability bounded by the birthday term.
 
 ### 6.7 Tag PRF Security
 
