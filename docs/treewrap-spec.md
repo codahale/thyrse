@@ -525,8 +525,10 @@ simplifies to $(\sigma + t)^2 / 2^c$.
    the ciphertext may coincide, but distinct (key, ciphertext) pairs produce distinct tags except with probability
    bounded by tag collision resistance (§6.6).
 
-2. **Same context, different messages** (same $(K,N,\mathit{AD})$, so same `tw_key`, but $M \neq M'$). Encryption is a
-   bijection for a fixed key (`encrypt`/`decrypt` are inverses for the same key), so $M \neq M'$ implies
+2. **Same context, different messages** (same $(K,N,\mathit{AD})$, so same `tw_key`, but $M \neq M'$). Same key
+   implies the same chunk boundaries: the chunk structure is determined by `tw_key` and $|M|$, and the CMT-4 game
+   requires $|\mathit{CT}| = |\mathit{CT}'|$, so $|M| = |M'|$. With identical key and chunk boundaries, encryption
+   is a bijection within each chunk (`encrypt`/`decrypt` are inverses for the same key), so $M \neq M'$ implies
    $\mathit{CT} \neq \mathit{CT}'$. This contradicts the equal-ciphertext requirement.
 
 In Case 1, after the sponge→RO hop (cost $(\sigma + t)^2 / 2^{c+1}$), distinct (key, ciphertext) pairs produce
