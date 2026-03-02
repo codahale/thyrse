@@ -492,7 +492,12 @@ Under a uniformly random key, the TreeWrap tag is a pseudorandom function of the
 ciphertext, the tag output of `EncryptAndMAC` (or `DecryptAndMAC`) is indistinguishable from a uniformly random $C$-byte
 string.
 
-$$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{8C}}$$
+$$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}}$$
+
+The second term is the **key-guessing** advantage: each of $t$ offline Keccak-p evaluations hits the correct 256-bit
+key prefix with probability $1 / 2^{256}$. This is distinct from the tag-guessing term $S / 2^{8C}$ that appears in
+INT-CTXT (§6.4), which counts online verification attempts. Since $8C = 256$, the two terms happen to have the same
+denominator, but they measure different adversarial capabilities (offline key search vs. online forgery).
 
 The argument follows from the monolithic sponge indifferentiability reduction (§6.12). After replacing all sponge
 evaluations with random oracle evaluations, each leaf defines a keyed PRF $F_K(i, C_i)$ with the secret key as a
@@ -501,8 +506,7 @@ simultaneously pseudorandom. The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_i
 where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values (or just the single leaf
 output squeezed with domain byte `0x61` if $n=1$). Domain byte `0x64` separates the tag accumulation from the leaf
 ciphers (`0x60` – `0x63`), so the tag is a PRF composition: a keyed function applied to pseudorandom input, which
-remains pseudorandom. The $t / 2^{256}$ term accounts for key-guessing: each of $t$ offline permutation calls hits
-the correct 256-bit key prefix with probability $1 / 2^{256}$.
+remains pseudorandom.
 
 Protocols that use the tag as a contribution to ongoing state (rather than solely for authentication) require this
 stronger property.
