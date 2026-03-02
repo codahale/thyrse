@@ -330,15 +330,19 @@ adversary cannot evaluate the keyed PRF without querying the random oracle on an
 **Notation:**
 
 - $\sigma$: total online Keccak-p calls across all queries in the security game (KDF evaluations, all leaves,
-  and tag computations combined, summed over all encryption and decryption queries). For a single query on a
-  message of length $L$ bytes with $n = \max(1, \lceil L / B \rceil)$ chunks, the per-query contribution is
-  $\lceil |\mathit{kdf\_input}| / R \rceil + \sum_{i=0}^{n-1}(1 + \max(1,\,
-  \lceil \ell_i / (R-1) \rceil)) + \mathbb{1}_{n>1} \cdot \lceil |\mathit{final\_input}| / R \rceil$, where the
-  first term counts the KDF's TurboSHAKE128 evaluation (§5.3), the second term counts each leaf's init
-  permutation (the 1) and ciphertext/squeeze permutations (the $\max$ term — at least one permutation for the
-  tag or chain value squeeze, even when the chunk is empty), and the third term counts the tag accumulation.
-  Since the KDF costs at least one Keccak-p call and each leaf costs at least two (init + squeeze),
-  $\sigma \geq 2Q$ for $Q$ queries — every query contributes at least 3 permutation calls.
+  and tag computations combined, summed over all encryption and decryption queries). Each query contributes
+  three components: the KDF evaluation ($\geq 1$ call), each leaf's init + encrypt/decrypt + squeeze ($\geq 2$
+  calls per leaf), and the tag accumulation for multi-chunk messages ($\geq 1$ call when $n > 1$). Since even
+  an empty message costs at least 3 Keccak-p calls (1 KDF + 2 leaf), $\sigma \geq 3Q$ for $Q$ queries. The
+  exact formula is given in Appendix A. Representative per-query costs:
+
+  | Message length $L$ | Chunks $n$ | $\sigma$ per query |
+  |--------------------|------------|--------------------|
+  | 0                  | 1          | 3                  |
+  | 167 ($= R - 1$)    | 1          | 3                  |
+  | 168 ($= R$)        | 1          | 4                  |
+  | 8192 ($= B$)       | 1          | 52                 |
+  | 16384 ($= 2B$)     | 2          | 104                |
 - $t$: adversary's total offline Keccak-p calls.
 - $c = 256$: capacity in bits.
 - $C = 32$: capacity in bytes; key and chain value size.
@@ -925,3 +929,24 @@ Swapping chunks 0 and 1 (bytes 0–8,191 and 8,192–16,383) yields tag
 ### 9.6 Round-Trip Consistency
 
 For all vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as `EncryptAndMAC`.
+
+## Appendix A. Exact Per-Query σ Formula
+
+For a single `TreeWrap-AEAD` query on a message of length $L$ bytes with
+$n = \max(1, \lceil L / B \rceil)$ chunks of sizes $\ell_0, \ldots, \ell_{n-1}$, the per-query contribution to
+$\sigma$ is:
+
+$$\sigma_{\mathrm{query}} = \underbrace{\left\lceil \frac{|\mathit{kdf\_input}|}{R} \right\rceil}_{\text{KDF}} + \underbrace{\sum_{i=0}^{n-1}\left(1 + \max\!\left(1,\, \left\lceil \frac{\ell_i}{R-1} \right\rceil\right)\right)}_{\text{leaves}} + \underbrace{\mathbb{1}_{n>1} \cdot \left\lceil \frac{|\mathit{final\_input}|}{R} \right\rceil}_{\text{tag accumulation}}$$
+
+where:
+
+- **KDF term.** $|\mathit{kdf\_input}|$ is the byte length of `encode_string(K) ‖ encode_string(N) ‖ encode_string(AD)`.
+  Each `encode_string` contributes `left_encode(|x|)` (1–2 bytes for practical lengths) plus the field itself. For a
+  32-byte key, 12-byte nonce, and empty AD, $|\mathit{kdf\_input}| = (2+32) + (2+12) + (2+0) = 50$ bytes, giving
+  $\lceil 50 / 168 \rceil = 1$ Keccak-p call.
+- **Leaf term.** Each leaf costs $1$ (init `pad_permute`) $+$ $\max(1, \lceil \ell_i / (R-1) \rceil)$ (ciphertext
+  block permutations and the final squeeze — at least 1 even for empty chunks). For a full $B = 8192$-byte chunk:
+  $1 + \lceil 8192 / 167 \rceil = 1 + 50 = 51$.
+- **Tag accumulation term.** Present only when $n > 1$. $|\mathit{final\_input}| = 8 + nC +
+  |\mathrm{right\_encode}(n)| + 2$ bytes. For $n = 2$: $|final\_input| = 8 + 64 + 2 + 2 = 76$ bytes, giving
+  $\lceil 76 / 168 \rceil = 1$.
