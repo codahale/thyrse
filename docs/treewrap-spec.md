@@ -44,14 +44,14 @@ single rate block). $\max(\tau, C) < R$ (tag and chain value outputs fit in a si
 A leaf cipher operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
 TurboSHAKE128. It uses six domain separation bytes, reserved for TreeWrap:
 
-| Byte   | Usage                        | Procedure(s)             |
-|--------|------------------------------|--------------------------|
-| `0x60` | Init (key/index absorption)  | `init`                   |
-| `0x61` | Single-node tag squeeze      | `single_node_tag`        |
-| `0x62` | Intermediate encrypt/decrypt | `encrypt`, `decrypt`     |
-| `0x63` | Final block (chain value)    | `chain_value`            |
-| `0x64` | Tag accumulation             | `TreeWrap`, `TreeUnwrap` |
-| `0x65` | AEAD key derivation          | `TreeWrap-AEAD`          |
+| Byte   | Usage                        | Procedure(s)                     |
+|--------|------------------------------|----------------------------------|
+| `0x60` | Init (key/index absorption)  | `init`                           |
+| `0x61` | Single-node tag squeeze      | `single_node_tag`                |
+| `0x62` | Intermediate encrypt/decrypt | `encrypt`, `decrypt`             |
+| `0x63` | Final block (chain value)    | `chain_value`                    |
+| `0x64` | Tag accumulation             | `EncryptAndMAC`, `DecryptAndMAC` |
+| `0x65` | AEAD key derivation          | `TreeWrap-AEAD`                  |
 
 > [!NOTE]
 > **System-wide permutation accounting.** All Keccak-p[1600,12] evaluations across the entire system — by TreeWrap,
