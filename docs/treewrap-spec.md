@@ -253,20 +253,28 @@ produce distinct `tw_key` values (except with negligible probability).
 
 > [!WARNING]
 > **Key reuse damage.** If the KDF produces the same `tw_key` for two different plaintexts $M \neq M'$, the overwrite
-> duplex leaks plaintext XOR differences within each block. At each byte position $j$ within a block, the keystream byte
-> $S[j]$ is the same for both encryptions because the overwrite at positions $0, \ldots, j-1$ does not affect the state
-> at position $j$ until the next permutation. Therefore $\mathit{CT}_j \oplus \mathit{CT}'_j = P_j \oplus P'_j$ for all
-> positions within the first block where the plaintexts differ. After `pad_permute` at the block boundary, the
-> permutation mixes the entire state, and the two state evolutions diverge — no further XOR relationship is exploitable
-> in subsequent blocks.
->
-> Integrity is also affected: an attacker who knows one plaintext–ciphertext pair under the reused key can XOR-flip
-> ciphertext bytes within the same block and predict the resulting plaintext. However, unlike polynomial-MAC AEADs
-> (e.g., AES-GCM), where nonce reuse leaks the MAC key and enables universal forgery, TreeWrap's sponge-based tag
-> remains a computationally unpredictable PRF output for novel ciphertexts even under key reuse — the attacker
-> cannot predict the tag for a modified ciphertext without evaluating the full sponge construction. Key reuse
-> therefore compromises confidentiality and weakens integrity (known-plaintext bit-flipping within the first block),
-> but does not enable universal forgery. Callers MUST still ensure key uniqueness via the KDF.
+> duplex leaks plaintext XOR differences within the first block. At each byte position $j$ within a block, the
+> keystream byte $S[j]$ is the same for both encryptions because the overwrite at positions $0, \ldots, j-1$ does not
+> affect the state at position $j$ until the next permutation. Therefore $\mathit{CT}_j \oplus \mathit{CT}'_j = P_j
+> \oplus P'_j$ for all positions within the first block where the plaintexts differ. After `pad_permute` at the block
+> boundary, the permutation mixes the entire state, and the two state evolutions diverge — no further XOR relationship
+> is exploitable in subsequent blocks. An attacker who knows one plaintext–ciphertext pair under the reused key can
+> recover the keystream within the first block, enabling targeted decryption and forgery of specific plaintext values
+> for other encryptions under that key (within the first block). However, unlike polynomial-MAC AEADs (e.g.,
+> AES-GCM), where nonce reuse leaks the MAC key and enables universal forgery, TreeWrap's sponge-based tag remains
+> a computationally unpredictable PRF output for novel ciphertexts even under key reuse — the attacker cannot
+> predict the tag for a modified ciphertext without evaluating the full sponge construction. Key reuse therefore
+> compromises confidentiality and weakens integrity within the first block, but does not enable universal forgery.
+> Callers MUST still ensure key uniqueness via the KDF.
+
+> [!NOTE]
+> **Release of unverified plaintext (RUP).** Independently of key reuse, the bare `DecryptAndMAC` interface is
+> inherently malleable: an attacker who flips ciphertext bit $j$ in the first block causes the corresponding
+> plaintext bit $j$ to flip, because the keystream byte at position $j$ depends only on prior state. This is a
+> general property of stream ciphers under RUP, not specific to key reuse. Authentication depends entirely on the
+> caller verifying the tag (see §6.5.1). Without key reuse, this malleability is *blind* — the attacker does not
+> know the plaintext and cannot target specific values — but any protocol that releases plaintext before tag
+> verification must account for it.
 
 ### 6.2 Security Model
 
