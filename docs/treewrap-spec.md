@@ -329,22 +329,12 @@ and may be left explicit or absorbed into a conservative global margin statement
 
 ### 6.5 TreeWrap-AEAD Confidentiality and Integrity
 
-The AEAD wrapper is:
+The AEAD wrapper definition is given in §5.2 (`treewrap_aead_encrypt` / `treewrap_aead_decrypt`) and is used unchanged
+here. In both directions it derives
 
-```python
-import hmac
+$$K_{tw} = \mathrm{TurboSHAKE128}(\mathrm{encode\_string}(K)\|\mathrm{encode\_string}(N)\|\mathrm{encode\_string}(AD), 0x65, C)$$
 
-def aead_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
-    K_tw = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x65, C)
-    CT, tag = encrypt_and_mac(K_tw, M)
-    return CT + tag
-
-def aead_decrypt(K: bytes, N: bytes, AD: bytes, CT_tag: bytes) -> bytes | None:
-    K_tw = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x65, C)
-    CT, tag_expected = CT_tag[:-TAU], CT_tag[-TAU:]
-    M, tag = decrypt_and_mac(K_tw, CT)
-    return M if hmac.compare_digest(tag, tag_expected) else None
-```
+then calls `encrypt_and_mac` / `decrypt_and_mac`, with constant-time tag comparison on decryption.
 
 #### 6.5.1 IND-CPA (nonce-respecting)
 
