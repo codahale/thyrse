@@ -201,7 +201,7 @@ available. `decrypt_and_mac` produces the same tag as `encrypt_and_mac` because 
 write ciphertext into the sponge rate (§4). The caller is responsible for comparing the returned tag against an
 expected value; TreeWrap does not perform tag verification.
 
-### 5.3 TreeWrap-AEAD
+### 5.2 TreeWrap-AEAD
 
 TreeWrap-AEAD is a concrete AEAD construction built on top of the bare TreeWrap primitive. It derives a per-invocation
 TreeWrap key from `(K, N, AD)` using TurboSHAKE128, then delegates to `EncryptAndMAC`/`DecryptAndMAC`. This
@@ -249,13 +249,13 @@ indifferentiability — see §6.12 ("Keyed duplex interpretation") for the expli
 ### 6.1 AEAD Construction
 
 To state standard security games (IND-CCA2, INT-CTXT, CMT-4), we use the concrete `TreeWrap-AEAD` construction
-defined in §5.3. TreeWrap itself remains a bare `EncryptAndMAC`/`DecryptAndMAC` primitive; the AEAD wrapper
+defined in §5.2. TreeWrap itself remains a bare `EncryptAndMAC`/`DecryptAndMAC` primitive; the AEAD wrapper
 provides key derivation and tag verification for security analysis.
 
 The KDF uses TurboSHAKE128 with domain byte `0x65` — the same Keccak-p permutation underlying all TreeWrap
 operations. No separate KDF security assumption is needed: the sponge→RO reduction (§6.2) covers all
 TurboSHAKE128 evaluations (including KDF evaluations) in a single hop. After the reduction, the injective
-`encode_string` encoding (§5.3) ensures that distinct `(K, N, AD)` triples produce distinct random oracle inputs,
+`encode_string` encoding (§5.2) ensures that distinct `(K, N, AD)` triples produce distinct random oracle inputs,
 so each fresh nonce yields an independent, uniformly random `tw_key`.
 
 The concrete KDF provides two properties used by the theorems below, both as immediate consequences of the
@@ -271,7 +271,7 @@ sponge→RO hop:
 > block, i.e., $R - 1 = 167$ bytes per chunk). Unlike polynomial-MAC AEADs (e.g., AES-GCM), key reuse
 > does not enable universal forgery — the sponge-based tag remains a PRF of the ciphertext under the
 > shared key, so INT-CTXT is not degraded (each forgery attempt still succeeds with probability
-> $1/2^{8\tau}$). Callers MUST ensure key uniqueness (e.g., via the KDF in §5.3 with fresh nonces).
+> $1/2^{8\tau}$). Callers MUST ensure key uniqueness (e.g., via the KDF in §5.2 with fresh nonces).
 
 > [!NOTE]
 > **Release of unverified plaintext (RUP).** The bare `DecryptAndMAC` interface is inherently malleable:
@@ -355,7 +355,7 @@ $\tau$-byte tag — the security level is determined by the capacity, not the ta
 
 ### 6.3 Confidentiality (IND-CPA)
 
-*This property is stated for `TreeWrap-AEAD` (§5.3).*
+*This property is stated for `TreeWrap-AEAD` (§5.2).*
 
 **Game.** The adversary has access to an `Encrypt` oracle under a random key `K`. The oracle takes
 $(N, \mathit{AD}, M_0, M_1)$ with $|M_0| = |M_1|$ and returns `Encrypt(K, N, AD, M_b)`. The adversary
@@ -379,7 +379,7 @@ key guessing (see §6.7 for discussion); it is dominated by the sponge term for 
    leaf cipher inputs (`0x60`–`0x63`) and tag accumulation inputs (`0x64`).
 
    After this hop, each fresh nonce yields an independent, uniformly random `tw_key`: the injective `encode_string`
-   encoding (§5.3) ensures distinct `(K, N, AD)` triples produce distinct random oracle inputs, and the random
+   encoding (§5.2) ensures distinct `(K, N, AD)` triples produce distinct random oracle inputs, and the random
    oracle maps distinct inputs to independent uniform outputs. Output collisions occur with probability at most
    $Q^2 / 2^{257}$ (birthday bound on 256-bit outputs), which is dominated by the sponge term since
    $Q \leq \sigma$ (each query costs at least 3 Keccak-p calls; see §6.2).
@@ -432,7 +432,7 @@ key-guessing term is dominated by the sponge term at all practical budgets.
 
 ### 6.3.1 CCA Security (IND-CCA2)
 
-*This property is stated for `TreeWrap-AEAD` (§5.3).*
+*This property is stated for `TreeWrap-AEAD` (§5.2).*
 
 **Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The `Encrypt` oracle
 is as in §6.3; the adversary is nonce-respecting for encryption queries. The `Decrypt` oracle takes
@@ -460,7 +460,7 @@ key and ciphertext, and (2) encryption and tagging use independent keying materi
   keys are needed; independence is structural.
 
 In the composition mapping: the MAC key is `tw_key`, the MAC input is the full ciphertext (including chunk
-structure), and `N`/`AD` are bound to `tw_key` via the KDF (§5.3). The `Decrypt` oracle enables $S$ tag-guess
+structure), and `N`/`AD` are bound to `tw_key` via the KDF (§5.2). The `Decrypt` oracle enables $S$ tag-guess
 tests; by the tag uniformity corollary (§6.7), each succeeds with probability $1/2^{8\tau}$.
 
 $$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}} + \frac{S}{2^{8\tau}}$$
@@ -469,7 +469,7 @@ The $t / 2^{256}$ term is key guessing, dominated by the sponge term (see §6.3)
 
 ### 6.4 Authenticity (INT-CTXT)
 
-*This property is stated for `TreeWrap-AEAD` (§5.3).*
+*This property is stated for `TreeWrap-AEAD` (§5.2).*
 
 **Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The adversary is
 nonce-respecting for encryption queries (each uses a fresh `N`); decryption queries may use any nonce. The adversary
@@ -499,7 +499,7 @@ $S/2^{8\tau}$.
 
 ### 6.5 Committing Security (CMT-4)
 
-*This property is stated for `TreeWrap-AEAD` (§5.3), but does not depend on tag verification — it applies equally to
+*This property is stated for `TreeWrap-AEAD` (§5.2), but does not depend on tag verification — it applies equally to
 the bare TreeWrap primitive (see §6.5.1).*
 
 **Game.** The adversary produces $(K, N, \mathit{AD}, M) \neq (K', N', \mathit{AD}', M')$ such that
@@ -518,7 +518,7 @@ simplifies to $(\sigma + t)^2 / 2^c$.
 **Proof sketch.** Two cases:
 
 1. **Different AEAD context** ($(K,N,\mathit{AD}) \neq (K',N',\mathit{AD}')$). After the sponge→RO hop, the
-   injective `encode_string` encoding (§5.3) ensures distinct `(K, N, AD)` triples produce distinct TurboSHAKE128
+   injective `encode_string` encoding (§5.2) ensures distinct `(K, N, AD)` triples produce distinct TurboSHAKE128
    inputs, which map to distinct random oracle inputs. In the RO world, distinct inputs produce independent
    uniform outputs — so the KDF yields independent, uniformly random `tw_key` values (distinct except with
    birthday probability $Q^2 / 2^{257}$, already captured by the sponge term). Conditioned on distinct keys:
@@ -564,7 +564,7 @@ pass over the data, unlike generic CMT-4 transforms applied to non-committing AE
 
 ### 6.5.1 Caller Obligations
 
-The theorems in §6.3–§6.5 are properties of `TreeWrap-AEAD` (§5.3), which internally
+The theorems in §6.3–§6.5 are properties of `TreeWrap-AEAD` (§5.2), which internally
 derives unique keys, verifies tags, and withholds plaintext on verification failure. The bare TreeWrap primitive
 (`EncryptAndMAC`/`DecryptAndMAC`) does none of these — it takes a raw key, always returns plaintext, and always
 returns the computed tag without comparing it to anything. The following table summarizes what each AEAD security
@@ -573,7 +573,7 @@ property requires of the caller, in increasing order of obligation:
 | Property              | Caller obligation                                                                                                                                                                                                                                                                                                                                      |
 |-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **CMT-4** (§6.5)      | None. Committing security is inherent to the construction and does not depend on tag verification.                                                                                                                                                                                                                                                     |
-| **IND-CPA** (§6.3)    | The caller MUST ensure that each `EncryptAndMAC` invocation uses a unique key. In `TreeWrap-AEAD` (§5.3), uniqueness follows from the injective encoding applied to a fresh nonce. Callers that manage keys directly MUST guarantee uniqueness by other means. Key reuse leaks plaintext XOR differences within the first block (§6.1).                |
+| **IND-CPA** (§6.3)    | The caller MUST ensure that each `EncryptAndMAC` invocation uses a unique key. In `TreeWrap-AEAD` (§5.2), uniqueness follows from the injective encoding applied to a fresh nonce. Callers that manage keys directly MUST guarantee uniqueness by other means. Key reuse leaks plaintext XOR differences within the first block (§6.1).                |
 | **INT-CTXT** (§6.4)   | The caller MUST compare the returned tag against the expected value using a constant-time equality check (§6.11) and MUST reject the plaintext if the comparison fails. Without tag verification, the bare primitive provides no authenticity guarantee — any ciphertext decrypts to *some* plaintext with a valid-looking tag.                        |
 | **IND-CCA2** (§6.3.1) | The caller MUST NOT release or act on the plaintext returned by `DecryptAndMAC` before successful tag verification. The bare primitive intentionally supports release of unverified plaintext (RUP) for protocols that need it, but RUP forfeits CCA2 security: an attacker can flip ciphertext bits and observe the effect on the released plaintext. |
 
@@ -857,7 +857,7 @@ per-leaf hybrid argument.
 
 **Multi-invocation security.** Multi-invocation security follows from the `TreeWrap-AEAD` game definitions
 (§6.3–§6.5), which permit multiple oracle queries under the same key. Each query uses a fresh nonce, producing an
-independent TreeWrap key via the KDF (§5.3). The indifferentiability reduction bounds the entire multi-query
+independent TreeWrap key via the KDF (§5.2). The indifferentiability reduction bounds the entire multi-query
 interaction at once: $\sigma$ counts the total online Keccak-p calls across all queries (including KDF evaluations),
 and the sponge indifferentiability theorem replaces all sponge evaluations simultaneously. Cross-query independence
 of TreeWrap keys is structural: the injective `encode_string` encoding ensures distinct `(K, N, AD)` triples produce
@@ -873,7 +873,7 @@ the sponge indifferentiability term at $\sigma + t \leq 2^{128}$.
 ## 7. Comparison with Traditional AEAD
 
 TreeWrap differs from traditional AEAD in several respects. This document defines a concrete AEAD construction
-(TreeWrap-AEAD, §5.3) for security analysis purposes, but the core primitive remains a bare
+(TreeWrap-AEAD, §5.2) for security analysis purposes, but the core primitive remains a bare
 `EncryptAndMAC`/`DecryptAndMAC` interface.
 
 **No internal tag verification.** Traditional AEAD schemes (AES-GCM, ChaCha20-Poly1305, etc.) perform tag comparison
@@ -882,7 +882,7 @@ authentication. TreeWrap's `DecryptAndMAC` always returns both plaintext and tag
 This supports protocol frameworks that need the tag for transcript state advancement regardless of verification outcome.
 
 **Nonce-free bare primitive.** The bare TreeWrap primitive takes only a key and plaintext. It does not accept a nonce or
-associated data. Nonce handling is the KDF's responsibility: `TreeWrap-AEAD` (§5.3) accepts nonces, but they are
+associated data. Nonce handling is the KDF's responsibility: `TreeWrap-AEAD` (§5.2) accepts nonces, but they are
 consumed by the concrete TurboSHAKE128-based KDF to derive a unique TreeWrap key, not passed to TreeWrap itself. The key MUST be pseudorandom
 (indistinguishable from uniform) and unique per invocation (see §5.1).
 
