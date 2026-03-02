@@ -588,7 +588,8 @@ after the sponge-to-RO hop (§6.2), these distinct inputs produce independent ra
 probability bounded by the sponge indifferentiability term. Distinct chain
 value sequences produce distinct $\mathit{final\_input}$ values (the encoding is injective). Distinct inputs to
 TurboSHAKE128 collide with probability bounded by the birthday term. Evaluations with $n = 1$ (domain `0x61`) and
-$n > 1$ (domain `0x64`) use disjoint RO domains, so cross-type collisions do not arise.
+$n > 1$ (domain `0x64`) use disjoint RO domains, so their outputs are pairwise independent; cross-type
+collisions contribute at most $Q^2 / 2^{257}$, already captured by the birthday term.
 
 ### 6.7 Tag PRF Security
 
