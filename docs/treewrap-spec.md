@@ -153,6 +153,11 @@ in Appendix B.
   ($n$, $\ell_0, \ldots, \ell_{n-1}$) is public. Protocols requiring length hiding must pad before calling TreeWrap.
 - `tag`: A τ-byte MAC tag.
 
+> [!WARNING]
+> **Safe default for callers.** Prefer `TreeWrap-AEAD` (§5.2) unless you explicitly need bare
+> `EncryptAndMAC`/`DecryptAndMAC` semantics. Bare TreeWrap requires the caller to enforce per-invocation unique
+> pseudorandom keys and to perform correct tag verification policy.
+
 *Procedure:*
 
 ```python
@@ -192,7 +197,9 @@ def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
 All leaf operations are independent and may execute in parallel. Tag computation begins as soon as all chain values are
 available. `decrypt_and_mac` produces the same tag as `encrypt_and_mac` because both `encrypt` and `decrypt`
 write ciphertext into the sponge rate (§4). The caller is responsible for comparing the returned tag against an
-expected value; TreeWrap does not perform tag verification.
+expected value; TreeWrap does not perform tag verification. For production implementations, avoid repeated byte-string
+concatenation (`final_input += ...`) when building the final node input; prefer preallocation or list/join style
+buffer construction.
 
 ### 5.2 TreeWrap-AEAD
 
@@ -468,12 +475,13 @@ string (§6.3.1). This stronger property supports protocols that absorb the tag 
 ### 7.1. Usage Limits
 
 Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost
-$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), and planning approximation $\sigma + t \approx \sigma$.
+$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), planning approximation $\sigma + t \approx \sigma$,
+and per-key accounting (single key / key epoch).
 
-| Scheme        | Limit type  | Approx protected volume |
-|---------------|-------------|-------------------------|
-| AES-128-GCM   | per key     | $\approx 2^{13.1}$ GiB  |
-| TreeWrap-AEAD | system-wide | $\approx 2^{80.6}$ GiB  |
+| Scheme        | Limit type | Approx protected volume |
+|---------------|------------|-------------------------|
+| AES-128-GCM   | per key    | $\approx 2^{13.1}$ GiB  |
+| TreeWrap-AEAD | per key    | $\approx 2^{80.6}$ GiB  |
 
 The AES-128-GCM figure is from Günther, Thomson, and Wood (Table 2) converted to GiB. The TreeWrap figure is the
 corresponding conversion of the §6 bound under the assumptions above.
