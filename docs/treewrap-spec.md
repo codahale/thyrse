@@ -31,6 +31,9 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 | τ      | 32                | Tag size (bytes); equal to C for this instantiation   |
 | B      | 8192              | Chunk size (bytes), matching KangarooTwelve           |
 
+**Parameter constraints.** $C + 8 \leq R - 1$ (init material `key ‖ [index]₆₄LE` = $C + 8 = 40$ bytes fits in a
+single rate block). $\max(\tau, C) < R$ (tag and chain value outputs fit in a single squeeze block).
+
 ## 3. Dependencies
 
 **`TurboSHAKE128(M, D, ℓ)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D`
