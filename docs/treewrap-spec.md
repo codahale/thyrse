@@ -267,6 +267,9 @@ permutation-level properties do not translate into structural breaks of the spon
 indifferentiability claim holds up to the 128-bit target security level. No duplex-specific attacks on reduced-round
 Keccak are known to improve on generic sponge distinguishers, so the margin analysis for TurboSHAKE applies unchanged.
 Each property reduces to the Keccak sponge claim via TurboSHAKE128's indifferentiability from a random oracle.
+Leaf keystream pseudorandomness (needed for IND-CPA, §6.3) additionally reduces via the keyed duplex security
+theorem (Bertoni et al. 2011; Mennink–Reyhanitabar–Vizár 2015), which itself reduces to sponge
+indifferentiability — see §6.12 ("Keyed duplex interpretation") for the explicit correspondence.
 
 ### 6.1 AEAD Construction
 
@@ -404,15 +407,25 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    secret 256-bit key, giving probability $t / 2^{256}$. The sponge indifferentiability term is already paid in
    hop 1.
 
-   In the ideal world, the keystream byte at each position is uniformly random *before* the corresponding ciphertext
-   byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
+   After the sponge→RO hop (hop 1), the rewritten leaf is a keyed duplex whose intermediate rate outputs — the
+   keystream bytes XORed with plaintext — are pseudorandom by the duplex security theorem (Bertoni et al.,
+   "Duplexing the Sponge," SAC 2011, Theorem 1). For tighter bounds in the keyed setting, Mennink–Reyhanitabar–Vizár
+   (Eurocrypt 2015) provide direct ideal-permutation-model bounds for the full-state keyed duplex; the resulting
+   advantage bound remains $(\sigma+t)^2/2^{c+1}$. See §6.12 ("Keyed duplex interpretation") for the explicit duplex
+   correspondence. In the ideal world, each keystream byte $S[j]$ is therefore uniformly random before the
+   corresponding ciphertext byte is produced. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
    uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$.
 
-   **No circularity.** The equivalent sponge input for block $k$ contains the plaintext of block $k$, which is
-   determined before the PRF output (keystream) for that block is produced. The PRF guarantee is that each output
-   byte is uniform given only prior state, before the overwrite occurs. The resulting ciphertext is then overwritten
-   into the state, but this feedback only affects subsequent blocks, not the current PRF evaluation. There is
-   therefore no circular dependence between the PRF output and the plaintext appearing in its input.
+   **No circularity (batch mode).** The equivalent sponge input for block $k$ contains the plaintext of block $k$,
+   which is determined before the PRF output (keystream) for that block is produced. The PRF guarantee is that each
+   output byte is uniform given only prior state, before the overwrite occurs. The resulting ciphertext is then
+   overwritten into the state, but this feedback only affects subsequent blocks, not the current PRF evaluation.
+   There is therefore no circular dependence between the PRF output and the plaintext appearing in its input.
+
+   Crucially, TreeWrap is a batch primitive: the entire plaintext is provided at once before encryption begins, so
+   the duplex inputs are fully determined before any output is produced. No adaptive-input extension of the duplex
+   security theorem is needed — the standard non-adaptive formulation (Bertoni et al. 2011, Theorem 1) applies
+   directly.
 
    For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
    output under the secret key on a distinct domain. For $n > 1$, the tag is
@@ -724,6 +737,14 @@ position $\mathit{pos}$ and `0x80` at position $R - 1$ — exactly TurboSHAKE's 
 (bytes $R$ through 199) is never directly read or written. Therefore, after the rewriting, each leaf's full computation
 is a standard $\mathrm{Keccak}[256]$ sponge evaluation.
 
+**Keyed duplex interpretation.** The rewritten leaf is equivalently a keyed duplex construction (Bertoni et al.,
+"Duplexing the Sponge," SAC 2011): the init block absorbs key material ($K \| [i]_{\mathrm{64LE}}$), and each
+subsequent block absorbs plaintext and produces rate bytes that serve as keystream (squeezed before the next
+absorption). The duplex security theorem (ibid., Theorem 1) therefore covers not just the terminal squeeze (chain
+value or tag) but all intermediate rate outputs — precisely the bytes XORed with plaintext to form ciphertext.
+This observation is used in §6.3 hop 2 to justify keystream pseudorandomness. For tighter bounds in the keyed
+setting, see Mennink–Reyhanitabar–Vizár (Eurocrypt 2015); the resulting bound remains $(\sigma+t)^2/2^{c+1}$.
+
 **Equivalent sponge input.** Define $\mathrm{pad}(X, d)$ as the $R$-byte string $X \| d \| 0^{R-2-|X|} \| \texttt{0x80}$,
 where $|X| \leq R - 2$ (the data, domain byte, and terminator fit in one rate block). This is `pad10*1` applied to
 $X$ with domain byte $d$.
@@ -883,6 +904,15 @@ calls system-wide — roughly $2^{100}$ messages even at maximum tree depth — 
   security notion.
 - Günther, F., Thomson, M., and Wood, C. A. "Usage Limits on AEAD Algorithms." draft-irtf-cfrg-aead-limits-11. Concrete
   usage limit tables for AES-GCM and ChaCha20-Poly1305; referenced in §7.1.
+- Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
+  and Other Applications." SAC 2011. IACR ePrint 2011/499. Proves that duplex outputs are pseudorandom under the sponge
+  indifferentiability assumption (Theorem 1); establishes that all intermediate rate outputs — not just terminal squeezes
+  — are covered by the duplex security bound.
+- Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Beyond the Birthday
+  Bound." Eurocrypt 2015. Provides direct ideal-permutation-model bounds for the keyed duplex, giving a tighter reduction
+  than routing through sponge indifferentiability.
+- Daemen, J., Mennink, B., and Van Assche, G. "Full-State Keyed Duplex with Built-in Multi-User Support." Asiacrypt 2017.
+  Extends the keyed duplex bounds to the multi-user setting; referenced in §6.12 multi-user discussion.
 - Luykx, A. and Paterson, K. G. "Limits on Authenticated Encryption Use in TLS." IACR ePrint 2024/051 (originally 2016).
   Derives the underlying AES-GCM and ChaCha20-Poly1305 bounds that Günther et al. tabulate.
 
