@@ -67,59 +67,69 @@ into the rate rather than XORing plaintext into it. This enables a clean securit
 sponge via a per-byte algebraic identity (§6.12, Step 1), and for full-rate blocks, a write-only state update is faster
 than read-XOR-write on most architectures.
 
-A leaf cipher consists of a 200-byte state `S`, initialized to all zeros, and a rate index `pos`, initialized to zero.
+The leaf cipher is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are
+defined in Appendix B.
 
-- **`pad_permute(domain_byte)`:**
-  - `S[pos] ^= domain_byte`
-  - `S[R-1] ^= 0x80`
-  - `S ← f(S)`
-  - `pos ← 0`
+```python
+R = 168   # Sponge rate (bytes).
+C = 32    # Capacity (bytes); key and chain value size.
+TAU = 32  # Tag size (bytes).
+B = 8192  # Chunk size (bytes).
 
-> [!NOTE]
-> This matches standard TurboSHAKE padding, where the domain byte includes the first bit of the `pad10*1` sequence.
+class LeafCipher:
+    def __init__(self):
+        self.S = bytearray(200)
+        self.pos = 0
 
-- **`init(key, index)`:**
-  - For each byte of `key ‖ [index]₆₄LE`, XOR it into `S[pos]` and increment `pos`. When `pos` reaches R−1 and more
-    input remains, call `pad_permute(0x60)`.
-  - Call `pad_permute(0x60)`.
+    def pad_permute(self, domain_byte: int):
+        self.S[self.pos] ^= domain_byte
+        self.S[R - 1] ^= 0x80
+        keccak_p1600(self.S)
+        self.pos = 0
 
-> [!NOTE]
-> `init` uses domain byte `0x60`, distinct from the intermediate `encrypt`/`decrypt` byte `0x62`. This ensures the key
-> absorption block is domain-separated from ciphertext blocks.
+    def init(self, key: bytes, index: int):
+        for b in key + index.to_bytes(8, "little"):
+            self.S[self.pos] ^= b
+            self.pos += 1
+            if self.pos == R - 1:
+                self.pad_permute(0x60)
+        self.pad_permute(0x60)
 
-After `init`, the cipher has absorbed the key and index and is ready for encryption.
+    def encrypt(self, plaintext: bytes) -> bytes:
+        ct = bytearray()
+        for j, p in enumerate(plaintext):
+            ct.append(p ^ self.S[self.pos])
+            self.S[self.pos] = ct[-1]
+            self.pos += 1
+            if self.pos == R - 1 and j < len(plaintext) - 1:
+                self.pad_permute(0x62)
+        return bytes(ct)
 
-- **`encrypt(P) → CT`:** For each plaintext byte `Pⱼ`:
-  - `CTⱼ ← Pⱼ ⊕ S[pos]`
-  - `S[pos] ← CTⱼ` (overwrite with ciphertext)
-  - Increment `pos`. If `pos = R−1` **and** more plaintext bytes remain, call `pad_permute(0x62)`.
-    (If `pos = R−1` but no plaintext remains, do not call `pad_permute` — the next operation will be
-    `chain_value()` or `single_node_tag()`, which applies its own padding.)
-  - Return concatenated ciphertext bytes.
+    def decrypt(self, ciphertext: bytes) -> bytes:
+        pt = bytearray()
+        for j, c in enumerate(ciphertext):
+            pt.append(c ^ self.S[self.pos])
+            self.S[self.pos] = c
+            self.pos += 1
+            if self.pos == R - 1 and j < len(ciphertext) - 1:
+                self.pad_permute(0x62)
+        return bytes(pt)
 
-- **`decrypt(CT) → P`:** For each ciphertext byte `CTⱼ`:
-  - `Pⱼ ← CTⱼ ⊕ S[pos]`
-  - `S[pos] ← CTⱼ` (overwrite with ciphertext)
-  - Increment `pos`. If `pos = R−1` **and** more ciphertext bytes remain, call `pad_permute(0x62)`.
-    (Same boundary condition as `encrypt`.)
-  - Return concatenated plaintext bytes.
+    def single_node_tag(self) -> bytes:
+        self.pad_permute(0x61)
+        return bytes(self.S[:TAU])
 
-> [!NOTE]
-> Both `encrypt` and `decrypt` overwrite the rate with ciphertext. This ensures the state evolution is identical
-> regardless of direction, which is required for `EncryptAndMAC`/`DecryptAndMAC` consistency.
+    def chain_value(self) -> bytes:
+        self.pad_permute(0x63)
+        return bytes(self.S[:C])
+```
 
-- **`single_node_tag() → tag`:**
-  - Call `pad_permute(0x61)`.
-  - Output `S[0..τ-1]` (τ bytes starting at position 0).
-
-- **`chain_value() → cv`:**
-  - Call `pad_permute(0x63)`.
-  - Output `S[0..C-1]` (C bytes starting at position 0).
-
-> [!NOTE]
-> Both `single_node_tag()` and `chain_value()` begin with a `pad_permute` call to ensure all encrypted data is fully
-> mixed and domain-separated from intermediate permutations before output is derived. The output fits in a single
-> squeeze block because $\tau = C = 32 \ll R = 168$. This is a parameter constraint: $\max(\tau, C) < R$ must hold.
+**Notes.** `pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at `R-1`). `init`
+uses domain byte `0x60`, distinct from the intermediate byte `0x62`, ensuring key absorption is
+domain-separated from ciphertext blocks. Both `encrypt` and `decrypt` overwrite the rate with ciphertext,
+so state evolution is identical regardless of direction. `single_node_tag` and `chain_value` begin with
+`pad_permute` to mix all data before squeezing; both outputs fit in a single squeeze block since
+$\max(\tau, C) = 32 \ll R = 168$.
 
 ## 5. TreeWrap
 
@@ -127,105 +137,69 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 
 - `‖`: Byte string concatenation.
 - `[i]₆₄LE`: The 8-byte little-endian encoding of integer `i`.
-- `left_encode(x)`: The encoding from NIST SP 800-185: a big-endian byte string of `x` with no leading zeros,
-  preceded by a single byte indicating the length of that byte string.
-- `right_encode(x)`: The encoding from NIST SP 800-185: a big-endian byte string of `x` with no leading zeros,
-  followed by a single byte indicating the length of that byte string. `right_encode(0)` is `0x00`.
-- `encode_string(x)`: The encoding from NIST SP 800-185: `left_encode(|x|) ‖ x`.
 
-### 5.1 EncryptAndMAC
+The NIST SP 800-185 encodings (`left_encode`, `right_encode`, `encode_string`) are defined as Python functions
+in Appendix B.
 
-**`TreeWrap.EncryptAndMAC(key, plaintext) → (ciphertext, tag)`**
+### 5.1 EncryptAndMAC / DecryptAndMAC
+
+**`TreeWrap.EncryptAndMAC(key, plaintext) → (ciphertext, tag)`**\
+**`TreeWrap.DecryptAndMAC(key, ciphertext) → (plaintext, tag)`**
 
 *Inputs:*
 
 - `key`: A C-byte key. MUST be pseudorandom (computationally indistinguishable from uniform — required for the PRF
   reductions in §6.3–§6.7) and unique per invocation (no two calls share a key — required for fresh-input
   guarantees). See §6.1 and §6.2.
-- `plaintext`: Plaintext of any length (may be empty). Maximum length is $(2^{64} - 1) \cdot B$ bytes, since leaf
-  indices are encoded as 8-byte little-endian integers.
+- `plaintext` / `ciphertext`: Data of any length (may be empty). Maximum length is $(2^{64} - 1) \cdot B$ bytes,
+  since leaf indices are encoded as 8-byte little-endian integers.
 
 *Outputs:*
 
-- `ciphertext`: Same length as `plaintext`. Ciphertext length reveals plaintext length; the chunking structure
+- `ciphertext` / `plaintext`: Same length as the input data. Length reveals plaintext length; the chunking structure
   ($n$, $\ell_0, \ldots, \ell_{n-1}$) is public. Protocols requiring length hiding must pad before calling TreeWrap.
 - `tag`: A τ-byte MAC tag.
 
 *Procedure:*
 
-Partition `plaintext` into $n = \max(1, \lceil\mathit{len}(\mathit{plaintext}) / B\rceil)$ chunks. Chunk $i$ (0-indexed)
-has size $\ell_i = \min(B,\, \mathit{len}(\mathit{plaintext}) - i \cdot B)$. If plaintext is empty, $n = 1$ and the
-single chunk is empty.
+```python
+def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes]:
+    """Shared logic for EncryptAndMAC / DecryptAndMAC."""
+    n = max(1, -(-len(data) // B))
+    chunks = [data[i * B : (i + 1) * B] for i in range(n)]
 
-If `n = 1` (fast-path):
+    if n == 1:
+        L = LeafCipher()
+        L.init(key, 0)
+        out = L.encrypt(chunks[0]) if direction == "E" else L.decrypt(chunks[0])
+        return out, L.single_node_tag()
 
-- Create a leaf cipher `L`.
-- `L.init(key, 0)`
-- `ciphertext[0] ← L.encrypt(plaintext_chunk[0])`
-- `tag ← L.single_node_tag()`
+    out_parts, cvs = [], []
+    for i, chunk in enumerate(chunks):
+        L = LeafCipher()
+        L.init(key, i)
+        out_parts.append(L.encrypt(chunk) if direction == "E" else L.decrypt(chunk))
+        cvs.append(L.chain_value())
 
-If `n > 1`:
+    final_input = bytes([0x03, 0, 0, 0, 0, 0, 0, 0])
+    for cv in cvs:
+        final_input += cv
+    final_input += right_encode(n)
+    final_input += b"\xff\xff"
+    tag = turboshake128(final_input, 0x64, TAU)
+    return b"".join(out_parts), tag
 
-- For each chunk `i`:
-  - Create a leaf cipher `L`.
-  - `L.init(key, i)`
-  - `ciphertext[i] ← L.encrypt(plaintext_chunk[i])`
-  - `cv[i] ← L.chain_value()`
-- Compute the tag using the Sakura final node structure:
-  - `final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
-  - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
-  - `final_input ← final_input ‖ right_encode(n)`
-  - `final_input ← final_input ‖ 0xFF 0xFF`
-  - `tag ← TurboSHAKE128(final_input, 0x64, τ)`
+def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
+    return _tree_process(key, plaintext, "E")
 
-Return `(ciphertext[0] ‖ ... ‖ ciphertext[n−1], tag)`.
+def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
+    return _tree_process(key, ciphertext, "D")
+```
 
 All leaf operations are independent and may execute in parallel. Tag computation begins as soon as all chain values are
-available.
-
-### 5.2 DecryptAndMAC
-
-**`TreeWrap.DecryptAndMAC(key, ciphertext) → (plaintext, tag)`**
-
-*Inputs:*
-
-- `key`: A C-byte key.
-- `ciphertext`: Ciphertext of any length (may be empty). Same maximum length as `plaintext` in `EncryptAndMAC`.
-
-*Outputs:*
-
-- `plaintext`: Same length as `ciphertext`.
-- `tag`: A τ-byte MAC tag.
-
-*Procedure:*
-
-Partition `ciphertext` into chunks identically to `EncryptAndMAC`.
-
-If `n = 1` (fast-path):
-
-- Create a leaf cipher `L`.
-- `L.init(key, 0)`
-- `plaintext[0] ← L.decrypt(ciphertext_chunk[0])`
-- `tag ← L.single_node_tag()`
-
-If `n > 1`:
-
-- For each chunk `i`:
-  - Create a leaf cipher `L`.
-  - `L.init(key, i)`
-  - `plaintext[i] ← L.decrypt(ciphertext_chunk[i])`
-  - `cv[i] ← L.chain_value()`
-- Compute the tag using the same final node structure as `EncryptAndMAC`:
-  - `final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
-  - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
-  - `final_input ← final_input ‖ right_encode(n)`
-  - `final_input ← final_input ‖ 0xFF 0xFF`
-  - `tag ← TurboSHAKE128(final_input, 0x64, τ)`
-
-Return `(plaintext[0] ‖ ... ‖ plaintext[n−1], tag)`.
-
-The caller is responsible for comparing the returned tag against an expected value. TreeWrap does not perform tag
-verification.
+available. `decrypt_and_mac` produces the same tag as `encrypt_and_mac` because both `encrypt` and `decrypt`
+write ciphertext into the sponge rate (§4). The caller is responsible for comparing the returned tag against an
+expected value; TreeWrap does not perform tag verification.
 
 ### 5.3 TreeWrap-AEAD
 
@@ -245,17 +219,18 @@ with its `left_encode`d length, so no `(K, N, AD)` triple can produce the same T
 different triple.
 Domain byte `0x65` separates key derivation from all other TreeWrap uses of TurboSHAKE128 (`0x60`–`0x64`).
 
-**`TreeWrap-AEAD.Encrypt(K, N, AD, M) → CT ‖ tag`:**
+```python
+def treewrap_aead_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x65, C)
+    ct, tag = encrypt_and_mac(tw_key, M)
+    return ct + tag
 
-1. `tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)`
-2. `(CT, tag) ← TreeWrap.EncryptAndMAC(tw_key, M)`
-3. Return `CT ‖ tag`.
-
-**`TreeWrap-AEAD.Decrypt(K, N, AD, CT ‖ tag_expected) → M or ⊥`:**
-
-1. `tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)`
-2. `(M, tag) ← TreeWrap.DecryptAndMAC(tw_key, CT)`
-3. If `tag = tag_expected`, return `M`; otherwise return `⊥`.
+def treewrap_aead_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x65, C)
+    ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
+    pt, tag = decrypt_and_mac(tw_key, ct)
+    return pt if tag == tag_expected else None
+```
 
 ## 6. Security Properties
 
@@ -1017,3 +992,106 @@ where:
 - **Tag accumulation term.** Present only when $n > 1$. $|\mathit{final\_input}| = 8 + nC +
   |\mathrm{right\_encode}(n)| + 2$ bytes. For $n = 2$: $|final\_input| = 8 + 64 + 2 + 2 = 76$ bytes, giving
   $\lceil 76 / 168 \rceil = 1$.
+
+## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
+
+This appendix provides a reference Python implementation of the cryptographic primitives used by TreeWrap. It
+is intended for specification clarity and test-vector generation; production implementations should use
+platform-optimized Keccak libraries.
+
+### Keccak-p[1600,12]
+
+```python
+def keccak_p1600(state: bytearray, rounds: int = 12):
+    """Apply Keccak-p[1600,rounds] to a 200-byte state in-place."""
+    RC = [
+        0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000,
+        0x000000000000808B, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
+        0x000000000000008A, 0x0000000000000088, 0x0000000080008009, 0x000000008000000A,
+        0x000000008000808B, 0x800000000000008B, 0x8000000000008089, 0x8000000000008003,
+        0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
+        0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008,
+    ]
+    # Combined rho+pi lane permutation order and rotation offsets.
+    PILN = [10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1]
+    ROTC = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44]
+    M = (1 << 64) - 1
+
+    A = [int.from_bytes(state[8 * i : 8 * i + 8], "little") for i in range(25)]
+
+    for ir in range(24 - rounds, 24):
+        # Theta.
+        C = [A[j] ^ A[j + 5] ^ A[j + 10] ^ A[j + 15] ^ A[j + 20] for j in range(5)]
+        for j in range(5):
+            d = C[(j - 1) % 5] ^ (((C[(j + 1) % 5] << 1) | (C[(j + 1) % 5] >> 63)) & M)
+            for k in range(0, 25, 5):
+                A[j + k] ^= d
+        # Rho and pi.
+        t = A[1]
+        for j in range(24):
+            A[PILN[j]], t = ((t << ROTC[j]) | (t >> (64 - ROTC[j]))) & M, A[PILN[j]]
+        # Chi.
+        for j in range(0, 25, 5):
+            C = A[j : j + 5]
+            for k in range(5):
+                A[j + k] = (C[k] ^ (~C[(k + 1) % 5] & C[(k + 2) % 5])) & M
+        # Iota.
+        A[0] ^= RC[ir]
+
+    for i in range(25):
+        state[8 * i : 8 * i + 8] = A[i].to_bytes(8, "little")
+```
+
+### TurboSHAKE128
+
+```python
+def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
+    """TurboSHAKE128(M, D, ell) as specified in RFC 9861."""
+    S = bytearray(200)
+    # Absorb.
+    pos = 0
+    for i in range(0, len(msg), R):
+        block = msg[i : i + R]
+        for j, b in enumerate(block):
+            S[pos + j] ^= b
+        pos += len(block)
+        if pos == R:
+            keccak_p1600(S)
+            pos = 0
+    # Pad and switch to squeezing.
+    S[pos] ^= domain_byte
+    S[R - 1] ^= 0x80
+    keccak_p1600(S)
+    # Squeeze.
+    out, pos = bytearray(), 0
+    while len(out) < output_len:
+        if pos == R:
+            keccak_p1600(S)
+            pos = 0
+        n = min(R - pos, output_len - len(out))
+        out.extend(S[pos : pos + n])
+        pos += n
+    return bytes(out)
+```
+
+### NIST SP 800-185 Encodings
+
+```python
+def right_encode(x: int) -> bytes:
+    """Big-endian, no leading zeros, followed by byte count. right_encode(0) = 0x00."""
+    if x == 0:
+        return b"\x00"
+    n = (x.bit_length() + 7) // 8
+    return x.to_bytes(n, "big") + bytes([n])
+
+def left_encode(x: int) -> bytes:
+    """Byte count, then big-endian value (at least one byte)."""
+    if x == 0:
+        return b"\x01\x00"
+    n = (x.bit_length() + 7) // 8
+    return bytes([n]) + x.to_bytes(n, "big")
+
+def encode_string(x: bytes) -> bytes:
+    """left_encode(len(x)) ‖ x."""
+    return left_encode(len(x)) + x
+```
