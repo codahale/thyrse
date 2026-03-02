@@ -288,8 +288,10 @@ TurboSHAKE128 with domain bytes `0x60`–`0x64`. This is a formal precondition, 
 guideline. The security reduction (§6.12) rewrites each leaf cipher as a standard sponge evaluation; after the
 sponge-to-RO hop, the distinct-input guarantee that underpins every bound in §6.3–§6.7 requires that TreeWrap's
 sponge inputs are never duplicated by other callers of the same sponge. An external TurboSHAKE128 call on one of
-these domain bytes could produce an input identical to a leaf evaluation, breaking the reduction. See §4 for the
-corresponding implementer requirement.
+these domain bytes could produce an input identical to a leaf evaluation, breaking the reduction. This restriction
+applies to co-located system components, not to the adversary: in the random permutation model the adversary can
+always evaluate any sponge (including TurboSHAKE128 on any domain byte) via offline permutation queries, and those
+evaluations are already counted in $t$. See §4 for the corresponding implementer requirement.
 
 **Notation:**
 
