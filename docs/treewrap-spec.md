@@ -323,6 +323,8 @@ is nonce-respecting and guesses `b`.
 
 $$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}}$$
 
+where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in §6.2).
+
 **Proof sketch** (three game hops):
 
 1. **KDF → random keys** (cost: $\varepsilon_{\mathrm{kdf}}$). By KDF PRF security, replace `KDF(K, N, AD)` with a
