@@ -745,7 +745,10 @@ sponge input is a single byte string:
 $$\mathrm{sponge\_input}(K, i, P, d_f) = \mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60}) \;\|\; \mathrm{pad}(P_1,\, \texttt{0x62}) \;\|\; \cdots \;\|\; \mathrm{pad}(P_m,\, \texttt{0x62}) \;\|\; \mathrm{pad}(P_*,\, d_f)$$
 
 When $m = 0$ (plaintext shorter than $R - 1$ bytes, including the empty case), the intermediate blocks vanish and
-the input is $\mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60}) \| \mathrm{pad}(P_*,\, d_f)$.
+the input is $\mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60}) \| \mathrm{pad}(P_*,\, d_f)$. In the
+empty-plaintext case ($P = \epsilon$, $P_* = \epsilon$), the final block is $d_f \| 0^{R-2} \| \texttt{0x80}$.
+This is well-defined and injective: it is distinct from any final block with non-empty $P_*$ (the domain byte
+$d_f$ appears at position 0 instead of position $|P_*| > 0$).
 
 This is a function of $(K, i, P)$ — the **plaintext**, not the ciphertext. This follows directly from the per-byte
 identity: the XOR-equivalent of overwriting with ciphertext absorbs plaintext. However, for a fixed key, encryption
