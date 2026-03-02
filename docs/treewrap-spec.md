@@ -50,10 +50,12 @@ TreeWrap:
 | `0x64` | Tag accumulation             | `TreeWrap`, `TreeUnwrap` |
 
 > [!WARNING]
-> Bytes `0x60`–`0x64` are reserved for TreeWrap. Other callers of TurboSHAKE128 in the same system must avoid these
-> domain bytes. After the duplex-to-sponge rewriting (§6.12), a leaf cipher evaluation with domain byte `0x63` is
-> structurally identical to a `TurboSHAKE128(M, 0x63, ℓ)` call; domain byte collision would break the distinct-input
-> guarantee that the security reduction relies on.
+> Bytes `0x60`–`0x64` are reserved for TreeWrap. Other callers of TurboSHAKE128 in the same system MUST NOT use
+> these domain bytes. This is a security precondition, not merely a recommendation: after the duplex-to-sponge
+> rewriting (§6.12), a leaf cipher evaluation with domain byte `0x63` is structurally identical to a
+> `TurboSHAKE128(M, 0x63, ℓ)` call. If another component in the same system uses any of these domain bytes, the
+> distinct-input guarantee that the security reduction (§6.12) relies on is broken, and the security theorems in
+> §6.3–§6.7 no longer hold.
 
 The overwrite duplex (DWrap) differs from the traditional XOR-absorb duplex (SpongeWrap) in that the `encrypt` operation
 overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it enables a
