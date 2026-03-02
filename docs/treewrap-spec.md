@@ -452,10 +452,12 @@ key and ciphertext, and (2) encryption and tagging use independent keying materi
 - **Structural key separation.** After the sponge→RO hop, the KDF (domain byte `0x65`), leaf ciphers
   (`0x60`–`0x63`), and tag accumulation (`0x64`) operate on disjoint sets of random oracle inputs. Within a leaf,
   intermediate ciphertext blocks use domain byte `0x62`, while tag output uses `0x61` ($n = 1$) or `0x63`/`0x64`
-  ($n > 1$). In the RO world, outputs on disjoint input domains are jointly independent: the adversary's
-  view of domain-`0x62` outputs (keystream) is statistically independent of domain-`0x61`/`0x63`/`0x64`
-  outputs (tags). The encryption keystream and the tag are therefore jointly pseudorandom — no composition
-  theorem or physically separate keys are needed; independence is structural.
+  ($n > 1$). In the RO world, disjoint input domains produce outputs that are computationally independent
+  from the adversary's perspective: the adversary's view of domain-`0x62` outputs (keystream) is
+  indistinguishable from independent of domain-`0x61`/`0x63`/`0x64` outputs (tags), since predicting
+  either requires querying the random oracle on an input prefixed with the secret key. The encryption
+  keystream and the tag are therefore jointly pseudorandom — no composition theorem or physically separate
+  keys are needed; independence is structural.
 
 In the composition mapping: the MAC key is `tw_key`, the MAC input is the full ciphertext (including chunk
 structure), and `N`/`AD` are bound to `tw_key` via the KDF (§5.3). The `Decrypt` oracle enables $S$ tag-guess
