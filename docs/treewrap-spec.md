@@ -38,7 +38,7 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 ## 4. Leaf Cipher
 
 A leaf cipher operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
-TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap:
+TurboSHAKE128. It uses six domain separation bytes, reserved for TreeWrap:
 
 | Byte   | Usage                        | Procedure(s)             |
 |--------|------------------------------|--------------------------|
@@ -47,6 +47,7 @@ TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap:
 | `0x62` | Intermediate encrypt/decrypt | `encrypt`, `decrypt`     |
 | `0x63` | Final block (chain value)    | `chain_value`            |
 | `0x64` | Tag accumulation             | `TreeWrap`, `TreeUnwrap` |
+| `0x65` | AEAD key derivation          | `TreeWrap-AEAD`          |
 
 > [!NOTE]
 > **System-wide permutation accounting.** All Keccak-p[1600,12] evaluations across the entire system — by TreeWrap,
@@ -119,8 +120,11 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 
 - `‖`: Byte string concatenation.
 - `[i]₆₄LE`: The 8-byte little-endian encoding of integer `i`.
-- `length_encode(x)`: The encoding used by KangarooTwelve: `x` as a big-endian byte string with no leading zeros,
-  followed by a single byte indicating the length of that byte string. `length_encode(0)` is `0x00`.
+- `left_encode(x)`: The encoding from NIST SP 800-185: a big-endian byte string of `x` with no leading zeros,
+  preceded by a single byte indicating the length of that byte string.
+- `right_encode(x)`: The encoding from NIST SP 800-185: a big-endian byte string of `x` with no leading zeros,
+  followed by a single byte indicating the length of that byte string. `right_encode(0)` is `0x00`.
+- `encode_string(x)`: The encoding from NIST SP 800-185: `left_encode(|x|) ‖ x`.
 
 ### 5.1 EncryptAndMAC
 
@@ -163,7 +167,7 @@ If `n > 1`:
 - Compute the tag using the Sakura final node structure:
   - `final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
   - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
-  - `final_input ← final_input ‖ length_encode(n)`
+  - `final_input ← final_input ‖ right_encode(n)`
   - `final_input ← final_input ‖ 0xFF 0xFF`
   - `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
@@ -207,7 +211,7 @@ If `n > 1`:
 - Compute the tag using the same final node structure as `EncryptAndMAC`:
   - `final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00`
   - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
-  - `final_input ← final_input ‖ length_encode(n)`
+  - `final_input ← final_input ‖ right_encode(n)`
   - `final_input ← final_input ‖ 0xFF 0xFF`
   - `tag ← TurboSHAKE128(final_input, 0x64, C)`
 
@@ -215,6 +219,37 @@ Return `(plaintext[0] ‖ ... ‖ plaintext[n−1], tag)`.
 
 The caller is responsible for comparing the returned tag against an expected value. TreeWrap does not perform tag
 verification.
+
+### 5.3 TreeWrap-AEAD
+
+TreeWrap-AEAD is a concrete AEAD construction built on top of the bare TreeWrap primitive. It derives a per-invocation
+TreeWrap key from `(K, N, AD)` using TurboSHAKE128, then delegates to `EncryptAndMAC`/`DecryptAndMAC`. This
+construction exists for security analysis — calling protocols may use it directly or implement equivalent key
+derivation.
+
+**Key derivation:**
+
+```
+tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)
+```
+
+The `encode_string` encoding (§5, NIST SP 800-185) makes the concatenation injective: each field is prefixed
+with its `left_encode`d length, so no `(K, N, AD)` triple can produce the same TurboSHAKE128 input as a
+different triple.
+Domain byte `0x65` separates key derivation from all other TreeWrap uses of TurboSHAKE128 (`0x60`–`0x64`).
+
+**`TreeWrap-AEAD.Encrypt(K, N, AD, M) → CT ‖ tag`:**
+
+1. `tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)`
+2. `(CT, tag) ← TreeWrap.EncryptAndMAC(tw_key, M)`
+3. Return `CT ‖ tag`.
+
+**`TreeWrap-AEAD.Decrypt(K, N, AD, C) → M or ⊥`:**
+
+1. Split `C` into `CT` (first `|C| − C` bytes) and `tag_expected` (last `C` bytes).
+2. `tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)`
+3. `(M, tag) ← TreeWrap.DecryptAndMAC(tw_key, CT)`
+4. If `tag = tag_expected`, return `M`; otherwise return `⊥`.
 
 ## 6. Security Properties
 
@@ -226,33 +261,20 @@ permutation-level properties do not translate into structural breaks of the spon
 indifferentiability claim holds up to the 128-bit target security level. Each property reduces to the Keccak sponge
 claim via TurboSHAKE128's indifferentiability from a random oracle.
 
-### 6.1 Notional AEAD Construction
+### 6.1 AEAD Construction
 
-To state standard security games (IND-CCA2, INT-CTXT, CMT-4), we define a notional AEAD parameterized by an abstract
-key derivation function. This AEAD exists solely for security analysis — TreeWrap itself remains a bare
-`EncryptAndMAC`/`DecryptAndMAC` primitive.
+To state standard security games (IND-CCA2, INT-CTXT, CMT-4), we use the concrete `TreeWrap-AEAD` construction
+defined in §5.3. TreeWrap itself remains a bare `EncryptAndMAC`/`DecryptAndMAC` primitive; the AEAD wrapper
+provides key derivation and tag verification for security analysis.
 
-**`TreeWrap-AEAD[KDF]`**:
-
-- **`Encrypt(K, N, AD, M)`**: Derive `tw_key ← KDF(K, N, AD)`. Run `TreeWrap.EncryptAndMAC(tw_key, M)` to
-  obtain `(CT, tag)`. Return `CT ‖ tag`.
-- **`Decrypt(K, N, AD, C)`**: Split `C` into `CT` (first `|C| − C` bytes) and `tag_expected` (last `C` bytes). Derive
-  `tw_key ← KDF(K, N, AD)`. Run `TreeWrap.DecryptAndMAC(tw_key, CT)` to obtain `(M, tag)`. If `tag = tag_expected`,
-  return `M`; otherwise return `⊥`.
-
-`KDF` is abstract. Calling protocols instantiate it and must show it satisfies the assumptions below. Nonce uniqueness
-in the AEAD maps to TreeWrap's key uniqueness requirement via the KDF: distinct `(N, AD)` pairs under the same `K`
-produce distinct `tw_key` values (except with negligible probability).
-
-**KDF assumption:**
-
-**PRF security.** `KDF(K, ·, ·)` is indistinguishable from a random function for uniform `K`.
-Advantage: $\varepsilon_{\mathrm{kdf}}$. This is the only KDF assumption required for confidentiality (§6.3) and
-authenticity (§6.4). Committing security (§6.5) requires an additional collision resistance property of the KDF,
-stated in that section.
+The KDF uses TurboSHAKE128 with domain byte `0x65` — the same Keccak-p permutation underlying all TreeWrap
+operations. No separate KDF security assumption is needed: the sponge→RO reduction (§6.2) covers all
+TurboSHAKE128 evaluations (including KDF evaluations) in a single hop. After the reduction, the injective
+`encode_string` encoding (§5.3) ensures that distinct `(K, N, AD)` triples produce distinct random oracle inputs,
+so each fresh nonce yields an independent, uniformly random `tw_key`.
 
 > [!WARNING]
-> **Key reuse damage.** If the KDF produces the same `tw_key` for two different plaintexts $M \neq M'$, the leaf
+> **Key reuse damage.** If the same `tw_key` is used for two different plaintexts $M \neq M'$, the leaf
 > cipher leaks plaintext XOR differences within the first block. At each byte position $j$ within a block, the
 > keystream byte $S[j]$ is the same for both encryptions because the ciphertext written at positions $0, \ldots, j-1$ does not
 > affect the state at position $j$ until the next permutation. Therefore $\mathit{CT}_j \oplus \mathit{CT}'_j = P_j
@@ -266,7 +288,7 @@ stated in that section.
 > a computationally unpredictable PRF output for novel ciphertexts even under key reuse — the attacker cannot
 > predict the tag for a modified ciphertext without evaluating the full sponge construction. Key reuse therefore
 > compromises confidentiality and weakens integrity within the first block, but does not enable universal forgery.
-> Callers MUST still ensure key uniqueness via the KDF.
+> Callers MUST still ensure key uniqueness (e.g., via the KDF in §5.3 with fresh nonces).
 
 > [!NOTE]
 > **Release of unverified plaintext (RUP).** Independently of key reuse, the bare `DecryptAndMAC` interface is
@@ -293,13 +315,16 @@ adversary cannot evaluate the keyed PRF without querying the random oracle on an
 
 **Notation:**
 
-- $\sigma$: total online Keccak-p calls across all queries in the security game (all leaves and tag computations
-  combined, summed over all encryption and decryption queries). For a single message of length $L$ bytes with
-  $n = \max(1, \lceil L / B \rceil)$ chunks, the per-query contribution is $\sum_{i=0}^{n-1}(1 + \max(1,\,
+- $\sigma$: total online Keccak-p calls across all queries in the security game (KDF evaluations, all leaves,
+  and tag computations combined, summed over all encryption and decryption queries). For a single query on a
+  message of length $L$ bytes with $n = \max(1, \lceil L / B \rceil)$ chunks, the per-query contribution is
+  $\lceil |\mathit{kdf\_input}| / R \rceil + \sum_{i=0}^{n-1}(1 + \max(1,\,
   \lceil \ell_i / (R-1) \rceil)) + \mathbb{1}_{n>1} \cdot \lceil |\mathit{final\_input}| / R \rceil$, where the
-  first term counts each leaf's init permutation (the 1) and ciphertext/squeeze permutations (the $\max$ term —
-  at least one permutation for the tag or chain value squeeze, even when the chunk is empty), and the second term
-  counts the tag accumulation.
+  first term counts the KDF's TurboSHAKE128 evaluation (§5.3), the second term counts each leaf's init
+  permutation (the 1) and ciphertext/squeeze permutations (the $\max$ term — at least one permutation for the
+  tag or chain value squeeze, even when the chunk is empty), and the third term counts the tag accumulation.
+  Since the KDF costs at least one Keccak-p call and each leaf costs at least two (init + squeeze),
+  $\sigma \geq 2Q$ for $Q$ queries — every query contributes at least 3 permutation calls.
 - $t$: adversary's total offline Keccak-p calls.
 - $c = 256$: capacity in bits.
 - $C = 32$: capacity in bytes; key, chain value, and tag size.
@@ -326,18 +351,18 @@ this term into concrete security levels for $c = 256$:
 Practitioners targeting a conventional "$n$-bit security" guarantee — meaning advantage $\leq 2^{-n}$ at some
 specified work budget — should read the bounds with the formula $\sigma + t \leq 2^{(c+1-n)/2}$. For example,
 achieving advantage $\leq 2^{-32}$ (a common practical target) requires $\sigma + t \leq 2^{112}$, which
-comfortably accommodates any realistic workload. The additional terms in each theorem (tag guessing, key guessing,
-KDF advantage) are negligible relative to the sponge term at all practical budgets.
+comfortably accommodates any realistic workload. The additional terms in each theorem (tag guessing, key guessing)
+are negligible relative to the sponge term at all practical budgets.
 
 **Capacity vs. tag length.** The dominant term $(\sigma + t)^2 / 2^{c+1}$ caps overall security at $c/2 \approx 128$
 bits of work for constant advantage, regardless of the tag length. The full 256-bit ($C = 32$) tag provides margin
-against birthday-type terms (tag collisions at $Q^2 / 2^{257}$, KDF collisions at $Q^2 / 2^{257}$) and key-guessing
+against birthday-type terms (tag collisions at $Q^2 / 2^{257}$) and key-guessing
 ($t / 2^{256}$), but does not raise the sponge ceiling. Readers should not infer "256-bit MAC security" from the
 32-byte tag — the security level is determined by the capacity, not the tag length.
 
 ### 6.3 Confidentiality (IND-CPA)
 
-*This property is stated for `TreeWrap-AEAD[KDF]`.*
+*This property is stated for `TreeWrap-AEAD` (§5.3).*
 
 **Game.** The adversary has access to an `Encrypt` oracle under a random key `K`. The oracle takes
 $(N, \mathit{AD}, M_0, M_1)$ with $|M_0| = |M_1|$ and fresh `N`, and returns `Encrypt(K, N, AD, M_b)`. The adversary
@@ -345,38 +370,33 @@ is nonce-respecting and guesses `b`.
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}}$$
+$$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \frac{(\sigma + t)^2}{2^{c+1}}$$
 
 where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in §6.2).
 
-**Proof sketch** (three game hops):
+**Proof sketch** (two game hops):
 
-1. **KDF → random keys** (cost: $\varepsilon_{\mathrm{kdf}}$). By KDF PRF security, replace `KDF(K, N, AD)` with a
-   random function of `(N, AD)`. Each fresh nonce produces an independent, uniformly random `tw_key`.
-
-   After this hop, a subtle question arises: what if the random function produces the same `tw_key` for two
-   different nonces? A random function on $Q$ distinct inputs collides with probability at most $Q^2 / 2^{257}$
-   (birthday bound on 256-bit outputs). This is a property of the idealized KDF replacement, not of TreeWrap
-   itself — the bare primitive assumes its key is unique and has no KDF. The term appears here because the
-   notional AEAD (§6.1) introduces the KDF to map standard AEAD games onto TreeWrap's key-per-invocation
-   interface, and the random-function replacement can collide where a truly injective mapping would not.
-
-   This term is dominated by the sponge indifferentiability term in hop 2: each encryption query requires at
-   least one Keccak-p call, so $Q \leq \sigma \leq \sigma + t$, giving
-   $Q^2 / 2^{257} \leq (\sigma + t)^2 / 2^{c+1}$. It does not appear in the final bound as a separate term.
-
-2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the ciphertext-write to XOR equivalence (§6.12, Step 1), each
+1. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the ciphertext-write to XOR equivalence (§6.12, Step 1), each
    leaf's interactive computation is expressible as a single standard sponge evaluation on an injective encoding
-   of its inputs. The sponge indifferentiability theorem then replaces all such evaluations — across all leaves
-   and the tag accumulation — with random oracle evaluations in a single reduction.
+   of its inputs. The sponge indifferentiability theorem then replaces all such evaluations — across all leaves,
+   the tag accumulation, and the KDF's TurboSHAKE128 evaluation (domain byte `0x65`) — with random oracle
+   evaluations in a single reduction. The KDF evaluation is covered by the same hop because it is a standard
+   TurboSHAKE128 call on the same Keccak-p permutation. Domain byte `0x65` ensures KDF inputs are disjoint from
+   leaf cipher inputs (`0x60`–`0x63`) and tag accumulation inputs (`0x64`).
 
-3. **RO world.** After the rewriting in hop 2, each leaf is a random oracle evaluation with `tw_key` as a secret
+   After this hop, each fresh nonce yields an independent, uniformly random `tw_key`: the injective `encode_string`
+   encoding (§5.3) ensures distinct `(K, N, AD)` triples produce distinct random oracle inputs, and the random
+   oracle maps distinct inputs to independent uniform outputs. Output collisions occur with probability at most
+   $Q^2 / 2^{257}$ (birthday bound on 256-bit outputs), which is dominated by the sponge term since
+   $Q \leq \sigma$ (each query costs at least 3 Keccak-p calls; see §6.2).
+
+2. **RO world.** After the rewriting in hop 1, each leaf is a random oracle evaluation with `tw_key` as a secret
    prefix. By construction, `tw_key` occupies the first 32 bytes of the equivalent sponge input (§6.12, Step 1),
    and the encoding is injective (§6.12, "Injectivity of the encoding"). Each leaf therefore defines a keyed PRF
-   $F_K(i, P_i)$ where $K$ is the secret key prefix (§6.12, Step 2). In the RO world (after hop 2), the only
+   $F_K(i, P_i)$ where $K$ is the secret key prefix (§6.12, Step 2). In the RO world (after hop 1), the only
    remaining advantage is key guessing: the adversary must query the random oracle on an input prefixed with the
    secret 256-bit key, giving probability $t / 2^{256}$. The sponge indifferentiability term is already paid in
-   hop 2.
+   hop 1.
 
    In the ideal world, the keystream byte at each position is uniformly random *before* the corresponding ciphertext
    byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
@@ -401,36 +421,32 @@ stated bound.
 
 ### 6.3.1 CCA Security (IND-CCA2)
 
-*This property is stated for `TreeWrap-AEAD[KDF]`.*
+*This property is stated for `TreeWrap-AEAD` (§5.3).*
 
-IND-CCA2 security follows from a joint reduction. By the Bellare–Namprempre composition theorem, the CCA2 game
-can be reduced to: (1) a single KDF→random hop, (2) a single sponge→RO hop, and (3) an ideal-world forgery game.
-The KDF and sponge transitions are paid once (not separately for CPA and CTXT), because both properties share the
-same underlying game hops.
+IND-CCA2 security follows from the standard encrypt-then-MAC composition, applied after the single sponge→RO hop.
 
-**Composition structure.** The composition theorem requires encrypt-then-MAC with key separation. TreeWrap satisfies
-both conditions, despite sharing `tw_key` across encryption and tagging:
+**Composition structure.** The encrypt-then-MAC composition requires two properties: (1) the tag is determined by the
+key and ciphertext, and (2) encryption and tagging use independent keying material. TreeWrap satisfies both:
 
 - **Encrypt-then-tag.** The tag is operationally determined by `(tw_key, ciphertext)`: given a key and ciphertext,
   `DecryptAndMAC` computes the tag without requiring the plaintext as a separate input. Although the equivalent sponge
   input (§6.12, Step 1) contains the plaintext (not the ciphertext), the encrypt bijection (§6.5 Case 2) ensures the
-  tag is equivalently a PRF of the ciphertext (§6.12, Step 2). The Bellare–Namprempre composition requires that the
-  MAC can be evaluated given only the key and ciphertext, which TreeWrap satisfies.
-- **Functional key separation.** Encryption and tagging share `tw_key` but operate on disjoint input domains:
-  intermediate ciphertext blocks use domain byte `0x62`, while tag output uses `0x61` ($n = 1$) or `0x63`/$\texttt{0x64}$
-  ($n > 1$). After the sponge→RO hop, distinct domain bytes produce disjoint sets of random oracle inputs, so the
-  encryption keystream and the tag are functionally independent PRF outputs. This provides the key-separation
-  property that the composition theorem requires, without needing physically separate keys.
+  tag is equivalently a PRF of the ciphertext (§6.12, Step 2).
+- **Structural key separation.** After the sponge→RO hop, the KDF (domain byte `0x65`), leaf ciphers
+  (`0x60`–`0x63`), and tag accumulation (`0x64`) operate on disjoint sets of random oracle inputs. Within a leaf,
+  intermediate ciphertext blocks use domain byte `0x62`, while tag output uses `0x61` ($n = 1$) or `0x63`/`0x64`
+  ($n > 1$). The encryption keystream and the tag are therefore functionally independent PRF outputs — no
+  composition theorem or physically separate keys are needed; independence is structural.
 
 In the composition mapping: the MAC key is `tw_key`, the MAC input is the full ciphertext (including chunk
-structure), and `N`/`AD` are bound to `tw_key` via the KDF. The `Decrypt` oracle enables $S$ tag-guess tests;
-by the tag uniformity corollary (§6.7), each succeeds with probability $1/2^{8C}$.
+structure), and `N`/`AD` are bound to `tw_key` via the KDF (§5.3). The `Decrypt` oracle enables $S$ tag-guess
+tests; by the tag uniformity corollary (§6.7), each succeeds with probability $1/2^{8C}$.
 
-$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
+$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
 
 ### 6.4 Authenticity (INT-CTXT)
 
-*This property is stated for `TreeWrap-AEAD[KDF]`.*
+*This property is stated for `TreeWrap-AEAD` (§5.3).*
 
 **Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The adversary wins by
 producing $(N, \mathit{AD}, C)$ such that `Decrypt(K, N, AD, C)` returns `M ≠ ⊥` and `C` was not previously returned by
@@ -438,23 +454,22 @@ producing $(N, \mathit{AD}, C)$ such that `Decrypt(K, N, AD, C)` returns `M ≠ 
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
+$$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
 
-**Proof sketch.** After KDF→random (cost $\varepsilon_{\mathrm{kdf}}$) and sponge→RO (cost $(\sigma+t)^2/2^{c+1}$),
-each fresh nonce yields an independent, uniformly random `tw_key`. (KDF-output collisions occur with probability
-$Q^2 / 2^{257}$, absorbed by the sponge term since $Q \leq \sigma$; see §6.3 hop 1.) The adversary may also guess
-the secret key $K$ with probability $t / 2^{256}$, likewise absorbed by the sponge term. By the tag uniformity
+**Proof sketch.** After the sponge→RO hop (cost $(\sigma+t)^2/2^{c+1}$), each fresh nonce yields an independent,
+uniformly random `tw_key` (injective `encode_string` encoding + RO independence; see §6.3 hop 1). The adversary may
+also guess the secret key $K$ with probability $t / 2^{256}$, absorbed by the sponge term. By the tag uniformity
 corollary (§6.7), the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$
 forgery attempts succeeds with probability $1/2^{8C}$; a union bound gives $S/2^{8C}$.
 
 > [!WARNING]
 > **Tag truncation.** When the caller truncates the tag to $T < C$ bytes, the forgery bound becomes
-> $\varepsilon_{\mathrm{kdf}} + (\sigma + t)^2 / 2^{c+1} + S / 2^{8T}$. For $T = 16$ (128-bit truncated tags),
+> $(\sigma + t)^2 / 2^{c+1} + S / 2^{8T}$. For $T = 16$ (128-bit truncated tags),
 > each forgery attempt succeeds with probability $1/2^{128}$.
 
 ### 6.5 Committing Security (CMT-4)
 
-*This property is stated for `TreeWrap-AEAD[KDF]`, but does not depend on tag verification — it applies equally to
+*This property is stated for `TreeWrap-AEAD` (§5.3), but does not depend on tag verification — it applies equally to
 the bare TreeWrap primitive (see §6.5.1).*
 
 **Game.** The adversary produces $(K, N, \mathit{AD}, M) \neq (K', N', \mathit{AD}', M')$ such that
@@ -462,28 +477,22 @@ the bare TreeWrap primitive (see §6.5.1).*
 (including keys) and performs all computation itself. Consequently, the adversary's ability to search for collisions
 is bounded by its total computational budget, not by a count of online queries.
 
-**Additional KDF assumption (CMT-4 only).** The CMT-4 bound depends on the KDF's collision resistance under
-adversary-chosen keys — a property distinct from PRF security (§6.1), which holds under a *fixed* secret key.
-Define $\varepsilon_{\mathrm{kdf\text{-}coll}}$ as the maximum probability over all adversaries running in time $t$ of
-outputting distinct $(K, N, \mathit{AD}) \neq (K', N', \mathit{AD}')$ such that
-$\mathrm{KDF}(K, N, \mathit{AD}) = \mathrm{KDF}(K', N', \mathit{AD}')$. For a KDF instantiated as a hash (e.g.,
-TurboSHAKE128) of a recoverable encoding of its inputs, collision resistance follows from the sponge's collision
-resistance: $\varepsilon_{\mathrm{kdf\text{-}coll}} \leq (\sigma + t)^2 / 2^{c+1}$.
-
 **Theorem.**
 
-$$\varepsilon_{\mathrm{cmt4}} \leq \varepsilon_{\mathrm{kdf\text{-}coll}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{(\sigma + t)^2}{2^{8C+1}}$$
+$$\varepsilon_{\mathrm{cmt4}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{(\sigma + t)^2}{2^{8C+1}}$$
 
 where $\sigma + t$ is the adversary's total Keccak-p evaluation budget (construction evaluations and direct
-primitive queries combined). For $C = 32$ (so $8C + 1 = c + 1 = 257$), the last two terms are equal and the bound
-simplifies to $\varepsilon_{\mathrm{kdf\text{-}coll}} + (\sigma + t)^2 / 2^c$.
+primitive queries combined). For $C = 32$ (so $8C + 1 = c + 1 = 257$), the two terms are equal and the bound
+simplifies to $(\sigma + t)^2 / 2^c$.
 
 **Proof sketch.** Two cases:
 
-1. **Different AEAD context** ($(K,N,\mathit{AD}) \neq (K',N',\mathit{AD}')$). The KDF produces different `tw_key`
-   values except with probability $\varepsilon_{\mathrm{kdf\text{-}coll}}$. Conditioned on distinct keys: the
-   ciphertext may coincide, but distinct (key, ciphertext) pairs produce distinct tags except with probability bounded
-   by tag collision resistance (§6.6).
+1. **Different AEAD context** ($(K,N,\mathit{AD}) \neq (K',N',\mathit{AD}')$). After the sponge→RO hop, the
+   injective `encode_string` encoding (§5.3) ensures distinct `(K, N, AD)` triples produce distinct TurboSHAKE128
+   inputs, which map to distinct random oracle inputs. In the RO world, distinct inputs produce independent
+   uniform outputs — so the KDF yields different `tw_key` values with certainty. Conditioned on distinct keys:
+   the ciphertext may coincide, but distinct (key, ciphertext) pairs produce distinct tags except with probability
+   bounded by tag collision resistance (§6.6).
 
 2. **Same context, different messages** (same $(K,N,\mathit{AD})$, so same `tw_key`, but $M \neq M'$). Encryption is a
    bijection for a fixed key (`encrypt`/`decrypt` are inverses for the same key), so $M \neq M'$ implies
@@ -515,7 +524,7 @@ pass over the data, unlike generic CMT-4 transforms applied to non-committing AE
 
 ### 6.5.1 Caller Obligations
 
-The theorems in §6.3–§6.5 are properties of the notional `TreeWrap-AEAD[KDF]` wrapper (§6.1), which internally
+The theorems in §6.3–§6.5 are properties of `TreeWrap-AEAD` (§5.3), which internally
 derives unique keys, verifies tags, and withholds plaintext on verification failure. The bare TreeWrap primitive
 (`EncryptAndMAC`/`DecryptAndMAC`) does none of these — it takes a raw key, always returns plaintext, and always
 returns the computed tag without comparing it to anything. The following table summarizes what each AEAD security
@@ -523,8 +532,8 @@ property requires of the caller, in increasing order of obligation:
 
 | Property              | Caller obligation                                                                                                                                                                                                                                                                                                                                      |
 |-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **CMT-4** (§6.5)      | None. Committing security is inherent to the construction and does not depend on tag verification. The caller must still instantiate a KDF satisfying the collision resistance assumption (§6.5).                                                                                                                                                      |
-| **IND-CPA** (§6.3)    | The caller MUST ensure that each `EncryptAndMAC` invocation uses a unique key. In the notional AEAD, uniqueness follows from the KDF's PRF security applied to a fresh nonce. Callers that manage keys directly MUST guarantee uniqueness by other means. Key reuse leaks plaintext XOR differences within the first block (§6.1).                     |
+| **CMT-4** (§6.5)      | None. Committing security is inherent to the construction and does not depend on tag verification.                                                                                                                                                                                                                                                     |
+| **IND-CPA** (§6.3)    | The caller MUST ensure that each `EncryptAndMAC` invocation uses a unique key. In `TreeWrap-AEAD` (§5.3), uniqueness follows from the injective encoding applied to a fresh nonce. Callers that manage keys directly MUST guarantee uniqueness by other means. Key reuse leaks plaintext XOR differences within the first block (§6.1).                |
 | **INT-CTXT** (§6.4)   | The caller MUST compare the returned tag against the expected value using a constant-time equality check (§6.11) and MUST reject the plaintext if the comparison fails. Without tag verification, the bare primitive provides no authenticity guarantee — any ciphertext decrypts to *some* plaintext with a valid-looking tag.                        |
 | **IND-CCA2** (§6.3.1) | The caller MUST NOT release or act on the plaintext returned by `DecryptAndMAC` before successful tag verification. The bare primitive intentionally supports release of unverified plaintext (RUP) for protocols that need it, but RUP forfeits CCA2 security: an attacker can flip ciphertext bits and observe the effect on the released plaintext. |
 
@@ -560,7 +569,7 @@ TurboSHAKE128 collide with probability bounded by the birthday term.
 
 ### 6.7 Tag PRF Security
 
-This property is stated for the **bare TreeWrap primitive** (not the notional AEAD), because calling protocols may use
+This property is stated for the **bare TreeWrap primitive** (not `TreeWrap-AEAD`), because calling protocols may use
 the tag value directly — for example, absorbing it into ongoing transcript state rather than solely verifying it for
 authentication.
 
@@ -629,12 +638,12 @@ tree hashing"), the same framing used by KangarooTwelve (RFC 9861). TreeWrap use
 chunks are processed as inner nodes producing chain values. This differs from KangarooTwelve's asymmetric topology
 (kangaroo hopping), where the first chunk's data is interleaved directly into the final node as native payload and only
 $n-1$ CVs follow. In TreeWrap, the final node is a pure chaining hop with no native payload — all $n$ chain values
-appear after the hop indicator, and `length_encode(n)` encodes the total number of CVs.
+appear after the hop indicator, and `right_encode(n)` encodes the total number of CVs.
 
 The final node input is constructed as:
 
 ```text
-final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1] ‖ length_encode(n) ‖ 0xFF 0xFF
+final_input ← 0x03 0x00 0x00 0x00 0x00 0x00 0x00 0x00 ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1] ‖ right_encode(n) ‖ 0xFF 0xFF
 ```
 
 The components of this encoding are:
@@ -647,7 +656,7 @@ The components of this encoding are:
 - **`cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`**: Chain values from all $n$ chunks, produced by independent leaf cipher
   evaluations. Unlike KangarooTwelve, the first chunk is not interleaved — all chunks are treated symmetrically.
 
-- **`length_encode(n)`**: The total number of inner-node chain values, encoded per KangarooTwelve's convention
+- **`right_encode(n)`**: The total number of inner-node chain values, encoded per KangarooTwelve's convention
   (big-endian with no leading zeros, followed by a byte giving the encoding length).
 
 - **`0xFF 0xFF`**: The Sakura tree hash terminator, signaling the end of the final node input.
@@ -656,7 +665,7 @@ This is processed by TurboSHAKE128 with domain separation byte 0x64, separating 
 KT128 hashing (0x07) and TreeWrap leaf ciphers (0x60 – 0x63).
 
 The encoding is injective: chain values are fixed-size ($C$ bytes each), the chaining hop indicator and terminator are
-fixed constants, and `length_encode` uniquely determines $n$. The number of chunks is also determined by the ciphertext
+fixed constants, and `right_encode` uniquely determines $n$. The number of chunks is also determined by the ciphertext
 length, which is assumed to be public.
 
 ### 6.11 Side Channels
@@ -757,12 +766,13 @@ evaluations. The number of leaves does not appear as a separate factor — the o
 counted in $\sigma$, and the indifferentiability theorem handles all sponge evaluations at once rather than requiring a
 per-leaf hybrid argument.
 
-**Multi-invocation security.** Multi-invocation security follows from the notional AEAD's game definitions
+**Multi-invocation security.** Multi-invocation security follows from the `TreeWrap-AEAD` game definitions
 (§6.3–§6.5), which permit multiple oracle queries under the same key. Each query uses a fresh nonce, producing an
-independent TreeWrap key via the KDF. The indifferentiability reduction bounds the entire multi-query interaction at
-once: $\sigma$ counts the total online Keccak-p calls across all queries, and the sponge indifferentiability theorem
-replaces all sponge evaluations simultaneously. Cross-query independence of TreeWrap keys is guaranteed by KDF PRF
-security ($\varepsilon_{\mathrm{kdf}}$).
+independent TreeWrap key via the KDF (§5.3). The indifferentiability reduction bounds the entire multi-query
+interaction at once: $\sigma$ counts the total online Keccak-p calls across all queries (including KDF evaluations),
+and the sponge indifferentiability theorem replaces all sponge evaluations simultaneously. Cross-query independence
+of TreeWrap keys is structural: the injective `encode_string` encoding ensures distinct `(K, N, AD)` triples produce
+distinct TurboSHAKE128 inputs (domain byte `0x65`), which yield independent uniform outputs in the RO world.
 
 **Multi-user security.** In the multi-user setting with $M$ users, each with an independent key, the sponge
 indifferentiability term scales naturally with the total data complexity: $\sigma$ counts all online Keccak-p calls
@@ -773,8 +783,8 @@ the sponge indifferentiability term at $\sigma + t \leq 2^{128}$.
 
 ## 7. Comparison with Traditional AEAD
 
-TreeWrap differs from traditional AEAD in several respects. This document describes a notional AEAD wrapper (
-TreeWrap-AEAD[KDF], §6.1) for security analysis purposes, but the core primitive remains a bare
+TreeWrap differs from traditional AEAD in several respects. This document defines a concrete AEAD construction
+(TreeWrap-AEAD, §5.3) for security analysis purposes, but the core primitive remains a bare
 `EncryptAndMAC`/`DecryptAndMAC` interface.
 
 **No internal tag verification.** Traditional AEAD schemes (AES-GCM, ChaCha20-Poly1305, etc.) perform tag comparison
@@ -783,8 +793,8 @@ authentication. TreeWrap's `DecryptAndMAC` always returns both plaintext and tag
 This supports protocol frameworks that need the tag for transcript state advancement regardless of verification outcome.
 
 **Nonce-free bare primitive.** The bare TreeWrap primitive takes only a key and plaintext. It does not accept a nonce or
-associated data. Nonce handling is the KDF's responsibility: the notional AEAD (§6.1) accepts nonces, but they are
-consumed by the KDF to derive a unique TreeWrap key, not passed to TreeWrap itself. The key MUST be pseudorandom
+associated data. Nonce handling is the KDF's responsibility: `TreeWrap-AEAD` (§5.3) accepts nonces, but they are
+consumed by the concrete TurboSHAKE128-based KDF to derive a unique TreeWrap key, not passed to TreeWrap itself. The key MUST be pseudorandom
 (indistinguishable from uniform) and unique per invocation (see §5.1).
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs — they prove authenticity but are not
