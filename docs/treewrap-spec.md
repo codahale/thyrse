@@ -397,7 +397,8 @@ simplifies to $\varepsilon_{\mathrm{kdf\text{-}coll}} + (\sigma + t)^2 / 2^c$.
    $\mathit{CT} \neq \mathit{CT}'$. This contradicts the equal-ciphertext requirement.
 
 In Case 1, after the sponge→RO hop (cost $(\sigma + t)^2 / 2^{c+1}$), distinct (key, ciphertext) pairs produce
-independent, uniformly random tags (by the tag collision resistance argument in §6.6). Since CMT-4 is a non-oracle
+tags that are pseudorandom and pairwise independent under the PRF reduction (by the tag collision resistance
+argument in §6.6). Since CMT-4 is a non-oracle
 game, the adversary can evaluate at most $\sigma + t$ distinct (key, ciphertext) pairs (each evaluation costs at
 least one Keccak-p call). The collision probability among these evaluations is the standard birthday bound on the
 $8C = 256$-bit tag output: $(\sigma + t)^2 / 2^{8C+1}$.
@@ -425,8 +426,8 @@ Two components:
 
 - **Sponge-vs-RO**: $(\sigma + t)^2 / 2^{c+1}$ — the cost of replacing all sponge evaluations with random oracle
   evaluations via sponge indifferentiability.
-- **RO-world birthday**: $Q^2 / 2^{8C+1}$ — the birthday collision probability among $Q$ independent $8C$-bit random
-  oracle outputs. For $C = 32$, this is $Q^2 / 2^{257}$.
+- **RO-world birthday**: $Q^2 / 2^{8C+1}$ — the birthday collision probability among $Q$ pseudorandom $8C$-bit
+  tag values (each a PRF output on a distinct input). For $C = 32$, this is $Q^2 / 2^{257}$.
 
 The RO-world term is negligible for practical $Q$.
 Simplified: $\varepsilon_{\mathrm{coll}} \leq (\sigma + t)^2 / 2^{c+1}$.
@@ -449,14 +450,14 @@ string.
 $$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{8C}}$$
 
 The argument follows from the monolithic sponge indifferentiability reduction (§6.12). After replacing all sponge
-evaluations with random oracle evaluations, each leaf's chain value is an independent random oracle output (distinct
-inputs due to leaf indices). The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$
-where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values (or just the single leaf output
-squeezed with domain byte `0x61` if $n=1$). Domain byte `0x64` separates the tag accumulation from the leaf ciphers
-(`0x60` – `0x63`), so the tag evaluation is an independent random oracle call on a pseudorandom input, producing a
-pseudorandom output. The $t / 2^{8C}$ term (equivalently $t / 2^{256}$, since $8C = 256$) accounts for the
-adversary's probability of guessing the secret key by offline evaluation of the random oracle: each of $t$ offline
-permutation calls hits the correct 256-bit key prefix with probability $1 / 2^{256}$.
+evaluations with random oracle evaluations, each leaf defines a keyed PRF $F_K(i, C_i)$ with the secret key as a
+prefix (§6.12, Step 2). Distinct leaf indices produce distinct PRF inputs, so for $n > 1$ all chain values are
+simultaneously pseudorandom. The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$
+where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values (or just the single leaf
+output squeezed with domain byte `0x61` if $n=1$). Domain byte `0x64` separates the tag accumulation from the leaf
+ciphers (`0x60` – `0x63`), so the tag is a PRF composition: a keyed function applied to pseudorandom input, which
+remains pseudorandom. The $t / 2^{256}$ term accounts for key-guessing: each of $t$ offline permutation calls hits
+the correct 256-bit key prefix with probability $1 / 2^{256}$.
 
 Protocols that use the tag as a contribution to ongoing state (rather than solely for authentication) require this
 stronger property.
@@ -591,11 +592,11 @@ evaluations simultaneously with random oracle evaluations in a single reduction.
 computes $\mathrm{cv}[i] = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$ where $\mathcal{O}$ is the random oracle
 and $K$ is the secret key. Because $K$ is a 256-bit secret prefix unknown to the adversary, each leaf defines a
 keyed PRF: $F_K(i, C_i) = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$. Distinct leaf indices produce distinct
-oracle inputs (and thus independent outputs), so for $n > 1$ all $n$ chain values are simultaneously pseudorandom.
-The tag is then $G_K(\mathit{CT}) = \mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where
-$\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64` separates
-tag accumulation from leaf evaluations (`0x60`–`0x63`), so the tag is an independent random oracle call on
-pseudorandom input — a PRF composition that remains pseudorandom. For $n = 1$, the single leaf directly outputs the
+oracle inputs, so for $n > 1$ all $n$ chain values are simultaneously pseudorandom (each is a PRF output on a
+distinct input). The tag is then $G_K(\mathit{CT}) = \mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$
+where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64`
+separates tag accumulation from leaf evaluations (`0x60`–`0x63`), so the tag is a PRF composition: a keyed function
+applied to pseudorandom input, which remains pseudorandom. For $n = 1$, the single leaf directly outputs the
 tag via domain byte `0x61`, which is again a PRF of the ciphertext under the secret key.
 
 The advantage of this reduction is bounded by:
