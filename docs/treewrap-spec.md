@@ -207,10 +207,10 @@ derivation.
 tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)
 ```
 
-The `encode_string` encoding (§5, NIST SP 800-185) makes the concatenation injective: each field is prefixed
-with its `left_encode`d length, so no `(K, N, AD)` triple can produce the same TurboSHAKE128 input as a
-different triple.
-Domain byte `0x65` separates key derivation from all other TreeWrap uses of TurboSHAKE128 (`0x60`–`0x64`).
+The `encode_string` encoding (§5, NIST SP 800-185) makes the concatenation injective: each field is prefixed with its
+`left_encode`d bit-length (`left_encode(8*len(x))`), so no `(K, N, AD)` triple can produce the same TurboSHAKE128 input
+as a different triple. Domain byte `0x65` separates key derivation from all other TreeWrap uses of TurboSHAKE128
+(`0x60`–`0x64`).
 
 ```python
 import hmac
@@ -588,9 +588,9 @@ $$\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_i
 where:
 
 - **KDF term.** $|\mathit{kdf\_input}|$ is the byte length of `encode_string(K) ‖ encode_string(N) ‖ encode_string(AD)`.
-  Each `encode_string` contributes `left_encode(|x|)` (1–2 bytes for practical lengths) plus the field itself. For a
-  32-byte key, 12-byte nonce, and empty AD, $|\mathit{kdf\_input}| = (2+32) + (2+12) + (2+0) = 50$ bytes, giving
-  $\lfloor 50 / 168 \rfloor + 1 = 1$ Keccak-p call.
+  Each `encode_string` contributes `left_encode(8|x|)` (2–3 bytes for practical lengths) plus the field itself. For a
+  32-byte key, 12-byte nonce, and empty AD, $|\mathit{kdf\_input}| = (3+32) + (2+12) + (2+0) = 51$ bytes, giving
+  $\lfloor 51 / 168 \rfloor + 1 = 1$ Keccak-p call.
   (The `+1` accounts for TurboSHAKE's pad+permute step even when the absorb phase ends exactly on a rate boundary.)
 - **Leaf term.** Each leaf costs $1$ (init `pad_permute`) $+$ $\max(1, \lceil \ell_i / (R-1) \rceil)$ (ciphertext
   block permutations and the final squeeze — at least 1 even for empty chunks). For a full $B = 8192$-byte chunk:
@@ -702,8 +702,8 @@ def left_encode(x: int) -> bytes:
     return bytes([n]) + x.to_bytes(n, "big")
 
 def encode_string(x: bytes) -> bytes:
-    """left_encode(len(x)) ‖ x."""
-    return left_encode(len(x)) + x
+    """SP 800-185: left_encode(len(x) * 8) ‖ x."""
+    return left_encode(len(x) * 8) + x
 ```
 
 ## Appendix C. Deployment Budgeting Across TreeWrap, TurboSHAKE, and KangarooTwelve (Non-Normative)
