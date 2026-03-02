@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "bare": {
+    "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "vectors": [
+      {
+        "id": "9.1",
+        "title": "Empty Plaintext (MAC-only, n = 1)",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 0
+        },
+        "mutations": {},
+        "expected": {
+          "tag_hex": "668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d",
+          "ct_hex": ""
+        }
+      },
+      {
+        "id": "9.2",
+        "title": "One-Byte Plaintext (n = 1)",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 1
+        },
+        "mutations": {
+          "flip_first_bit": true
+        },
+        "expected": {
+          "tag_hex": "c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35",
+          "ct_hex": "f1",
+          "flip_tag_hex": "8e419b1ad3363b42ebdf788c914c94e826a0d4864b6eb828c33ac460a60f7cee"
+        }
+      },
+      {
+        "id": "9.3",
+        "title": "B-Byte Plaintext (exactly one chunk, n = 1)",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 8192
+        },
+        "mutations": {
+          "flip_first_bit": true
+        },
+        "expected": {
+          "tag_hex": "16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2",
+          "ct_prefix32_hex": "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163",
+          "flip_tag_hex": "252c145ed845841ee9156ed46febaf03ad213d727256c761a36db0bf10901ea8"
+        }
+      },
+      {
+        "id": "9.4",
+        "title": "B+1-Byte Plaintext (two chunks, minimal second, n = 2)",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 8193
+        },
+        "mutations": {
+          "flip_first_bit": true
+        },
+        "expected": {
+          "tag_hex": "334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1",
+          "ct_prefix32_hex": "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163",
+          "flip_tag_hex": "76398352ca9c7594808135f297f085bda06bb1ccd0f328246e22cedc7ecfdf65"
+        }
+      },
+      {
+        "id": "9.5",
+        "title": "4B-Byte Plaintext (four full chunks, n = 4)",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 32768
+        },
+        "mutations": {
+          "flip_first_bit": true,
+          "swap_chunk_0_1": true
+        },
+        "expected": {
+          "tag_hex": "0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0",
+          "ct_prefix32_hex": "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163",
+          "flip_tag_hex": "579b5003e457831607da1ac382aea6cda97b0dcd2fd8fbbbe0c5124b0ce36260",
+          "swap_tag_hex": "e1d0c423874fec642ad161b2700209c74a74b41451cc70f8cc1c6b894cd0aa98"
+        }
+      }
+    ]
+  },
+  "aead": {
+    "vectors": [
+      {
+        "id": "9.7.1",
+        "title": "Empty Message",
+        "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "nonce_hex": "000102030405060708090a0b",
+        "ad_hex": "",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 0
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true
+        },
+        "expected": {
+          "ct_tag_hex": "25b1c33a42d3dd8546c0de7df2edc6d3fa1d39b4e1ee9696b6a046c6f853d54e"
+        }
+      },
+      {
+        "id": "9.7.2",
+        "title": "33-Byte Message With 5-Byte AD",
+        "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "nonce_hex": "a0a1a2a3a4a5a6a7a8a9aaab",
+        "ad_hex": "1011121314",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 33
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true
+        },
+        "expected": {
+          "ct_tag_hex": "d88f1d9d2b6f31316427abef58ef07ef047d4e9d3faec99c677a5b7d895b682fe8b98d90320dd7d3773160424f8b1a7aa4522038c5871e62689cdb90ef8820aa64"
+        }
+      },
+      {
+        "id": "9.7.3",
+        "title": "Multi-Chunk Message (8193 Bytes)",
+        "key_hex": "42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
+        "nonce_hex": "c0c1c2c3c4c5c6c7c8c9cacb",
+        "ad_hex": "000102030405060708090a0b0c0d0e0f10",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 8193
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true
+        },
+        "expected": {
+          "ct_prefix32_hex": "f5774bff15f14fd3b08bc8e48c63cad9d84b348b1c3097551db20dce21b0b36d",
+          "tag_hex": "ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f"
+        }
+      }
+    ]
+  }
+}

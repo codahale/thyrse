@@ -499,63 +499,63 @@ corresponding conversion of the §6 bound under the assumptions above.
 
 ## 9. Test Vectors
 
-All vectors use the following inputs:
+All vectors in this section are generated from `docs/treewrap-test-vectors.json`.
+
+All bare TreeWrap vectors use:
 
 - **Key:** 32 bytes `00 01 02 ... 1f`
 - **Plaintext:** `len` bytes `00 01 02 ... (len−1) mod 256`
 
 Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. All values are hexadecimal.
 
-### 9.1 Empty Plaintext (MAC-only, $n = 1$)
+### 9.1 Empty Plaintext (MAC-only, n = 1)
 
-| Field | Value                                                              |
-|-------|--------------------------------------------------------------------|
-| len   | 0                                                                  |
-| ct    | (empty)                                                            |
-| tag   | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
+| Field | Value |
+|-------|-------|
+| len | 0 |
+| ct | (empty) |
+| tag | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
 
-`DecryptAndMAC` with the same key and empty ciphertext produces the same tag.
+### 9.2 One-Byte Plaintext (n = 1)
 
-### 9.2 One-Byte Plaintext ($n = 1$)
-
-| Field | Value                                                              |
-|-------|--------------------------------------------------------------------|
-| len   | 1                                                                  |
-| ct    | `f1`                                                               |
-| tag   | `c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35` |
+| Field | Value |
+|-------|-------|
+| len | 1 |
+| ct | `f1` |
+| tag | `c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35` |
 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
 `8e419b1ad3363b42ebdf788c914c94e826a0d4864b6eb828c33ac460a60f7cee`.
 
-### 9.3 B-Byte Plaintext (exactly one chunk, $n = 1$)
+### 9.3 B-Byte Plaintext (exactly one chunk, n = 1)
 
-| Field   | Value                                                              |
-|---------|--------------------------------------------------------------------|
-| len     | 8192                                                               |
+| Field | Value |
+|-------|-------|
+| len | 8192 |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2` |
+| tag | `16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2` |
 
 Flipping bit 0 of `ct[0]` yields tag
 `252c145ed845841ee9156ed46febaf03ad213d727256c761a36db0bf10901ea8`.
 
-### 9.4 B+1-Byte Plaintext (two chunks, minimal second, $n = 2$)
+### 9.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
 
-| Field   | Value                                                              |
-|---------|--------------------------------------------------------------------|
-| len     | 8193                                                               |
+| Field | Value |
+|-------|-------|
+| len | 8193 |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1` |
+| tag | `334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1` |
 
 Flipping bit 0 of `ct[0]` yields tag
 `76398352ca9c7594808135f297f085bda06bb1ccd0f328246e22cedc7ecfdf65`.
 
-### 9.5 4B-Byte Plaintext (four full chunks, $n = 4$)
+### 9.5 4B-Byte Plaintext (four full chunks, n = 4)
 
-| Field   | Value                                                              |
-|---------|--------------------------------------------------------------------|
-| len     | 32768                                                              |
+| Field | Value |
+|-------|-------|
+| len | 32768 |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0` |
+| tag | `0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0` |
 
 Flipping bit 0 of `ct[0]` yields tag
 `579b5003e457831607da1ac382aea6cda97b0dcd2fd8fbbbe0c5124b0ce36260`.
@@ -565,7 +565,52 @@ Swapping chunks 0 and 1 (bytes 0–8,191 and 8,192–16,383) yields tag
 
 ### 9.6 Round-Trip Consistency
 
-For all vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as `EncryptAndMAC`.
+For all bare vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as `EncryptAndMAC`.
+
+### 9.7 TreeWrap-AEAD Vectors
+
+These vectors validate the `treewrap_aead_encrypt` / `treewrap_aead_decrypt` wrapper in §5.2, including SP 800-185
+`encode_string` key derivation.
+
+#### 9.7.1 Empty Message
+
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `00 01 02 ... 1f` |
+| N | 12 bytes `00 01 02 ... 0b` |
+| AD | (empty) |
+| M len | 0 |
+| ct‖tag | `25b1c33a42d3dd8546c0de7df2edc6d3fa1d39b4e1ee9696b6a046c6f853d54e` |
+
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+
+#### 9.7.2 33-Byte Message With 5-Byte AD
+
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `00 01 02 ... 1f` |
+| N | 12 bytes `a0 a1 a2 ... ab` |
+| AD | 10 11 12 ... 14 |
+| M len | 33 (`00 01 02 ... mod 256`) |
+| ct‖tag | `d88f1d9d2b6f31316427abef58ef07ef047d4e9d3faec99c677a5b7d895b682fe8b98d90320dd7d3773160424f8b1a7aa4522038c5871e62689cdb90ef8820aa64` |
+
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+
+#### 9.7.3 Multi-Chunk Message (8193 Bytes)
+
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `42 43 44 ... 61` |
+| N | 12 bytes `c0 c1 c2 ... cb` |
+| AD | 00 01 02 ... 10 |
+| M len | 8193 (`00 01 02 ... mod 256`) |
+| ct[:32] | `f5774bff15f14fd3b08bc8e48c63cad9d84b348b1c3097551db20dce21b0b36d` |
+| tag | `ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f` |
+
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 ## Appendix A. Exact Per-Query σ Formula
 
