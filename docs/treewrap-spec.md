@@ -148,7 +148,7 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 *Outputs:*
 
 - `ciphertext`: Same length as `plaintext`. Ciphertext length reveals plaintext length; the chunking structure
-  ($n$, $\ell_0, \ldots, \ell_{n-1}$) is public.
+  ($n$, $\ell_0, \ldots, \ell_{n-1}$) is public. Protocols requiring length hiding must pad before calling TreeWrap.
 - `tag`: A τ-byte MAC tag.
 
 *Procedure:*
