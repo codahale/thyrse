@@ -10,8 +10,8 @@
 ## 1. Introduction
 
 TreeWrap is a deterministic stream cipher with a MAC tag, using a Sakura flat-tree topology to enable SIMD acceleration
-(NEON, AVX2, AVX-512) on large inputs. Each leaf uses the overwrite duplex technique over a standard Keccak sponge, and
-leaf chain values are accumulated into a single MAC tag via TurboSHAKE128.
+(NEON, AVX2, AVX-512) on large inputs. Each leaf encrypts by XORing plaintext with the Keccak sponge state and writing
+the ciphertext back into the rate, and leaf chain values are accumulated into a single MAC tag via TurboSHAKE128.
 
 TreeWrap is not an AEAD scheme. It does not perform tag verification internally. Instead, it exposes two
 operations—**`EncryptAndMAC`** and **`DecryptAndMAC`**—which both return the computed tag to the caller. The caller is
@@ -37,8 +37,8 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 
 ## 4. Leaf Cipher
 
-A leaf cipher uses the overwrite duplex technique over a standard Keccak sponge, with the same permutation and
-rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap:
+A leaf cipher operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
+TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap:
 
 | Byte   | Usage                        | Procedure(s)             |
 |--------|------------------------------|--------------------------|
@@ -50,16 +50,16 @@ rate/capacity parameters as TurboSHAKE128. It uses five domain separation bytes,
 
 > [!WARNING]
 > Bytes `0x60`–`0x64` are reserved for TreeWrap. Other callers of TurboSHAKE128 in the same system MUST NOT use
-> these domain bytes. This is a security precondition, not merely a recommendation: after the overwrite-to-XOR
-> rewriting (§6.12), a leaf cipher evaluation with domain byte `0x63` is structurally identical to a
+> these domain bytes. This is a security precondition, not merely a recommendation: after the ciphertext-write
+> to XOR rewriting (§6.12), a leaf cipher evaluation with domain byte `0x63` is structurally identical to a
 > `TurboSHAKE128(M, 0x63, ℓ)` call. If another component in the same system uses any of these domain bytes, the
 > distinct-input guarantee that the security reduction (§6.12) relies on is broken, and the security theorems in
 > §6.3–§6.7 no longer hold.
 
-The overwrite duplex technique differs from the traditional XOR-absorb duplex (SpongeWrap) in that the `encrypt`
-operation overwrites the rate with ciphertext rather than XORing plaintext into it. This has two consequences: first, it
-enables a clean security reduction to the standard Keccak sponge via a per-byte algebraic identity (§6.12, Step 1);
-second, for full-rate blocks, overwrite is faster than XOR on most architectures (write-only vs. read-XOR-write).
+Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
+into the rate rather than XORing plaintext into it. This enables a clean security reduction to the standard Keccak
+sponge via a per-byte algebraic identity (§6.12, Step 1), and for full-rate blocks, a write-only state update is faster
+than read-XOR-write on most architectures.
 
 A leaf cipher consists of a 200-byte state `S`, initialized to all zeros, and a rate index `pos`, initialized to zero.
 
@@ -251,9 +251,9 @@ authenticity (§6.4). Committing security (§6.5) requires an additional collisi
 stated in that section.
 
 > [!WARNING]
-> **Key reuse damage.** If the KDF produces the same `tw_key` for two different plaintexts $M \neq M'$, the overwrite
-> duplex leaks plaintext XOR differences within the first block. At each byte position $j$ within a block, the
-> keystream byte $S[j]$ is the same for both encryptions because the overwrite at positions $0, \ldots, j-1$ does not
+> **Key reuse damage.** If the KDF produces the same `tw_key` for two different plaintexts $M \neq M'$, the leaf
+> cipher leaks plaintext XOR differences within the first block. At each byte position $j$ within a block, the
+> keystream byte $S[j]$ is the same for both encryptions because the ciphertext written at positions $0, \ldots, j-1$ does not
 > affect the state at position $j$ until the next permutation. Therefore $\mathit{CT}_j \oplus \mathit{CT}'_j = P_j
 > \oplus P'_j$ for all positions within the first block where the plaintexts differ. After `pad_permute` at the block
 > boundary, the permutation mixes the entire state, and the two state evolutions diverge — no further XOR relationship
@@ -365,7 +365,7 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    least one Keccak-p call, so $Q \leq \sigma \leq \sigma + t$, giving
    $Q^2 / 2^{257} \leq (\sigma + t)^2 / 2^{c+1}$. It does not appear in the final bound as a separate term.
 
-2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the overwrite-to-XOR equivalence (§6.12, Step 1), each
+2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the ciphertext-write to XOR equivalence (§6.12, Step 1), each
    leaf's interactive computation is expressible as a single standard sponge evaluation on an injective encoding
    of its inputs. The sponge indifferentiability theorem then replaces all such evaluations — across all leaves
    and the tag accumulation — with random oracle evaluations in a single reduction.
@@ -485,7 +485,7 @@ simplifies to $\varepsilon_{\mathrm{kdf\text{-}coll}} + (\sigma + t)^2 / 2^c$.
    by tag collision resistance (§6.6).
 
 2. **Same context, different messages** (same $(K,N,\mathit{AD})$, so same `tw_key`, but $M \neq M'$). Encryption is a
-   bijection for a fixed key (the overwrite duplex `encrypt`/`decrypt` operations are inverses), so $M \neq M'$ implies
+   bijection for a fixed key (`encrypt`/`decrypt` are inverses for the same key), so $M \neq M'$ implies
    $\mathit{CT} \neq \mathit{CT}'$. This contradicts the equal-ciphertext requirement.
 
 In Case 1, after the sponge→RO hop (cost $(\sigma + t)^2 / 2^{c+1}$), distinct (key, ciphertext) pairs produce
@@ -673,27 +673,18 @@ values. The chunk index is not secret and does not require side-channel protecti
 
 ### 6.12 Concrete Security Reduction
 
-Each leaf cipher is an overwrite duplex operating on the Keccak-p[1600,12] permutation with capacity $c = 256$ bits. The
-security argument proceeds in two steps: a syntactic rewriting that is information-theoretic, followed by a single
-application of the sponge indifferentiability theorem.
+Each leaf cipher operates on the Keccak-p[1600,12] permutation with capacity $c = 256$ bits. During encryption, each
+ciphertext byte is written back into the sponge rate. The security argument proceeds in two steps: a syntactic
+rewriting that is information-theoretic, followed by a single application of the sponge indifferentiability theorem.
 
-**Step 1: Overwrite-to-XOR equivalence.** Each leaf cipher uses the overwrite duplex: during encryption, each
-ciphertext byte $\mathit{CT}_j = P_j \oplus S[\mathit{pos}]$ is written back into the state at position $\mathit{pos}$.
-The overwrite-to-XOR equivalence is a per-byte identity: overwriting $S[j]$ with $\mathit{CT}_j$ when $S[j]$ currently
-holds $Z[j]$ (the permutation output) is equivalent to XORing $S[j]$ with $\mathit{CT}_j \oplus Z[j]$. Since
-$\mathit{CT}_j = P_j \oplus Z[j]$, the equivalent XOR input is $\mathit{CT}_j \oplus Z[j] = P_j$ — the plaintext byte.
-This is a per-position algebraic identity with no computational cost.
+**Step 1: Ciphertext-write to XOR equivalence.** During encryption, each ciphertext byte
+$\mathit{CT}_j = P_j \oplus S[\mathit{pos}]$ is written into the state at position $\mathit{pos}$. Writing $\mathit{CT}_j$
+into $S[j]$ when $S[j]$ currently holds $Z[j]$ (the permutation output) is equivalent to XORing $S[j]$ with
+$\mathit{CT}_j \oplus Z[j]$. Since $\mathit{CT}_j = P_j \oplus Z[j]$, the equivalent XOR input is
+$\mathit{CT}_j \oplus Z[j] = P_j$ — the plaintext byte. This is a per-position algebraic identity with no
+computational cost.
 
-> [!NOTE]
-> TreeWrap is not an instance of the OD[f, ρ, trailenc] construction defined by Daemen et al. (ePrint 2024/1618),
-> which uses a fixed block length ρ = (1600 − c − 64)/8 = 160 bytes for TurboSHAKE128 and reserves 8 bytes for
-> its trailer encoding function. TreeWrap processes $R - 1 = 167$ payload bytes per block and applies standard
-> TurboSHAKE padding (`pad10*1` with a domain byte) at every permutation boundary. The overwrite-to-XOR equivalence
-> is established directly from the per-byte identity above, without requiring OD's `pad10*` short-block mechanism
-> or its specific trailer encoding. The security argument proceeds identically: after rewriting, each leaf is a
-> standard $\mathrm{Keccak}[256]$ sponge evaluation, and the sponge indifferentiability theorem applies.
-
-After rewriting each overwrite as the equivalent XOR, the remaining operations are: (a) XOR absorption of key/index
+After rewriting each ciphertext write as the equivalent XOR, the remaining operations are: (a) XOR absorption of key/index
 material during `init` (already standard sponge absorption), and (b) `pad_permute` calls that XOR a domain byte at
 position $\mathit{pos}$ and `0x80` at position $R - 1$ — exactly TurboSHAKE's `pad10*1` padding. The capacity portion
 (bytes $R$ through 199) is never directly read or written. Therefore, after the rewriting, each leaf's full computation
@@ -804,9 +795,8 @@ string (§6.7). This stronger property supports protocols that absorb the tag in
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
 - Daemen, J., Hoffert, S., Mella, S., Van Assche, G., and Van Keer, R. "Shaking up authenticated encryption." IACR
-  ePrint 2024/1618. Defines the overwrite duplex (OD) construction and proves its security equivalence to (Turbo)SHAKE.
-  TreeWrap's security reduction uses the keyed sponge PRF bound (Theorem 4) and the flat sponge claim; the OD
-  construction itself is not directly instantiated (see §6.12, Step 1 note).
+  ePrint 2024/1618. TreeWrap's security reduction uses the keyed sponge PRF bound (Theorem 4) and the flat sponge
+  claim from this work.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
