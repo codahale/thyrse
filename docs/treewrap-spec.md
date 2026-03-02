@@ -837,8 +837,10 @@ differ by index; the tag evaluation is separated by domain byte.
 
 **Step 2: Monolithic indifferentiability reduction.** The sponge indifferentiability theorem replaces all sponge
 evaluations simultaneously with random oracle evaluations in a single reduction. After this replacement, each leaf
-computes $\mathrm{cv}[i] = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| P_i)$ where $\mathcal{O}$ is the random oracle
-and $K$ is the secret key. Because $K$ is a 256-bit secret prefix unknown to the adversary, each leaf defines a
+computes $\mathrm{cv}[i] = \mathcal{O}(\mathrm{sponge\_input}(K, i, P_i, d_f))$ where $\mathcal{O}$ is the random oracle
+(we abbreviate this as $\mathcal{O}(K \| [i]_{\mathrm{64LE}} \| P_i)$ below, since the full $\mathrm{sponge\_input}$
+from Step 1 is an injective function of $(K, i, P_i)$). Because $K$ is a 256-bit secret prefix unknown to the
+adversary (occupying the first $C$ bytes of every $\mathrm{sponge\_input}$), each leaf defines a
 keyed PRF: $F_K(i, P_i) = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| P_i)$. Distinct leaf indices produce distinct
 oracle inputs, so for $n > 1$ all $n$ chain values are simultaneously pseudorandom (each is a PRF output on a
 distinct input). For $n = 1$, the single leaf directly outputs the tag via domain byte `0x61`, which is a direct PRF
