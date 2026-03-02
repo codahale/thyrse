@@ -27,7 +27,8 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 |--------|-------------------|-------------------------------------------------------|
 | f      | Keccak-p[1600,12] | Underlying permutation (1600-bit state, 12 rounds)    |
 | R      | 168               | Sponge rate (bytes); data rate is R−1 = 167 per block |
-| C      | 32                | Capacity (bytes); key, chain value, and tag size      |
+| C      | 32                | Capacity (bytes); key and chain value size            |
+| τ      | 32                | Tag size (bytes); equal to C for this instantiation   |
 | B      | 8192              | Chunk size (bytes), matching KangarooTwelve           |
 
 ## 3. Dependencies
@@ -103,7 +104,7 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 
 - **`single_node_tag() → tag`:**
   - Call `pad_permute(0x61)`.
-  - Output `S[0..C-1]` (C bytes starting at position 0).
+  - Output `S[0..τ-1]` (τ bytes starting at position 0).
 
 - **`chain_value() → cv`:**
   - Call `pad_permute(0x63)`.
@@ -112,7 +113,7 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 > [!NOTE]
 > Both `single_node_tag()` and `chain_value()` begin with a `pad_permute` call to ensure all encrypted data is fully
 > mixed and domain-separated from intermediate permutations before output is derived. The output fits in a single
-> squeeze block because $C = 32 \ll R = 168$. This is a parameter constraint: $C < R$ must hold.
+> squeeze block because $\tau = C = 32 \ll R = 168$. This is a parameter constraint: $\max(\tau, C) < R$ must hold.
 
 ## 5. TreeWrap
 
@@ -142,7 +143,7 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 
 - `ciphertext`: Same length as `plaintext`. Ciphertext length reveals plaintext length; the chunking structure
   ($n$, $\ell_0, \ldots, \ell_{n-1}$) is public.
-- `tag`: A C-byte MAC tag.
+- `tag`: A τ-byte MAC tag.
 
 *Procedure:*
 
@@ -169,7 +170,7 @@ If `n > 1`:
   - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
   - `final_input ← final_input ‖ right_encode(n)`
   - `final_input ← final_input ‖ 0xFF 0xFF`
-  - `tag ← TurboSHAKE128(final_input, 0x64, C)`
+  - `tag ← TurboSHAKE128(final_input, 0x64, τ)`
 
 Return `(ciphertext[0] ‖ ... ‖ ciphertext[n−1], tag)`.
 
@@ -188,7 +189,7 @@ available.
 *Outputs:*
 
 - `plaintext`: Same length as `ciphertext`.
-- `tag`: A C-byte MAC tag.
+- `tag`: A τ-byte MAC tag.
 
 *Procedure:*
 
@@ -213,7 +214,7 @@ If `n > 1`:
   - `final_input ← final_input ‖ cv[0] ‖ cv[1] ‖ ... ‖ cv[n−1]`
   - `final_input ← final_input ‖ right_encode(n)`
   - `final_input ← final_input ‖ 0xFF 0xFF`
-  - `tag ← TurboSHAKE128(final_input, 0x64, C)`
+  - `tag ← TurboSHAKE128(final_input, 0x64, τ)`
 
 Return `(plaintext[0] ‖ ... ‖ plaintext[n−1], tag)`.
 
@@ -246,7 +247,7 @@ Domain byte `0x65` separates key derivation from all other TreeWrap uses of Turb
 
 **`TreeWrap-AEAD.Decrypt(K, N, AD, C) → M or ⊥`:**
 
-1. Split `C` into `CT` (first `|C| − C` bytes) and `tag_expected` (last `C` bytes).
+1. Split `C` into `CT` (first `|C| − τ` bytes) and `tag_expected` (last `τ` bytes).
 2. `tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)`
 3. `(M, tag) ← TreeWrap.DecryptAndMAC(tw_key, CT)`
 4. If `tag = tag_expected`, return `M`; otherwise return `⊥`.
@@ -335,7 +336,8 @@ adversary cannot evaluate the keyed PRF without querying the random oracle on an
   $\sigma \geq 2Q$ for $Q$ queries — every query contributes at least 3 permutation calls.
 - $t$: adversary's total offline Keccak-p calls.
 - $c = 256$: capacity in bits.
-- $C = 32$: capacity in bytes; key, chain value, and tag size.
+- $C = 32$: capacity in bytes; key and chain value size.
+- $\tau = 32$: tag size in bytes ($\tau = C$ for this instantiation).
 - $S$: number of forgery attempts (§6.4) or verification queries.
 - $Q$: number of distinct (key, ciphertext) pairs (§6.6) or encryption queries.
 
@@ -363,10 +365,10 @@ comfortably accommodates any realistic workload. The additional terms in each th
 are negligible relative to the sponge term at all practical budgets.
 
 **Capacity vs. tag length.** The dominant term $(\sigma + t)^2 / 2^{c+1}$ caps overall security at $c/2 \approx 128$
-bits of work for constant advantage, regardless of the tag length. The full 256-bit ($C = 32$) tag provides margin
-against birthday-type terms (tag collisions at $Q^2 / 2^{257}$) and key-guessing
+bits of work for constant advantage, regardless of the tag length. The full 256-bit ($\tau = 32$) tag provides margin
+against birthday-type terms (tag collisions at $Q^2 / 2^{8\tau+1}$) and key-guessing
 ($t / 2^{256}$), but does not raise the sponge ceiling. Readers should not infer "256-bit MAC security" from the
-32-byte tag — the security level is determined by the capacity, not the tag length.
+$\tau$-byte tag — the security level is determined by the capacity, not the tag length.
 
 ### 6.3 Confidentiality (IND-CPA)
 
@@ -417,7 +419,7 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
 
    For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
    output under the secret key on a distinct domain. For $n > 1$, the tag is
-   $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ — an unkeyed random oracle evaluated on a
+   $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ — an unkeyed random oracle evaluated on a
    deterministic, injective encoding of the chain values. We argue tag pseudorandomness via a bad-event bound.
    Define event $B$: the adversary queries the random oracle on $\mathit{final\_input}$. Since
    $\mathit{final\_input}$ contains $n$ chain values, each a pseudorandom $8C$-bit PRF output under the secret
@@ -451,9 +453,9 @@ key and ciphertext, and (2) encryption and tagging use independent keying materi
 
 In the composition mapping: the MAC key is `tw_key`, the MAC input is the full ciphertext (including chunk
 structure), and `N`/`AD` are bound to `tw_key` via the KDF (§5.3). The `Decrypt` oracle enables $S$ tag-guess
-tests; by the tag uniformity corollary (§6.7), each succeeds with probability $1/2^{8C}$.
+tests; by the tag uniformity corollary (§6.7), each succeeds with probability $1/2^{8\tau}$.
 
-$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
+$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8\tau}}$$
 
 ### 6.4 Authenticity (INT-CTXT)
 
@@ -465,16 +467,16 @@ producing $(N, \mathit{AD}, C)$ such that `Decrypt(K, N, AD, C)` returns `M ≠ 
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
+$$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8\tau}}$$
 
 **Proof sketch.** After the sponge→RO hop (cost $(\sigma+t)^2/2^{c+1}$), each fresh nonce yields an independent,
 uniformly random `tw_key` (injective `encode_string` encoding + RO independence; see §6.3 hop 1). The adversary may
 also guess the secret key $K$ with probability $t / 2^{256}$, absorbed by the sponge term. By the tag uniformity
-corollary (§6.7), the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$
-forgery attempts succeeds with probability $1/2^{8C}$; a union bound gives $S/2^{8C}$.
+corollary (§6.7), the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8\tau$ bits. Each of $S$
+forgery attempts succeeds with probability $1/2^{8\tau}$; a union bound gives $S/2^{8\tau}$.
 
 > [!WARNING]
-> **Tag truncation.** When the caller truncates the tag to $T < C$ bytes, the forgery bound becomes
+> **Tag truncation.** When the caller truncates the tag to $T < \tau$ bytes, the forgery bound becomes
 > $(\sigma + t)^2 / 2^{c+1} + S / 2^{8T}$. For $T = 16$ (128-bit truncated tags),
 > each forgery attempt succeeds with probability $1/2^{128}$.
 
@@ -490,10 +492,10 @@ is bounded by its total computational budget, not by a count of online queries.
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{cmt4}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{(\sigma + t)^2}{2^{8C+1}}$$
+$$\varepsilon_{\mathrm{cmt4}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{(\sigma + t)^2}{2^{8\tau+1}}$$
 
 where $\sigma + t$ is the adversary's total Keccak-p evaluation budget (construction evaluations and direct
-primitive queries combined). For $C = 32$ (so $8C + 1 = c + 1 = 257$), the two terms are equal and the bound
+primitive queries combined). For $\tau = 32$ (so $8\tau + 1 = c + 1 = 257$), the two terms are equal and the bound
 simplifies to $(\sigma + t)^2 / 2^c$.
 
 **Proof sketch.** Two cases:
@@ -515,7 +517,7 @@ argument in §6.6). CMT-4 is a single-stage game (the adversary outputs all inpu
 check follows), so the sponge indifferentiability composition theorem applies. Since the adversary can evaluate at
 most $\sigma + t$ distinct (key, ciphertext) pairs (each evaluation costs at
 least one Keccak-p call). The collision probability among these evaluations is the standard birthday bound on the
-$8C = 256$-bit tag output: $(\sigma + t)^2 / 2^{8C+1}$.
+$8\tau = 256$-bit tag output: $(\sigma + t)^2 / 2^{8\tau+1}$.
 
 The bound uses $\sigma + t$ as an upper bound on the number of distinct (key, ciphertext) evaluations. This is
 conservative: each full AEAD evaluation on a message of length $L$ costs at least $\lceil L / B \rceil$ Keccak-p
@@ -526,9 +528,9 @@ This committing property is inherent to the construction — it does not require
 pass over the data, unlike generic CMT-4 transforms applied to non-committing AE schemes.
 
 > [!WARNING]
-> **Tag truncation and committing security.** When the caller truncates the tag to $T < C$ bytes, the birthday
+> **Tag truncation and committing security.** When the caller truncates the tag to $T < \tau$ bytes, the birthday
 > term becomes $(\sigma + t)^2 / 2^{8T+1}$, governed by the truncated output length $8T$ bits rather than the full
-> $8C$ bits. Since the adversary controls the keys in the CMT-4 game, this term reflects offline collision search,
+> $8\tau$ bits. Since the adversary controls the keys in the CMT-4 game, this term reflects offline collision search,
 > not online query count. For $T = 16$ (128-bit truncated tags), the birthday term is $(\sigma + t)^2 / 2^{129}$,
 > giving constant advantage at $\sigma + t \approx 2^{64}$: a 128-bit truncated tag provides only $\approx$64-bit
 > committing security. Callers that truncate the tag and rely on committing security MUST ensure that the
@@ -560,14 +562,14 @@ tag collision resistance (§6.6), chunk reordering protection (§6.8), and commi
 For $Q$ distinct (key, ciphertext) pairs, the probability that `EncryptAndMAC` (or `DecryptAndMAC`) produces a tag
 collision is bounded by:
 
-$$\varepsilon_{\mathrm{coll}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{Q^2}{2^{8C+1}}$$
+$$\varepsilon_{\mathrm{coll}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{Q^2}{2^{8\tau+1}}$$
 
 Two components:
 
 - **Sponge-vs-RO**: $(\sigma + t)^2 / 2^{c+1}$ — the cost of replacing all sponge evaluations with random oracle
   evaluations via sponge indifferentiability.
-- **RO-world birthday**: $Q^2 / 2^{8C+1}$ — the birthday collision probability among $Q$ pseudorandom $8C$-bit
-  tag values (each a PRF output on a distinct input). For $C = 32$, this is $Q^2 / 2^{257}$.
+- **RO-world birthday**: $Q^2 / 2^{8\tau+1}$ — the birthday collision probability among $Q$ pseudorandom $8\tau$-bit
+  tag values (each a PRF output on a distinct input). For $\tau = 32$, this is $Q^2 / 2^{257}$.
 
 The RO-world term is negligible for practical $Q$.
 Simplified: $\varepsilon_{\mathrm{coll}} \leq (\sigma + t)^2 / 2^{c+1}$.
@@ -587,7 +589,7 @@ authentication.
 
 Under a uniformly random key, the TreeWrap tag is a pseudorandom function of the plaintext, equivalently of the
 ciphertext (since encryption is a bijection for a fixed key; see §6.12, Step 2). Specifically, for any fixed ciphertext,
-the tag output of `EncryptAndMAC` (or `DecryptAndMAC`) is indistinguishable from a uniformly random $C$-byte string.
+the tag output of `EncryptAndMAC` (or `DecryptAndMAC`) is indistinguishable from a uniformly random $\tau$-byte string.
 
 $$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}}$$
 
@@ -606,8 +608,8 @@ probability of a specific event (key recovery) that would break the PRF regardle
 subsumes the other, so both appear in the union bound. In practice, $t / 2^{256} \ll (\sigma + t)^2 / 2^{257}$
 for all relevant parameter ranges, so the key-guessing term is negligible.
 
-This is also distinct from the tag-guessing term $S / 2^{8C}$ in INT-CTXT (§6.4), which counts online
-verification attempts. Since $8C = 256$, the key-guessing and tag-guessing terms share the same denominator, but
+This is also distinct from the tag-guessing term $S / 2^{8\tau}$ in INT-CTXT (§6.4), which counts online
+verification attempts. Since $8\tau = 256$, the key-guessing and tag-guessing terms share the same denominator, but
 they measure different adversarial capabilities (offline key search vs. online forgery).
 
 The argument follows from the monolithic sponge indifferentiability reduction (§6.12). After replacing all sponge
@@ -615,14 +617,14 @@ evaluations with random oracle evaluations, each leaf defines a keyed PRF $F_K(i
 prefix (§6.12, Step 2). Distinct leaf indices produce distinct PRF inputs, so for $n > 1$ all chain values are
 simultaneously pseudorandom. For $n = 1$, the tag is squeezed directly from the leaf state with domain byte `0x61`,
 which is a PRF output under the secret key. For $n > 1$, the tag is
-$\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where $\mathit{final\_input}$ is a deterministic,
+$\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ where $\mathit{final\_input}$ is a deterministic,
 injective encoding of the chain values. Domain byte `0x64` separates tag accumulation from the leaf ciphers
 (`0x60` – `0x63`). By the same bad-event argument as §6.3 hop 2: the adversary queries the random oracle at
 $\mathit{final\_input}$ with probability at most $t / 2^{8Cn}$; conditioned on this not occurring, the tag is
 uniformly random.
 
 **Corollary (tag uniformity).** For any ciphertext not previously queried under the same key, the tag is uniformly
-distributed over $8C$ bits, independent of the adversary's view. This follows directly from the PRF property: a
+distributed over $8\tau$ bits, independent of the adversary's view. This follows directly from the PRF property: a
 PRF output on a fresh input is indistinguishable from uniform.
 
 Protocols that use the tag as a contribution to ongoing state (rather than solely for authentication) require this
@@ -783,7 +785,7 @@ keyed PRF: $F_K(i, P_i) = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| P_i)$. Distinc
 oracle inputs, so for $n > 1$ all $n$ chain values are simultaneously pseudorandom (each is a PRF output on a
 distinct input). For $n = 1$, the single leaf directly outputs the tag via domain byte `0x61`, which is a direct PRF
 output under the secret key. For $n > 1$, the tag is
-$\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where
+$\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ where
 $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64` separates
 tag accumulation from leaf evaluations (`0x60`–`0x63`). Tag pseudorandomness follows from the bad-event argument
 in §6.3 hop 2: the adversary queries the random oracle at $\mathit{final\_input}$ with probability at most
