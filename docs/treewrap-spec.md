@@ -340,12 +340,13 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    function on $Q$ distinct inputs collides with probability $Q^2 / 2^{257}$; since each query costs at least one
    Keccak-p call, $Q \leq \sigma$, so this term is absorbed by the sponge term $(\sigma + t)^2 / 2^{c+1}$ in hop 2.
 
-2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By sponge indifferentiability, replace all Keccak sponge
-   evaluations with random oracle evaluations.
+2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the overwrite duplex equivalence (§6.12, Step 1), each
+   leaf's interactive computation is expressible as a single standard sponge evaluation on an injective encoding
+   of its inputs. The sponge indifferentiability theorem then replaces all such evaluations — across all leaves
+   and the tag accumulation — with random oracle evaluations in a single reduction.
 
-3. **RO world.** Each `tw_key` is a 256-bit secret absorbed as a prefix into the sponge. By the overwrite duplex
-   equivalence (§6.12, Lemma 2 of Daemen et al.), each leaf's computation maps to a standard sponge evaluation with
-   `tw_key` as a secret prefix.
+3. **RO world.** After the rewriting in hop 2, each leaf is a random oracle evaluation with `tw_key` as a secret
+   prefix (Lemma 2 of Daemen et al. guarantees `tw_key` is a prefix of the equivalent sponge input; see §6.12).
 
    *Theorem 5 of Daemen et al. (ePrint 2024/1618):* The idaho advantage of the keyed overwrite duplex
    $\mathrm{OD}[f, \rho, \mathrm{trailenc}][\mathcal{K}]$ is upper bounded by the multi-user PRF advantage of the
