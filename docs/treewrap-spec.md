@@ -507,7 +507,8 @@ simplifies to $(\sigma + t)^2 / 2^c$.
 1. **Different AEAD context** ($(K,N,\mathit{AD}) \neq (K',N',\mathit{AD}')$). After the sponge→RO hop, the
    injective `encode_string` encoding (§5.3) ensures distinct `(K, N, AD)` triples produce distinct TurboSHAKE128
    inputs, which map to distinct random oracle inputs. In the RO world, distinct inputs produce independent
-   uniform outputs — so the KDF yields different `tw_key` values with certainty. Conditioned on distinct keys:
+   uniform outputs — so the KDF yields independent, uniformly random `tw_key` values (distinct except with
+   birthday probability $Q^2 / 2^{257}$, already captured by the sponge term). Conditioned on distinct keys:
    the ciphertext may coincide, but distinct (key, ciphertext) pairs produce distinct tags except with probability
    bounded by tag collision resistance (§6.6).
 
