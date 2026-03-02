@@ -49,12 +49,11 @@ TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap:
 | `0x64` | Tag accumulation             | `TreeWrap`, `TreeUnwrap` |
 
 > [!WARNING]
-> Bytes `0x60`–`0x64` are reserved for TreeWrap. Other callers of TurboSHAKE128 in the same system MUST NOT use
-> these domain bytes. This is a security precondition, not merely a recommendation: after the ciphertext-write
-> to XOR rewriting (§6.12), a leaf cipher evaluation with domain byte `0x63` is structurally identical to a
-> `TurboSHAKE128(M, 0x63, ℓ)` call. If another component in the same system uses any of these domain bytes, the
-> distinct-input guarantee that the security reduction (§6.12) relies on is broken, and the security theorems in
-> §6.3–§6.7 no longer hold.
+> **System-wide permutation accounting.** All Keccak-p[1600,12] evaluations across the entire system — by TreeWrap,
+> by other components using TurboSHAKE128 or any Keccak-based primitive, and by the adversary — contribute to the
+> total budget $\sigma + t$ in the security bounds (§6.2). The sponge indifferentiability theorem replaces the
+> permutation with a random oracle in a single reduction whose cost depends on this total. Systems that make heavy
+> use of Keccak-p outside TreeWrap should account for those calls when evaluating the security margin.
 
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
 into the rate rather than XORing plaintext into it. This enables a clean security reduction to the standard Keccak
@@ -281,15 +280,14 @@ stated in that section.
 **Random permutation model.** All bounds in this section model Keccak-p[1600,12] as a random permutation. This is a
 heuristic assumption (see §6 preamble).
 
-**Domain byte exclusivity.** All theorems in this section assume that no component outside TreeWrap evaluates
-TurboSHAKE128 with domain bytes `0x60`–`0x64`. This is a formal precondition, not merely an implementation
-guideline. The security reduction (§6.12) rewrites each leaf cipher as a standard sponge evaluation; after the
-sponge-to-RO hop, the distinct-input guarantee that underpins every bound in §6.3–§6.7 requires that TreeWrap's
-sponge inputs are never duplicated by other callers of the same sponge. An external TurboSHAKE128 call on one of
-these domain bytes could produce an input identical to a leaf evaluation, breaking the reduction. This restriction
-applies to co-located system components, not to the adversary: in the random permutation model the adversary can
-always evaluate any sponge (including TurboSHAKE128 on any domain byte) via offline permutation queries, and those
-evaluations are already counted in $t$. See §4 for the corresponding implementer requirement.
+**Whole-system permutation budget.** The sponge indifferentiability theorem replaces all Keccak-p evaluations —
+by TreeWrap, by other system components, and by the adversary — with random oracle evaluations in a single
+reduction. The cost is $(\sigma + t)^2 / 2^{c+1}$, where $\sigma$ counts all online permutation calls across
+the entire system and $t$ counts all offline (adversary) permutation calls. Other components using Keccak-p
+(including TurboSHAKE128 on any domain byte) do not break the security reduction; they simply contribute to
+$\sigma + t$. After the sponge-to-RO replacement, TreeWrap's security rests on the secrecy of `tw_key`: the
+adversary cannot evaluate the keyed PRF without querying the random oracle on an input prefixed with the
+256-bit key, regardless of what domain byte is used. See §4 for the corresponding implementer guidance.
 
 **Notation:**
 
@@ -553,8 +551,8 @@ Simplified: $\varepsilon_{\mathrm{coll}} \leq (\sigma + t)^2 / 2^{c+1}$.
 
 Distinct (key, ciphertext) pairs correspond to distinct (key, plaintext) pairs (by the encrypt bijection for fixed
 key), which produce distinct leaf sponge inputs via the injective encoding (§6.12, "Injectivity of the encoding") —
-this relies on the domain byte exclusivity precondition (§6.2) to guarantee no external caller duplicates a leaf
-evaluation — producing distinct chain values (except with probability bounded by the sponge claim). Distinct chain
+after the sponge-to-RO hop (§6.2), these distinct inputs produce independent random outputs except with
+probability bounded by the sponge indifferentiability term. Distinct chain
 value sequences produce distinct $\mathit{final\_input}$ values (the encoding is injective). Distinct inputs to
 TurboSHAKE128 collide with probability bounded by the birthday term.
 
