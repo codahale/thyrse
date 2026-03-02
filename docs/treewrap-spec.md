@@ -258,8 +258,9 @@ stated in that section.
 > \oplus P'_j$ for all positions within the first block where the plaintexts differ. After `pad_permute` at the block
 > boundary, the permutation mixes the entire state, and the two state evolutions diverge — no further XOR relationship
 > is exploitable in subsequent blocks. An attacker who knows one plaintext–ciphertext pair under the reused key can
-> recover the keystream within the first block, enabling targeted decryption and forgery of specific plaintext values
-> for other encryptions under that key (within the first block). However, unlike polynomial-MAC AEADs (e.g.,
+> recover the keystream within the first block, enabling targeted plaintext recovery and ciphertext malleation
+> for other encryptions under that key (within the first block; malleation requires RUP — see §6.5.1).
+> However, unlike polynomial-MAC AEADs (e.g.,
 > AES-GCM), where nonce reuse leaks the MAC key and enables universal forgery, TreeWrap's sponge-based tag remains
 > a computationally unpredictable PRF output for novel ciphertexts even under key reuse — the attacker cannot
 > predict the tag for a modified ciphertext without evaluating the full sponge construction. Key reuse therefore
