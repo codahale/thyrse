@@ -313,11 +313,21 @@ $$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \varepsilon_{\mathrm{kdf}} + \frac{
 2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By sponge indifferentiability, replace all Keccak sponge
    evaluations with random oracle evaluations.
 
-3. **RO world.** Each `tw_key` is a 256-bit secret prefix absorbed into the sponge. The adversary guesses it with
-   probability $t / 2^{256}$. Conditioned on not guessing: each leaf's keystream is a PRF of the ciphertext under
-   the secret key, so `CT` is indistinguishable from uniform; the tag is a PRF evaluation on a distinct domain
-   (byte `0x64` or `0x61`), so `(CT, tag)` is jointly indistinguishable from uniform. A fresh nonce implies a fresh
-   `tw_key` (after hop 1), so each encryption query uses an independent key.
+3. **RO world.** Each `tw_key` is a 256-bit secret absorbed as a prefix into the sponge. By the overwrite duplex
+   equivalence (§6.12, Lemma 2 of Daemen et al.), each leaf's computation maps to a standard sponge evaluation with
+   `tw_key` as a secret prefix. By Theorem 5 of Daemen et al. (ePrint 2024/1618), the keyed overwrite duplex cipher
+   is indistinguishable from an ideal keyed function that returns uniformly random output at each duplexing step,
+   up to the PRF advantage of the underlying sponge function — which in the RO world reduces to key-guessing
+   probability $t / 2^{256}$.
+
+   In the ideal world, the keystream byte at each position is uniformly random *before* the corresponding ciphertext
+   byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
+   uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$. (The equivalent sponge input
+   depends on $\mathit{CT}$ per §6.12, but no circularity arises: the PRF guarantee is that each output byte is
+   uniform given only prior state, before the overwrite occurs.) The tag — squeezed with domain byte `0x61` for
+   $n = 1$, or computed via TurboSHAKE128 with domain byte `0x64` for $n > 1$ — is an independent PRF evaluation
+   on a distinct domain, so $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
+   implies a fresh `tw_key` (after hop 1), so each encryption query uses an independent key.
 
 Since $t / 2^{256} \ll (\sigma + t)^2 / 2^{257}$, the key-guessing term is absorbed into the sponge term, giving the
 stated bound.
