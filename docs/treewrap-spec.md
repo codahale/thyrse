@@ -264,8 +264,9 @@ model the underlying Keccak-p[1600,12] permutation as a random permutation. In r
 permutation-level distinguishers (e.g., zero-sum distinguishers) and is therefore not perfectly indistinguishable from
 random. However, TreeWrap relies on the same heuristic assumption as KangarooTwelve and TurboSHAKE: that these
 permutation-level properties do not translate into structural breaks of the sponge construction, and that the sponge
-indifferentiability claim holds up to the 128-bit target security level. Each property reduces to the Keccak sponge
-claim via TurboSHAKE128's indifferentiability from a random oracle.
+indifferentiability claim holds up to the 128-bit target security level. No duplex-specific attacks on reduced-round
+Keccak are known to improve on generic sponge distinguishers, so the margin analysis for TurboSHAKE applies unchanged.
+Each property reduces to the Keccak sponge claim via TurboSHAKE128's indifferentiability from a random oracle.
 
 ### 6.1 AEAD Construction
 
