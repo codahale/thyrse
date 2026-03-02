@@ -476,26 +476,16 @@ string (§6.3.1). This stronger property supports protocols that absorb the tag 
 
 ### 7.1. Usage Limits
 
-Günther, Thomson, and Wood tabulate concrete usage limits for AES-GCM and ChaCha20-Poly1305 as functions of a
-target advantage $p$. TreeWrap's security bounds (§6) are dominated by a single sponge indifferentiability term
-$(\sigma + t)^2 / 2^{c+1}$ with $c = 256$, which yields structurally simpler limits. Here $\sigma + t$ counts all
-Keccak-p[1600,12] calls across every key in the system (§6.1).
+Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost
+$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), and planning approximation $\sigma + t \approx \sigma$.
 
-Setting the total advantage $\leq p$:
+| Scheme        | Limit type  | Approx protected volume |
+|---------------|-------------|-------------------------|
+| AES-128-GCM   | per key     | $\approx 2^{13.1}$ GiB  |
+| TreeWrap-AEAD | system-wide | $\approx 2^{80.6}$ GiB  |
 
-| Property                    | Bound                                         | $p = 2^{-32}$             | $p = 2^{-50}$             |
-|-----------------------------|-----------------------------------------------|---------------------------|---------------------------|
-| Confidentiality (IND-CPA)   | $(\sigma+t)^2 / 2^{257} \leq p$               | $\sigma+t \leq 2^{112.5}$ | $\sigma+t \leq 2^{103.5}$ |
-| Integrity (INT-CTXT)        | $(\sigma+t)^2 / 2^{257} + S / 2^{256} \leq p$ | $S \leq 2^{224}$          | $S \leq 2^{206}$          |
-| Auth. Encryption (IND-CCA2) | $(\sigma+t)^2 / 2^{257} + S / 2^{256} \leq p$ | same                      | same                      |
-
-**Multi-key.** The bounds above are whole-system: $\sigma + t$ is the total Keccak-p call count across all $u$ keys.
-With $u$ keys the per-key budget is approximately $(\sigma + t)/u$. In this analysis, no extra per-key degradation term
-is introduced beyond the same global sponge term, so scaling to more keys is handled by budgeting total Keccak-p calls.
-
-**Comparison with AES-128-GCM.** At $p = 2^{-50}$ with 1500-byte messages, Günther, Thomson, and Wood (Table 2) limit
-AES-128-GCM to $2^{32.5}$ queries per key. TreeWrap at the same advantage permits $\sigma + t \leq 2^{103.5}$ Keccak-p
-calls system-wide — roughly $2^{100}$ messages even at maximum tree depth — a factor of approximately $2^{67}$.
+The AES-128-GCM figure is from Günther, Thomson, and Wood (Table 2) converted to GiB. The TreeWrap figure is the
+corresponding conversion of the §6 bound under the assumptions above.
 
 ## 8. References
 
