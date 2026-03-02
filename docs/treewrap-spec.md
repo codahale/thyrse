@@ -668,7 +668,7 @@ Each leaf is initialized with `key ‖ [index]₆₄LE`, binding it to its posit
 which leaf decrypts which data, producing different chain values and a different tag. Additionally, since leaf indices
 are bound at initialization, an attacker cannot cause chunk $i$'s ciphertext to be decrypted as chunk $j$ — the
 decryption will produce garbage and the chain value will not match. Truncating or extending the ciphertext changes the
-number of chunks $n$, which changes $\mathrm{length\_encode}(n)$ in the final node input, producing a different tag.
+number of chunks $n$, which changes $\mathrm{right\_encode}(n)$ in the final node input, producing a different tag.
 
 ### 6.9 Empty Plaintext
 
