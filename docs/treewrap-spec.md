@@ -283,6 +283,14 @@ produce distinct `tw_key` values (except with negligible probability).
 **Random permutation model.** All bounds in this section model Keccak-p[1600,12] as a random permutation. This is a
 heuristic assumption (see §6 preamble).
 
+**Domain byte exclusivity.** All theorems in this section assume that no component outside TreeWrap evaluates
+TurboSHAKE128 with domain bytes `0x60`–`0x64`. This is a formal precondition, not merely an implementation
+guideline. The security reduction (§6.12) rewrites each leaf cipher as a standard sponge evaluation; after the
+sponge-to-RO hop, the distinct-input guarantee that underpins every bound in §6.3–§6.7 requires that TreeWrap's
+sponge inputs are never duplicated by other callers of the same sponge. An external TurboSHAKE128 call on one of
+these domain bytes could produce an input identical to a leaf evaluation, breaking the reduction. See §4 for the
+corresponding implementer requirement.
+
 **Notation:**
 
 - $\sigma$: total online Keccak-p calls across all queries in the security game (all leaves and tag computations
