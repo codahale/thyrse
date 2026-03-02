@@ -373,28 +373,22 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    and the tag accumulation — with random oracle evaluations in a single reduction.
 
 3. **RO world.** After the rewriting in hop 2, each leaf is a random oracle evaluation with `tw_key` as a secret
-   prefix (Lemma 2 of Daemen et al. guarantees `tw_key` is a prefix of the equivalent sponge input; see §6.12).
-
-   *Theorem 5 of Daemen et al. (ePrint 2024/1618):* The idaho advantage of the keyed overwrite duplex
-   $\mathrm{OD}[f, \rho, \mathrm{trailenc}][\mathcal{K}]$ is upper bounded by the multi-user PRF advantage of the
-   corresponding sponge function $F[\mathcal{K}]$:
-   $\mathrm{Adv}^{\mathrm{idaho}}_{\mathrm{OD}[f,\rho,\mathrm{trailenc}][\mathcal{K}]}(\mu, t, \sigma) \leq
-   \mathrm{Adv}^{\mathrm{mPRF}}_{F[\mathcal{K}]}(\mu, t, \sigma)$, where $\mu$ is the key multiplicity, $t$ is the
-   computational complexity (permutation evaluations), and $\sigma$ is the data complexity (input and output blocks
-   in construction queries). The idaho advantage measures distinguishability from an ideal stateful object that
-   returns independent random outputs at each duplexing and squeezing step.
-
-   TreeWrap applies this with $\mu = 1$ (single key per invocation), $f = \mathrm{Keccak\text{-}p}[1600,12]$,
-   $\rho = R = 168$, and $c = 256$. The preconditions of Lemma 2 (injective input encoding, key as prefix) are
-   verified in §6.12 Step 1. In the RO world (after hop 2), the multi-user PRF advantage of keyed TurboSHAKE128
-   reduces to key-guessing probability $t / 2^{256}$ (by Theorem 4 of Daemen et al., with the sponge
+   prefix. By construction, `tw_key` occupies the first 32 bytes of the equivalent sponge input (§6.12, Step 1),
+   and the encoding is injective (§6.12, "Injectivity of the encoding"). Each leaf therefore defines a keyed PRF
+   $F_K(i, P_i)$ where $K$ is the secret key prefix (§6.12, Step 2). In the RO world (after hop 2), the
+   key-guessing probability is $t / 2^{256}$ (by Theorem 4 of Daemen et al., ePrint 2024/1618, with the sponge
    indifferentiability term already paid in hop 2).
 
    In the ideal world, the keystream byte at each position is uniformly random *before* the corresponding ciphertext
    byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
-   uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$. (The equivalent sponge input
-   depends on $\mathit{CT}$ per §6.12, but no circularity arises: the PRF guarantee is that each output byte is
-   uniform given only prior state, before the overwrite occurs.) For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
+   uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$. No circularity arises between
+   the PRF output and the plaintext appearing in the equivalent sponge input: the PRF guarantee is that each
+   output byte is uniform given only prior state, before the overwrite occurs. The equivalent sponge input for
+   block $k$ depends on the plaintext of block $k$, which is determined before the PRF output (keystream) for that
+   block is produced. The PRF output is then used to encrypt the plaintext, and the resulting ciphertext is
+   overwritten into the state — but this feedback only affects subsequent blocks, not the current PRF evaluation.
+
+   For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
    output under the secret key on a distinct domain. For $n > 1$, the tag is
    $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ — an unkeyed random oracle evaluated on a
    deterministic, injective encoding of the chain values. Because the chain values are pseudorandom PRF outputs
@@ -418,9 +412,11 @@ same underlying game hops.
 **Composition structure.** The composition theorem requires encrypt-then-MAC with key separation. TreeWrap satisfies
 both conditions, despite sharing `tw_key` across encryption and tagging:
 
-- **Encrypt-then-tag.** By the overwrite duplex equivalence (§6.12), the tag is a function of the *ciphertext*, not
-  the plaintext — the equivalent sponge input for each leaf contains the ciphertext bytes (§6.12, "Equivalent sponge
-  input"). This gives the encrypt-then-MAC structure that the composition theorem requires.
+- **Encrypt-then-tag.** The tag is operationally determined by `(tw_key, ciphertext)`: given a key and ciphertext,
+  `DecryptAndMAC` computes the tag without requiring the plaintext as a separate input. Although the equivalent sponge
+  input (§6.12, Step 1) contains the plaintext (not the ciphertext), the encrypt bijection (§6.5 Case 2) ensures the
+  tag is equivalently a PRF of the ciphertext (§6.12, Step 2). The Bellare–Namprempre composition requires that the
+  MAC can be evaluated given only the key and ciphertext, which TreeWrap satisfies.
 - **Functional key separation.** Encryption and tagging share `tw_key` but operate on disjoint input domains:
   intermediate ciphertext blocks use domain byte `0x62`, while tag output uses `0x61` ($n = 1$) or `0x63`/$\texttt{0x64}$
   ($n > 1$). After the sponge→RO hop, distinct domain bytes produce disjoint sets of random oracle inputs, so the
@@ -556,12 +552,12 @@ Two components:
 The RO-world term is negligible for practical $Q$.
 Simplified: $\varepsilon_{\mathrm{coll}} \leq (\sigma + t)^2 / 2^{c+1}$.
 
-Distinct (key, ciphertext) pairs produce distinct sequences of leaf inputs (key, index, ciphertext chunk). The leaf
-cipher's injective encoding (§6.12, Step 3) ensures distinct sponge inputs — this relies on the domain byte
-exclusivity precondition (§6.2) to guarantee no external caller duplicates a leaf evaluation — producing distinct
-chain values (except with probability bounded by the sponge claim). Distinct chain value sequences produce distinct
-$\mathit{final\_input}$ values (the encoding is injective). Distinct inputs to TurboSHAKE128 collide with
-probability bounded by the birthday term.
+Distinct (key, ciphertext) pairs correspond to distinct (key, plaintext) pairs (by the encrypt bijection for fixed
+key), which produce distinct leaf sponge inputs via the injective encoding (§6.12, "Injectivity of the encoding") —
+this relies on the domain byte exclusivity precondition (§6.2) to guarantee no external caller duplicates a leaf
+evaluation — producing distinct chain values (except with probability bounded by the sponge claim). Distinct chain
+value sequences produce distinct $\mathit{final\_input}$ values (the encoding is injective). Distinct inputs to
+TurboSHAKE128 collide with probability bounded by the birthday term.
 
 ### 6.7 Tag PRF Security
 
@@ -569,9 +565,9 @@ This property is stated for the **bare TreeWrap primitive** (not the notional AE
 the tag value directly — for example, absorbing it into ongoing transcript state rather than solely verifying it for
 authentication.
 
-Under a uniformly random key, the TreeWrap tag is a pseudorandom function of the ciphertext. Specifically, for any fixed
-ciphertext, the tag output of `EncryptAndMAC` (or `DecryptAndMAC`) is indistinguishable from a uniformly random $C$-byte
-string.
+Under a uniformly random key, the TreeWrap tag is a pseudorandom function of the plaintext, equivalently of the
+ciphertext (since encryption is a bijection for a fixed key; see §6.12, Step 2). Specifically, for any fixed ciphertext,
+the tag output of `EncryptAndMAC` (or `DecryptAndMAC`) is indistinguishable from a uniformly random $C$-byte string.
 
 $$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}}$$
 
@@ -595,14 +591,14 @@ verification attempts. Since $8C = 256$, the key-guessing and tag-guessing terms
 they measure different adversarial capabilities (offline key search vs. online forgery).
 
 The argument follows from the monolithic sponge indifferentiability reduction (§6.12). After replacing all sponge
-evaluations with random oracle evaluations, each leaf defines a keyed PRF $F_K(i, C_i)$ with the secret key as a
+evaluations with random oracle evaluations, each leaf defines a keyed PRF $F_K(i, P_i)$ with the secret key as a
 prefix (§6.12, Step 2). Distinct leaf indices produce distinct PRF inputs, so for $n > 1$ all chain values are
-simultaneously pseudorandom. For $n = 1$, the tag is squeezed directly from the leaf state with domain byte `0x61`, which is a PRF output
-under the secret key. For $n > 1$, the tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$
-where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64`
-separates tag accumulation from the leaf ciphers (`0x60` – `0x63`). TurboSHAKE128 is an unkeyed random oracle;
-the tag is pseudorandom because its input consists entirely of pseudorandom chain values (keyed leaf PRF outputs)
-that are hidden from the adversary.
+simultaneously pseudorandom. For $n = 1$, the tag is squeezed directly from the leaf state with domain byte `0x61`,
+which is a PRF output under the secret key. For $n > 1$, the tag is
+$\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where $\mathit{final\_input}$ is a deterministic,
+injective encoding of the chain values. Domain byte `0x64` separates tag accumulation from the leaf ciphers
+(`0x60` – `0x63`). TurboSHAKE128 is an unkeyed random oracle; the tag is pseudorandom because its input consists
+entirely of pseudorandom chain values (keyed leaf PRF outputs) that are hidden from the adversary.
 
 **Corollary (tag uniformity).** For any ciphertext not previously queried under the same key, the tag is uniformly
 distributed over $8C$ bits, independent of the adversary's view. This follows directly from the PRF property: a
@@ -683,63 +679,61 @@ Each leaf cipher is an overwrite duplex operating on the Keccak-p[1600,12] permu
 security argument proceeds in two steps: a syntactic rewriting that is information-theoretic, followed by a single
 application of the sponge indifferentiability theorem.
 
-**Step 1: Overwrite duplex equivalence.** Each leaf cipher implements DWrap mode over a standard Keccak sponge. By the
-overwrite-to-XOR equivalence (Daemen et al., Lemma 2), each leaf's computation can be expressed as a
-standard $\mathrm{Keccak}[256]$ sponge evaluation on an injective encoding of the leaf's inputs. This step is a
-syntactic rewriting with no computational cost.
+**Step 1: Overwrite-to-XOR equivalence.** Each leaf cipher uses the overwrite duplex: during encryption, each
+ciphertext byte $\mathit{CT}_j = P_j \oplus S[\mathit{pos}]$ is written back into the state at position $\mathit{pos}$.
+The overwrite-to-XOR equivalence is a per-byte identity: overwriting $S[j]$ with $\mathit{CT}_j$ when $S[j]$ currently
+holds $Z[j]$ (the permutation output) is equivalent to XORing $S[j]$ with $\mathit{CT}_j \oplus Z[j]$. Since
+$\mathit{CT}_j = P_j \oplus Z[j]$, the equivalent XOR input is $\mathit{CT}_j \oplus Z[j] = P_j$ — the plaintext byte.
+This is a per-position algebraic identity with no computational cost.
 
-The equivalence requires four preconditions, all of which TreeWrap satisfies:
+> [!NOTE]
+> TreeWrap is not an instance of the OD[f, ρ, trailenc] construction defined by Daemen et al. (ePrint 2024/1618),
+> which uses a fixed block length ρ = (1600 − c − 64)/8 = 160 bytes for TurboSHAKE128 and reserves 8 bytes for
+> its trailer encoding function. TreeWrap processes $R - 1 = 167$ payload bytes per block and applies standard
+> TurboSHAKE padding (`pad10*1` with a domain byte) at every permutation boundary. The overwrite-to-XOR equivalence
+> is established directly from the per-byte identity above, without requiring OD's `pad10*` short-block mechanism
+> or its specific trailer encoding. The security argument proceeds identically: after rewriting, each leaf is a
+> standard $\mathrm{Keccak}[256]$ sponge evaluation, and the sponge indifferentiability theorem applies.
 
-1. **Proper padding rule.** Each `pad_permute` call applies `pad10*1` with a domain byte, producing a framed duplex
-   where every permutation call has its own domain separation. This is structurally different from a standard sponge
-   (which pads once at the end of absorption), but the Daemen et al. equivalence applies at the level of the full
-   duplex session: the complete sequence of duplex interactions maps to a single equivalent sponge input.
+After rewriting each overwrite as the equivalent XOR, the remaining operations are: (a) XOR absorption of key/index
+material during `init` (already standard sponge absorption), and (b) `pad_permute` calls that XOR a domain byte at
+position $\mathit{pos}$ and `0x80` at position $R - 1$ — exactly TurboSHAKE's `pad10*1` padding. The capacity portion
+(bytes $R$ through 199) is never directly read or written. Therefore, after the rewriting, each leaf's full computation
+is a standard $\mathrm{Keccak}[256]$ sponge evaluation.
 
-2. **Capacity not directly accessed.** The construction never reads or writes the capacity portion of the state
-   (bytes $R$ through 199). Key and index absorption (`init`), encryption, and decryption all operate on positions $0$
-   through $R - 2$, within the rate. Chain value squeezing reads positions 0 through $C - 1$ after a permutation, which
-   is also within the rate ($C = 32 < R = 168$).
-
-3. **Overwrite restricted to the rate.** During encryption and decryption, the ciphertext overwrite (`S[pos] ← Cⱼ`)
-   operates at positions 0 through $R - 2$, strictly within the outer (rate) portion of the state.
-
-4. **Key absorption via XOR.** The `init` procedure absorbs key and index material by XORing it into the rate, which is
-   standard sponge absorption (not overwrite). The overwrite applies only during encryption/decryption.
-
-**Equivalent sponge input.** After applying the overwrite-to-XOR equivalence, each leaf is a standard
-$\mathrm{Keccak}[256]$ sponge evaluation on an input assembled from the rate-sized blocks absorbed before each
-permutation call. For a leaf with key $K$, index $i$, and ciphertext $C = C_1 \| C_2 \| \cdots \| C_m$, the equivalent
-sponge input consists of the following blocks (each padded to $R = 168$ bytes via `pad10*1`):
+**Equivalent sponge input.** For a leaf with key $K$, index $i$, and plaintext $P$ partitioned into $(R - 1)$-byte
+segments $P_1, P_2, \ldots, P_m$, the equivalent sponge input consists of the following $R$-byte blocks:
 
 - **Init block:** $K \| [i]_{\mathrm{64LE}}$ (40 bytes), padded with domain byte `0x60`.
-- **Intermediate ciphertext blocks:** Each full $(R - 1)$-byte segment of ciphertext, padded with domain byte `0x62`.
-- **Final block:** The remaining ciphertext bytes (possibly zero length), padded with domain byte `0x63` (chain value
+- **Intermediate blocks:** Each full $(R - 1)$-byte plaintext segment $P_j$, padded with domain byte `0x62`.
+- **Final block:** The remaining plaintext bytes (possibly zero length), padded with domain byte `0x63` (chain value
   output) or `0x61` (single-node tag output).
 
-This equivalent sponge input is a function of $(K, i, C)$ — the **ciphertext**, not the plaintext. The overwrite-to-XOR
-equivalence rewrites the overwrite duplex (which absorbs ciphertext by overwriting state bytes) into an equivalent XOR
-duplex (which absorbs the same ciphertext by XORing into the state). The plaintext does not appear in the equivalent
-sponge input.
+This equivalent sponge input is a function of $(K, i, P)$ — the **plaintext**, not the ciphertext. This follows
+directly from the per-byte identity: the XOR-equivalent of overwriting with ciphertext absorbs plaintext. However, for
+a fixed key, encryption is a bijection ($P \neq P'$ implies $C \neq C'$ for the same key; see §6.5 Case 2), so the
+sponge input is equivalently determined by $(K, i, C)$. The tag is therefore both a PRF of the plaintext and a PRF of
+the ciphertext (see Step 2).
 
-**Injectivity of the encoding.** The encoding $(K, i, C) \mapsto \text{sponge input}$ is injective because:
+**Injectivity of the encoding.** The encoding $(K, i, P) \mapsto \text{sponge input}$ is injective because:
 
 1. **Fixed-size prefix.** $K \| [i]_{\mathrm{64LE}}$ is always exactly 40 bytes, so the boundary between init material
-   and ciphertext is unambiguous.
+   and plaintext is unambiguous.
 2. **Unambiguous block boundaries.** `pad10*1` after each block ensures no block can be a suffix or prefix of another.
 3. **Distinct domain bytes.** `0x60` (init), `0x62` (intermediate), `0x61`/`0x63` (final) prevent init blocks from
-   being confused with ciphertext blocks.
-4. **Ciphertext determines content.** For a fixed key and index, distinct ciphertexts trivially produce distinct sponge
-   inputs — the ciphertext bytes differ in the corresponding blocks.
+   being confused with plaintext blocks.
+4. **Plaintext determines content.** For a fixed key and index, distinct plaintexts trivially produce distinct sponge
+   inputs — the plaintext bytes differ in the corresponding blocks.
 
-**Edge cases.** When the ciphertext data ends exactly at position $R - 2$ (i.e., one byte before the end of the rate),
+**Edge cases.** When plaintext data ends exactly at position $R - 2$ (i.e., one byte before the end of the rate),
 the domain byte occupies $S[R-2]$ and the `0x80` padding terminator occupies $S[R-1]$, which is the standard `pad10*1`
-with no extra block — the encoding remains injective. When a chunk has zero-length ciphertext (empty plaintext), the
+with no extra block — the encoding remains injective. When a chunk has zero-length plaintext (empty message), the
 leaf produces a single `pad_permute` with just the init block (domain byte `0x60`) followed by a final-block
-`pad_permute` with zero ciphertext bytes (domain byte `0x63` or `0x61`). The domain byte distinguishes this from
+`pad_permute` with zero data bytes (domain byte `0x63` or `0x61`). The domain byte distinguishes this from
 intermediate blocks (`0x62`), so the encoding is still injective.
 
-The injectivity is a property of the encoding format, not of the encrypt operation. (The encrypt/decrypt bijection is a
-separate property, used in the CMT-4 proof §6.5 to show that distinct plaintexts produce distinct ciphertexts.)
+The injectivity is a property of the encoding format. The encrypt/decrypt bijection is a separate property (used in
+the CMT-4 proof §6.5 and to establish that the PRF of plaintext is equivalently a PRF of ciphertext).
 
 After this rewriting, all computations in a TreeWrap invocation — $n$ leaf sponge evaluations plus one optional tag
 accumulation (TurboSHAKE128 with domain byte `0x64`) — are standard sponge evaluations on distinct inputs. Leaf inputs
@@ -747,17 +741,21 @@ differ by index; the tag evaluation is separated by domain byte.
 
 **Step 2: Monolithic indifferentiability reduction.** The sponge indifferentiability theorem replaces all sponge
 evaluations simultaneously with random oracle evaluations in a single reduction. After this replacement, each leaf
-computes $\mathrm{cv}[i] = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$ where $\mathcal{O}$ is the random oracle
+computes $\mathrm{cv}[i] = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| P_i)$ where $\mathcal{O}$ is the random oracle
 and $K$ is the secret key. Because $K$ is a 256-bit secret prefix unknown to the adversary, each leaf defines a
-keyed PRF: $F_K(i, C_i) = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$. Distinct leaf indices produce distinct
+keyed PRF: $F_K(i, P_i) = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| P_i)$. Distinct leaf indices produce distinct
 oracle inputs, so for $n > 1$ all $n$ chain values are simultaneously pseudorandom (each is a PRF output on a
-distinct input). For $n = 1$, the single leaf directly outputs the tag via domain byte `0x61`, which is a PRF of the ciphertext
-under the secret key. For $n > 1$, the tag is
-$G_K(\mathit{CT}) = \mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where
+distinct input). For $n = 1$, the single leaf directly outputs the tag via domain byte `0x61`, which is a direct PRF
+output under the secret key. For $n > 1$, the tag is
+$\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where
 $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64` separates
 tag accumulation from leaf evaluations (`0x60`–`0x63`). TurboSHAKE128 here is an unkeyed random oracle; the tag
 is pseudorandom because the chain values — keyed leaf PRF outputs on distinct inputs — are simultaneously
 pseudorandom and hidden from the adversary.
+
+Since encryption is a bijection for a fixed key (§6.5 Case 2), the PRF $F_K(i, P_i)$ is equivalently a PRF of the
+ciphertext: distinct ciphertexts under the same key correspond to distinct plaintexts, producing distinct sponge
+inputs. The tag is therefore pseudorandom as a function of either the plaintext or the ciphertext.
 
 The advantage of this reduction is bounded by:
 
@@ -809,6 +807,8 @@ string (§6.7). This stronger property supports protocols that absorb the tag in
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
 - Daemen, J., Hoffert, S., Mella, S., Van Assche, G., and Van Keer, R. "Shaking up authenticated encryption." IACR
   ePrint 2024/1618. Defines the overwrite duplex (OD) construction and proves its security equivalence to (Turbo)SHAKE.
+  TreeWrap's security reduction uses the keyed sponge PRF bound (Theorem 4) and the flat sponge claim; the OD
+  construction itself is not directly instantiated (see §6.12, Step 1 note).
 - RFC 9861: TurboSHAKE and KangarooTwelve.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
