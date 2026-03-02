@@ -760,9 +760,11 @@ value or tag) but all intermediate rate outputs — precisely the bytes XORed wi
 This observation is used in §6.3 hop 2 to justify keystream pseudorandomness. For tighter bounds in the keyed
 setting, see Mennink–Reyhanitabar–Vizár (Eurocrypt 2015); the resulting bound remains $(\sigma+t)^2/2^{c+1}$.
 
-**Equivalent sponge input.** Define $\mathrm{pad}(X, d)$ as the $R$-byte string $X \| d \| 0^{R-2-|X|} \| \texttt{0x80}$,
-where $|X| \leq R - 2$ (the data, domain byte, and terminator fit in one rate block). This is `pad10*1` applied to
-$X$ with domain byte $d$.
+**Equivalent sponge input.** Define $\mathrm{pad}(X, d)$ for $|X| \leq R - 1$ as the $R$-byte string obtained by
+starting with $X \| 0^{R-|X|}$, XORing $d$ at position $|X|$, and XORing $\texttt{0x80}$ at position $R - 1$.
+When $|X| < R - 1$, positions $|X|$ and $R - 1$ are distinct and this reduces to $X \| d \| 0^{R-2-|X|} \| \texttt{0x80}$.
+When $|X| = R - 1$ (a full-rate intermediate block), the domain byte and terminator share position $R - 1$,
+giving $X \| (d \oplus \texttt{0x80})$. This matches the behavior of `pad_permute` in §4.
 
 For a leaf with key $K$, index $i$, plaintext $P$, and final domain byte $d_f$ (`0x63` for chain value, `0x61` for
 single-node tag), partition $P$ into $(R-1)$-byte segments: $P = P_1 \| P_2 \| \cdots \| P_m \| P_*$, where
