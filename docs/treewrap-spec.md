@@ -423,8 +423,8 @@ both conditions, despite sharing `tw_key` across encryption and tagging:
   property that the composition theorem requires, without needing physically separate keys.
 
 In the composition mapping: the MAC key is `tw_key`, the MAC input is the full ciphertext (including chunk
-structure), and `N`/`AD` are bound to `tw_key` via the KDF. The `Decrypt` oracle enables $S$ tag-guess tests, each
-succeeding with probability $1/2^{8C}$.
+structure), and `N`/`AD` are bound to `tw_key` via the KDF. The `Decrypt` oracle enables $S$ tag-guess tests;
+by the tag uniformity corollary (§6.7), each succeeds with probability $1/2^{8C}$.
 
 $$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
 
@@ -443,9 +443,9 @@ $$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \varepsilon_{\mathrm{kdf}} + \frac
 **Proof sketch.** After KDF→random (cost $\varepsilon_{\mathrm{kdf}}$) and sponge→RO (cost $(\sigma+t)^2/2^{c+1}$),
 each fresh nonce yields an independent, uniformly random `tw_key`. (KDF-output collisions occur with probability
 $Q^2 / 2^{257}$, absorbed by the sponge term since $Q \leq \sigma$; see §6.3 hop 1.) The adversary may also guess
-the secret key $K$ with probability $t / 2^{256}$, likewise absorbed by the sponge term. The tag on any unseen
-ciphertext under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$ forgery attempts succeeds with probability
-$1/2^{8C}$; a union bound gives $S/2^{8C}$.
+the secret key $K$ with probability $t / 2^{256}$, likewise absorbed by the sponge term. By the tag uniformity
+corollary (§6.7), the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$
+forgery attempts succeeds with probability $1/2^{8C}$; a union bound gives $S/2^{8C}$.
 
 > [!WARNING]
 > **Tag truncation.** When the caller truncates the tag to $T < C$ bytes, the forgery bound becomes
@@ -591,6 +591,10 @@ where $\mathit{final\_input}$ is a deterministic, injective encoding of the chai
 separates tag accumulation from the leaf ciphers (`0x60` – `0x63`). TurboSHAKE128 is an unkeyed random oracle;
 the tag is pseudorandom because its input consists entirely of pseudorandom chain values (keyed leaf PRF outputs)
 that are hidden from the adversary.
+
+**Corollary (tag uniformity).** For any ciphertext not previously queried under the same key, the tag is uniformly
+distributed over $8C$ bits, independent of the adversary's view. This follows directly from the PRF property: a
+PRF output on a fresh input is indistinguishable from uniform.
 
 Protocols that use the tag as a contribution to ongoing state (rather than solely for authentication) require this
 stronger property.
