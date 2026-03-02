@@ -379,9 +379,10 @@ is nonce-respecting: each encryption query uses a fresh `N`.
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \frac{(\sigma + t)^2}{2^{c+1}}$$
+$$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}}$$
 
-where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in §6.2).
+where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in §6.2). The second term is
+key guessing (see §6.7 for discussion); it is dominated by the sponge term for $\sigma + t \geq 2$.
 
 **Proof sketch** (two game hops):
 
@@ -439,8 +440,9 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
    implies a fresh `tw_key` (after hop 1), so each encryption query uses an independent key.
 
-Since $t \leq \sigma + t$ implies $t / 2^{256} \leq (\sigma + t)^2 / 2^{c+1}$ for $\sigma + t \geq 2$, the
-key-guessing term is absorbed into the sponge term, giving the stated bound.
+The key-guessing term $t / 2^{256}$ is stated explicitly in the bound for consistency with §6.7. Since
+$t \leq \sigma + t$ implies $t / 2^{256} \leq (\sigma + t)^2 / 2^{c+1}$ for $\sigma + t \geq 2$, the
+key-guessing term is dominated by the sponge term at all practical budgets.
 
 ### 6.3.1 CCA Security (IND-CCA2)
 
@@ -471,7 +473,9 @@ In the composition mapping: the MAC key is `tw_key`, the MAC input is the full c
 structure), and `N`/`AD` are bound to `tw_key` via the KDF (§5.3). The `Decrypt` oracle enables $S$ tag-guess
 tests; by the tag uniformity corollary (§6.7), each succeeds with probability $1/2^{8\tau}$.
 
-$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8\tau}}$$
+$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}} + \frac{S}{2^{8\tau}}$$
+
+The $t / 2^{256}$ term is key guessing, dominated by the sponge term (see §6.3).
 
 ### 6.4 Authenticity (INT-CTXT)
 
@@ -484,12 +488,13 @@ wins by producing $(N, \mathit{AD}, \mathit{CT} \| \mathit{tag})$ such that `Dec
 
 **Theorem.**
 
-$$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8\tau}}$$
+$$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}} + \frac{S}{2^{8\tau}}$$
+
+The $t / 2^{256}$ term is key guessing, dominated by the sponge term (see §6.3).
 
 **Proof sketch.** After the sponge→RO hop (cost $(\sigma+t)^2/2^{c+1}$), each fresh nonce yields an independent,
 uniformly random `tw_key` (injective `encode_string` encoding + RO independence; see §6.3 hop 1). The adversary may
-also guess the secret key $K$ with probability $t / 2^{256}$, absorbed by the sponge term (since
-$t \leq \sigma + t$ implies $t / 2^{256} \leq (\sigma + t)^2 / 2^{c+1}$ for $\sigma + t \geq 2$). By the tag uniformity
+also guess the secret key $K$ with probability $t / 2^{256}$ (stated explicitly in the bound above). By the tag uniformity
 corollary (§6.7), the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8\tau$ bits. Each of $S$
 forgery attempts succeeds with probability $1/2^{8\tau}$; a union bound gives $S/2^{8\tau}$.
 
