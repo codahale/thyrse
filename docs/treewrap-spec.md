@@ -245,12 +245,11 @@ Domain byte `0x65` separates key derivation from all other TreeWrap uses of Turb
 2. `(CT, tag) ← TreeWrap.EncryptAndMAC(tw_key, M)`
 3. Return `CT ‖ tag`.
 
-**`TreeWrap-AEAD.Decrypt(K, N, AD, C) → M or ⊥`:**
+**`TreeWrap-AEAD.Decrypt(K, N, AD, CT ‖ tag_expected) → M or ⊥`:**
 
-1. Split `C` into `CT` (first `|C| − τ` bytes) and `tag_expected` (last `τ` bytes).
-2. `tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)`
-3. `(M, tag) ← TreeWrap.DecryptAndMAC(tw_key, CT)`
-4. If `tag = tag_expected`, return `M`; otherwise return `⊥`.
+1. `tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)`
+2. `(M, tag) ← TreeWrap.DecryptAndMAC(tw_key, CT)`
+3. If `tag = tag_expected`, return `M`; otherwise return `⊥`.
 
 ## 6. Security Properties
 
@@ -462,8 +461,8 @@ $$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \
 *This property is stated for `TreeWrap-AEAD` (§5.3).*
 
 **Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The adversary wins by
-producing $(N, \mathit{AD}, C)$ such that `Decrypt(K, N, AD, C)` returns `M ≠ ⊥` and `C` was not previously returned by
-`Encrypt(K, N, AD, ·)`. The adversary is nonce-respecting.
+producing $(N, \mathit{AD}, \mathit{CT} \| \mathit{tag})$ such that `Decrypt(K, N, AD, CT ‖ tag)` returns `M ≠ ⊥`
+and `CT ‖ tag` was not previously returned by `Encrypt(K, N, AD, ·)`. The adversary is nonce-respecting.
 
 **Theorem.**
 
