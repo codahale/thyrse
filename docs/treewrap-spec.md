@@ -525,9 +525,10 @@ simplifies to $(\sigma + t)^2 / 2^c$.
    injective `encode_string` encoding (§5.2) ensures distinct `(K, N, AD)` triples produce distinct TurboSHAKE128
    inputs, which map to distinct random oracle inputs. In the RO world, distinct inputs produce independent
    uniform outputs — so the KDF yields independent, uniformly random `tw_key` values (distinct except with
-   birthday probability $Q^2 / 2^{257}$, already captured by the sponge term). Conditioned on distinct keys:
-   the ciphertext may coincide, but distinct (key, ciphertext) pairs produce distinct tags except with probability
-   bounded by tag collision resistance (§6.6).
+   birthday probability $Q^2 / 2^{257}$, already captured by the sponge term). The CMT-4 game requires equal
+   outputs, i.e., $\mathit{CT} = \mathit{CT}'$ and $\mathit{tag} = \mathit{tag}'$. If $\mathit{CT} \neq \mathit{CT}'$,
+   the game is trivially not won. If $\mathit{CT} = \mathit{CT}'$ but the keys differ, the (key, ciphertext) pairs
+   are distinct, and tag collision resistance (§6.6) bounds the probability that the tags coincide.
 
 2. **Same context, different messages** (same $(K,N,\mathit{AD})$, so same `tw_key`, but $M \neq M'$). Same key
    implies the same chunk boundaries: the chunk structure is determined by `tw_key` and $|M|$, and the CMT-4 game
