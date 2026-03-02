@@ -273,6 +273,14 @@ TurboSHAKE128 evaluations (including KDF evaluations) in a single hop. After the
 `encode_string` encoding (§5.3) ensures that distinct `(K, N, AD)` triples produce distinct random oracle inputs,
 so each fresh nonce yields an independent, uniformly random `tw_key`.
 
+The concrete KDF provides two properties used by the theorems below, both as immediate consequences of the
+sponge→RO hop:
+
+- **PRF security.** For uniform `K`, the mapping `(N, AD) → tw_key` is indistinguishable from a random function.
+  Used by: IND-CPA (§6.3), INT-CTXT (§6.4), IND-CCA2 (§6.3.1).
+- **Collision resistance.** Distinct `(K, N, AD) ≠ (K', N', AD')` (including adversary-chosen keys) produce
+  distinct `tw_key` values in the RO world (injective encoding → distinct RO inputs). Used by: CMT-4 (§6.5).
+
 > [!WARNING]
 > **Key reuse damage.** If the same `tw_key` is used for two different plaintexts $M \neq M'$, the leaf
 > cipher leaks plaintext XOR differences within the first block. At each byte position $j$ within a block, the
