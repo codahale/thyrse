@@ -365,9 +365,10 @@ $$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \varepsilon_{\mathrm{kdf}} + \frac
 
 **Proof sketch.** After KDF→random (cost $\varepsilon_{\mathrm{kdf}}$) and sponge→RO (cost $(\sigma+t)^2/2^{c+1}$),
 each fresh nonce yields an independent, uniformly random `tw_key`. (KDF-output collisions occur with probability
-$Q^2 / 2^{257}$, absorbed by the sponge term since $Q \leq \sigma$; see §6.3 hop 1.) The tag on any unseen ciphertext
-under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$ forgery attempts succeeds with probability $1/2^{8C}$;
-a union bound gives $S/2^{8C}$.
+$Q^2 / 2^{257}$, absorbed by the sponge term since $Q \leq \sigma$; see §6.3 hop 1.) The adversary may also guess
+the secret key $K$ with probability $t / 2^{256}$, likewise absorbed by the sponge term. The tag on any unseen
+ciphertext under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$ forgery attempts succeeds with probability
+$1/2^{8C}$; a union bound gives $S/2^{8C}$.
 
 > [!WARNING]
 > **Tag truncation.** When the caller truncates the tag to $T < C$ bytes, the forgery bound becomes
