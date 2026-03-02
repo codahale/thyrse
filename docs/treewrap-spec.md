@@ -879,7 +879,7 @@ This contrasts with AES-GCM, where multi-key security introduces per-key block-c
 
 **Comparison with AES-128-GCM.** At $p = 2^{-50}$ with 1500-byte messages, Günther, Thomson, and Wood (Table 2) limit
 AES-128-GCM to $2^{32.5}$ queries per key. TreeWrap at the same advantage permits $\sigma + t \leq 2^{103.5}$ Keccak-p
-calls system-wide — roughly $2^{100}$ messages even at maximum tree depth — a difference of over 67 orders of magnitude.
+calls system-wide — roughly $2^{100}$ messages even at maximum tree depth — a factor of approximately $2^{67}$.
 
 ## 8. References
 
