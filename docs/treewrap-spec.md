@@ -420,7 +420,9 @@ key guessing (see §6.7 for discussion); it is dominated by the sponge term for 
    $\mathit{final\_input}$ contains $n$ chain values, each $8C$ bits, and the adversary makes at most $t$
    random oracle queries, $\Pr[B] \leq t / 2^{8Cn}$. (In the RO world, the chain values are truly uniform
    from the adversary's perspective — they are random oracle outputs on inputs prefixed by the secret key —
-   so this is a direct counting bound, not a PRF advantage.) Conditioned on
+   so this is a direct counting bound, not a PRF advantage.) Since $8Cn \geq 512 > 256$ for $n \geq 2$,
+   this is dominated by the key-guessing term $t / 2^{256}$ and does not appear separately in the bound.
+   Conditioned on
    $\lnot B$, the random oracle has not been evaluated at $\mathit{final\_input}$, so the tag is uniformly random
    and independent of the adversary's view. In both cases ($n = 1$ and $n > 1$),
    $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
