@@ -336,9 +336,18 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
 **Proof sketch** (three game hops):
 
 1. **KDF → random keys** (cost: $\varepsilon_{\mathrm{kdf}}$). By KDF PRF security, replace `KDF(K, N, AD)` with a
-   random function of `(N, AD)`. Each fresh nonce produces an independent, uniformly random `tw_key`. A random
-   function on $Q$ distinct inputs collides with probability $Q^2 / 2^{257}$; since each query costs at least one
-   Keccak-p call, $Q \leq \sigma$, so this term is absorbed by the sponge term $(\sigma + t)^2 / 2^{c+1}$ in hop 2.
+   random function of `(N, AD)`. Each fresh nonce produces an independent, uniformly random `tw_key`.
+
+   After this hop, a subtle question arises: what if the random function produces the same `tw_key` for two
+   different nonces? A random function on $Q$ distinct inputs collides with probability at most $Q^2 / 2^{257}$
+   (birthday bound on 256-bit outputs). This is a property of the idealized KDF replacement, not of TreeWrap
+   itself — the bare primitive assumes its key is unique and has no KDF. The term appears here because the
+   notional AEAD (§6.1) introduces the KDF to map standard AEAD games onto TreeWrap's key-per-invocation
+   interface, and the random-function replacement can collide where a truly injective mapping would not.
+
+   This term is dominated by the sponge indifferentiability term in hop 2: each encryption query requires at
+   least one Keccak-p call, so $Q \leq \sigma \leq \sigma + t$, giving
+   $Q^2 / 2^{257} \leq (\sigma + t)^2 / 2^{c+1}$. It does not appear in the final bound as a separate term.
 
 2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the overwrite duplex equivalence (§6.12, Step 1), each
    leaf's interactive computation is expressible as a single standard sponge evaluation on an injective encoding
