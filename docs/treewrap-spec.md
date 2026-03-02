@@ -268,9 +268,10 @@ sponge→RO hop:
 
 > [!WARNING]
 > **Key reuse.** Reusing `tw_key` compromises IND-CPA (leaks plaintext XOR differences within the first
-> block, i.e., $R - 1 = 167$ bytes per chunk) and weakens INT-CTXT within the first block. Unlike polynomial-MAC AEADs (e.g., AES-GCM), key reuse
-> does not enable universal forgery — the sponge-based tag remains computationally unpredictable for novel
-> ciphertexts. Callers MUST ensure key uniqueness (e.g., via the KDF in §5.3 with fresh nonces).
+> block, i.e., $R - 1 = 167$ bytes per chunk). Unlike polynomial-MAC AEADs (e.g., AES-GCM), key reuse
+> does not enable universal forgery — the sponge-based tag remains a PRF of the ciphertext under the
+> shared key, so INT-CTXT is not degraded (each forgery attempt still succeeds with probability
+> $1/2^{8\tau}$). Callers MUST ensure key uniqueness (e.g., via the KDF in §5.3 with fresh nonces).
 
 > [!NOTE]
 > **Release of unverified plaintext (RUP).** The bare `DecryptAndMAC` interface is inherently malleable:
