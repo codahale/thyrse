@@ -308,7 +308,9 @@ $$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \varepsilon_{\mathrm{kdf}} + \frac{
 **Proof sketch** (three game hops):
 
 1. **KDF → random keys** (cost: $\varepsilon_{\mathrm{kdf}}$). By KDF PRF security, replace `KDF(K, N, AD)` with a
-   random function of `(N, AD)`. Each fresh nonce produces an independent, uniformly random `tw_key`.
+   random function of `(N, AD)`. Each fresh nonce produces an independent, uniformly random `tw_key`. A random
+   function on $Q$ distinct inputs collides with probability $Q^2 / 2^{257}$; since each query costs at least one
+   Keccak-p call, $Q \leq \sigma$, so this term is absorbed by the sponge term $(\sigma + t)^2 / 2^{c+1}$ in hop 2.
 
 2. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By sponge indifferentiability, replace all Keccak sponge
    evaluations with random oracle evaluations.
@@ -358,8 +360,10 @@ producing $(N, \mathit{AD}, C)$ such that `Decrypt(K, N, AD, C)` returns `M ≠ 
 $$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
 
 **Proof sketch.** After KDF→random (cost $\varepsilon_{\mathrm{kdf}}$) and sponge→RO (cost $(\sigma+t)^2/2^{c+1}$),
-the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$ forgery attempts succeeds
-with probability $1/2^{8C}$; a union bound gives $S/2^{8C}$.
+each fresh nonce yields an independent, uniformly random `tw_key`. (KDF-output collisions occur with probability
+$Q^2 / 2^{257}$, absorbed by the sponge term since $Q \leq \sigma$; see §6.3 hop 1.) The tag on any unseen ciphertext
+under a fresh `tw_key` is uniform over $8C$ bits. Each of $S$ forgery attempts succeeds with probability $1/2^{8C}$;
+a union bound gives $S/2^{8C}$.
 
 > [!WARNING]
 > **Tag truncation.** When the caller truncates the tag to $T < C$ bytes, the forgery bound becomes
