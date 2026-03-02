@@ -456,6 +456,31 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 - Tag verification MUST use constant-time equality.
 - Partial-block logic may branch on public length, not on secret data.
 
+### 6.11 Implementation Design Callouts (Non-Normative)
+
+The following implementation decisions are performance-critical and align with high-throughput production designs:
+
+- **Batch leaves by SIMD width.** Process complete chunks in vector batches (for example, x4 then x2 then x1) to keep
+  permutation backends saturated.
+- **Use runtime-dispatched Keccak backends.** Provide architecture-specific permutation paths and dispatch at runtime:
+  amd64 (AVX-512/AVX2/SSE2), arm64 (FEAT_SHA3 where available), with a constant-time scalar fallback for portability.
+- **Match scheduling to permutation kernels.** Structure worker loops so the hot path maps directly onto `P1600x4`,
+  then `P1600x2`, then `P1600`, minimizing tail overhead and avoiding per-block feature checks inside inner loops.
+- **Parallelize independent finalizations when available.** If two independent TurboSHAKE/Keccak states must be
+  finalized together, use a paired permutation path (`x2`) to reduce permutation-call overhead.
+- **Stream chain values incrementally.** Feed chain values into a running TurboSHAKE128 hasher as each batch completes;
+  only finalization depends on having absorbed all chain values.
+- **Preserve empty/single-chunk fast paths.** Keep dedicated `n = 0` (empty input) and `n = 1` paths to avoid
+  unnecessary tree-accumulation overhead on latency-sensitive inputs.
+- **Use incremental stateful processing.** Maintain chunk-local state across partial writes/reads so callers can stream
+  large messages without extra buffering copies.
+- **Reuse one scheduling pipeline for both directions.** Encrypt and decrypt should share the same chunk scheduling,
+  index binding, and chain-value accumulation pipeline.
+- **Keep domain bytes and index mapping exact.** `0x60`–`0x65` constants and `key || [index]_64LE` binding are
+  structural for interoperability and security analysis.
+- **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
+  patterns when constructing final-node inputs.
+
 ## 7. Comparison with Traditional AEAD
 
 TreeWrap differs from traditional AEAD in several respects. This document defines a concrete AEAD construction
