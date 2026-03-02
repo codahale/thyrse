@@ -297,13 +297,14 @@ transcript-dependent sponge output in the same model, and no extra hybrid model 
 
 #### 6.3.2 Tag Collision Resistance
 
-For $Q$ distinct `(key, ciphertext)` inputs:
+For $Q$ distinct ciphertext inputs under one fixed secret key:
 
 $$
 \varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}}.
 $$
 
-The second term is the birthday bound on $8\tau$-bit pseudorandom outputs.
+The second term is the birthday bound on $8\tau$-bit pseudorandom outputs. By Lemma 3, this is equivalently a
+fixed-key bound over distinct plaintext inputs.
 
 ### 6.4 AEAD KDF Separation Lemma
 
