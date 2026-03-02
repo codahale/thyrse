@@ -384,8 +384,8 @@ $\tau$-byte tag — the security level is determined by the capacity, not the ta
 *This property is stated for `TreeWrap-AEAD` (§5.3).*
 
 **Game.** The adversary has access to an `Encrypt` oracle under a random key `K`. The oracle takes
-$(N, \mathit{AD}, M_0, M_1)$ with $|M_0| = |M_1|$ and fresh `N`, and returns `Encrypt(K, N, AD, M_b)`. The adversary
-is nonce-respecting and guesses `b`.
+$(N, \mathit{AD}, M_0, M_1)$ with $|M_0| = |M_1|$ and returns `Encrypt(K, N, AD, M_b)`. The adversary
+is nonce-respecting: each encryption query uses a fresh `N`.
 
 **Theorem.**
 
@@ -445,6 +445,12 @@ key-guessing term is absorbed into the sponge term, giving the stated bound.
 
 *This property is stated for `TreeWrap-AEAD` (§5.3).*
 
+**Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The `Encrypt` oracle
+is as in §6.3; the adversary is nonce-respecting for encryption queries. The `Decrypt` oracle takes
+$(N, \mathit{AD}, \mathit{CT} \| \mathit{tag})$ and returns `Decrypt(K, N, AD, CT ‖ tag)`; decryption queries may
+reuse any nonce, including nonces used in encryption queries. The adversary may not submit a ciphertext returned by
+`Encrypt` to `Decrypt` on the same `(N, AD)`.
+
 IND-CCA2 security follows from the standard encrypt-then-MAC composition, applied after the single sponge→RO hop.
 
 **Composition structure.** The encrypt-then-MAC composition requires two properties: (1) the tag is determined by the
@@ -470,9 +476,10 @@ $$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \
 
 *This property is stated for `TreeWrap-AEAD` (§5.3).*
 
-**Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The adversary wins by
-producing $(N, \mathit{AD}, \mathit{CT} \| \mathit{tag})$ such that `Decrypt(K, N, AD, CT ‖ tag)` returns `M ≠ ⊥`
-and `CT ‖ tag` was not previously returned by `Encrypt(K, N, AD, ·)`. The adversary is nonce-respecting.
+**Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The adversary is
+nonce-respecting for encryption queries (each uses a fresh `N`); decryption queries may use any nonce. The adversary
+wins by producing $(N, \mathit{AD}, \mathit{CT} \| \mathit{tag})$ such that `Decrypt(K, N, AD, CT ‖ tag)` returns
+`M ≠ ⊥` and `CT ‖ tag` was not previously returned by `Encrypt(K, N, AD, ·)`.
 
 **Theorem.**
 
