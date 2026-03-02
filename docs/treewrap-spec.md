@@ -92,13 +92,16 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 - **`encrypt(P) → CT`:** For each plaintext byte `Pⱼ`:
   - `CTⱼ ← Pⱼ ⊕ S[pos]`
   - `S[pos] ← CTⱼ` (overwrite with ciphertext)
-  - Increment `pos`. When `pos` reaches R−1 and more plaintext remains, call `pad_permute(0x62)`.
+  - Increment `pos`. If `pos = R−1` **and** more plaintext bytes remain, call `pad_permute(0x62)`.
+    (If `pos = R−1` but no plaintext remains, do not call `pad_permute` — the next operation will be
+    `chain_value()` or `single_node_tag()`, which applies its own padding.)
   - Return concatenated ciphertext bytes.
 
 - **`decrypt(CT) → P`:** For each ciphertext byte `CTⱼ`:
   - `Pⱼ ← CTⱼ ⊕ S[pos]`
   - `S[pos] ← CTⱼ` (overwrite with ciphertext)
-  - Increment `pos`. When `pos` reaches R−1 and more ciphertext remains, call `pad_permute(0x62)`.
+  - Increment `pos`. If `pos = R−1` **and** more ciphertext bytes remain, call `pad_permute(0x62)`.
+    (Same boundary condition as `encrypt`.)
   - Return concatenated plaintext bytes.
 
 > [!NOTE]
