@@ -1112,9 +1112,13 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
 
 ### NIST SP 800-185 Encodings
 
+`left_encode` and `encode_string` follow NIST SP 800-185. `right_encode` follows the KangarooTwelve
+convention (RFC 9861): for $x = 0$ it returns a single `0x00` byte rather than `0x00 0x01`. TreeWrap
+only calls `right_encode` with $n \geq 2$, so the difference is unreachable in practice.
+
 ```python
 def right_encode(x: int) -> bytes:
-    """Big-endian, no leading zeros, followed by byte count. right_encode(0) = 0x00."""
+    """Big-endian, no leading zeros, followed by byte count (KangarooTwelve convention)."""
     if x == 0:
         return b"\x00"
     n = (x.bit_length() + 7) // 8
