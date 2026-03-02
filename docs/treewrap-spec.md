@@ -414,8 +414,10 @@ key guessing (see §6.7 for discussion); it is dominated by the sponge term for 
    $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ — an unkeyed random oracle evaluated on a
    deterministic, injective encoding of the chain values. We argue tag pseudorandomness via a bad-event bound.
    Define event $B$: the adversary queries the random oracle on $\mathit{final\_input}$. Since
-   $\mathit{final\_input}$ contains $n$ chain values, each a pseudorandom $8C$-bit PRF output under the secret
-   key, and the adversary makes at most $t$ random oracle queries, $\Pr[B] \leq t / 2^{8Cn}$. Conditioned on
+   $\mathit{final\_input}$ contains $n$ chain values, each $8C$ bits, and the adversary makes at most $t$
+   random oracle queries, $\Pr[B] \leq t / 2^{8Cn}$. (In the RO world, the chain values are truly uniform
+   from the adversary's perspective — they are random oracle outputs on inputs prefixed by the secret key —
+   so this is a direct counting bound, not a PRF advantage.) Conditioned on
    $\lnot B$, the random oracle has not been evaluated at $\mathit{final\_input}$, so the tag is uniformly random
    and independent of the adversary's view. In both cases ($n = 1$ and $n > 1$),
    $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
