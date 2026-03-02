@@ -548,7 +548,9 @@ pass over the data, unlike generic CMT-4 transforms applied to non-committing AE
 > not online query count. For $T = 16$ (128-bit truncated tags), the birthday term is $(\sigma + t)^2 / 2^{129}$,
 > giving constant advantage at $\sigma + t \approx 2^{64}$: a 128-bit truncated tag provides only $\approx$64-bit
 > committing security. Callers that truncate the tag and rely on committing security MUST ensure that the
-> adversary's computational budget remains well below $2^{4T}$ Keccak-p evaluations.
+> adversary's computational budget remains well below $2^{4T}$ Keccak-p evaluations. (The KDF output collision
+> term $(\sigma + t)^2 / 2^{c+1}$ is unaffected by tag truncation, since it depends on the 256-bit `tw_key`,
+> not the tag length.)
 
 ### 6.5.1 Caller Obligations
 
