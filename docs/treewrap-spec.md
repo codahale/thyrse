@@ -733,7 +733,11 @@ After rewriting each ciphertext write as the equivalent XOR, the remaining opera
 material during `init` (already standard sponge absorption), and (b) `pad_permute` calls that XOR a domain byte at
 position $\mathit{pos}$ and `0x80` at position $R - 1$ — exactly TurboSHAKE's `pad10*1` padding. The capacity portion
 (bytes $R$ through 199) is never directly read or written. Therefore, after the rewriting, each leaf's full computation
-is a standard $\mathrm{Keccak}[256]$ sponge evaluation.
+is a standard $\mathrm{Keccak}[256]$ sponge evaluation. Note that the concatenated sponge input consists of
+$R$-byte blocks, each self-padded via `pad10*1`. When absorbed by a standard sponge $R$ bytes at a time, the
+absorption boundaries align with the block boundaries, reproducing the leaf's per-block `pad_permute` behavior
+exactly. The standard sponge's own final padding is never triggered because every block is already $R$-byte
+aligned — this is the same technique used by Sakura tree hashing.
 
 **Keyed duplex interpretation.** The rewritten leaf is equivalently a keyed duplex construction (Bertoni et al.,
 "Duplexing the Sponge," SAC 2011): the init block absorbs key material ($K \| [i]_{\mathrm{64LE}}$), and each
