@@ -48,12 +48,14 @@ TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap:
 | `0x63` | Final block (chain value)    | `chain_value`            |
 | `0x64` | Tag accumulation             | `TreeWrap`, `TreeUnwrap` |
 
-> [!WARNING]
+> [!NOTE]
 > **System-wide permutation accounting.** All Keccak-p[1600,12] evaluations across the entire system — by TreeWrap,
 > by other components using TurboSHAKE128 or any Keccak-based primitive, and by the adversary — contribute to the
-> total budget $\sigma + t$ in the security bounds (§6.2). The sponge indifferentiability theorem replaces the
-> permutation with a random oracle in a single reduction whose cost depends on this total. Systems that make heavy
-> use of Keccak-p outside TreeWrap should account for those calls when evaluating the security margin.
+> total budget $\sigma + t$ in the security bounds (§6.2). For example, a system using both TreeWrap and
+> KangarooTwelve simply sums the permutation calls from both when evaluating the security margin. In practice this
+> is not a concern: encrypting or hashing one terabyte of data costs approximately $2^{33}$ permutation calls, so
+> even an aggressive workload of $2^{50}$ total calls across all components leaves the security margin at
+> $(2^{50})^2 / 2^{257} = 2^{-157}$ — far below any practical threshold.
 
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
 into the rate rather than XORing plaintext into it. This enables a clean security reduction to the standard Keccak
