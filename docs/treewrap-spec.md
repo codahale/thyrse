@@ -345,10 +345,22 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
 
 3. **RO world.** Each `tw_key` is a 256-bit secret absorbed as a prefix into the sponge. By the overwrite duplex
    equivalence (§6.12, Lemma 2 of Daemen et al.), each leaf's computation maps to a standard sponge evaluation with
-   `tw_key` as a secret prefix. By Theorem 5 of Daemen et al. (ePrint 2024/1618), the keyed overwrite duplex cipher
-   is indistinguishable from an ideal keyed function that returns uniformly random output at each duplexing step,
-   up to the PRF advantage of the underlying sponge function — which in the RO world reduces to key-guessing
-   probability $t / 2^{256}$.
+   `tw_key` as a secret prefix.
+
+   *Theorem 5 of Daemen et al. (ePrint 2024/1618):* The idaho advantage of the keyed overwrite duplex
+   $\mathrm{OD}[f, \rho, \mathrm{trailenc}][\mathcal{K}]$ is upper bounded by the multi-user PRF advantage of the
+   corresponding sponge function $F[\mathcal{K}]$:
+   $\mathrm{Adv}^{\mathrm{idaho}}_{\mathrm{OD}[f,\rho,\mathrm{trailenc}][\mathcal{K}]}(\mu, t, \sigma) \leq
+   \mathrm{Adv}^{\mathrm{mPRF}}_{F[\mathcal{K}]}(\mu, t, \sigma)$, where $\mu$ is the key multiplicity, $t$ is the
+   computational complexity (permutation evaluations), and $\sigma$ is the data complexity (input and output blocks
+   in construction queries). The idaho advantage measures distinguishability from an ideal stateful object that
+   returns independent random outputs at each duplexing and squeezing step.
+
+   TreeWrap applies this with $\mu = 1$ (single key per invocation), $f = \mathrm{Keccak\text{-}p}[1600,12]$,
+   $\rho = R = 168$, and $c = 256$. The preconditions of Lemma 2 (injective input encoding, key as prefix) are
+   verified in §6.12 Step 1. In the RO world (after hop 2), the multi-user PRF advantage of keyed TurboSHAKE128
+   reduces to key-guessing probability $t / 2^{256}$ (by Theorem 4 of Daemen et al., with the sponge
+   indifferentiability term already paid in hop 2).
 
    In the ideal world, the keystream byte at each position is uniformly random *before* the corresponding ciphertext
    byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
