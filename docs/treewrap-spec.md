@@ -419,12 +419,13 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
 
    In the ideal world, the keystream byte at each position is uniformly random *before* the corresponding ciphertext
    byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
-   uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$. No circularity arises between
-   the PRF output and the plaintext appearing in the equivalent sponge input: the PRF guarantee is that each
-   output byte is uniform given only prior state, before the overwrite occurs. The equivalent sponge input for
-   block $k$ depends on the plaintext of block $k$, which is determined before the PRF output (keystream) for that
-   block is produced. The PRF output is then used to encrypt the plaintext, and the resulting ciphertext is
-   overwritten into the state — but this feedback only affects subsequent blocks, not the current PRF evaluation.
+   uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$.
+
+   **No circularity.** The equivalent sponge input for block $k$ contains the plaintext of block $k$, which is
+   determined before the PRF output (keystream) for that block is produced. The PRF guarantee is that each output
+   byte is uniform given only prior state, before the overwrite occurs. The resulting ciphertext is then overwritten
+   into the state, but this feedback only affects subsequent blocks, not the current PRF evaluation. There is
+   therefore no circular dependence between the PRF output and the plaintext appearing in its input.
 
    For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
    output under the secret key on a distinct domain. For $n > 1$, the tag is
