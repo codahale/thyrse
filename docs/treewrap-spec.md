@@ -290,7 +290,10 @@ the entire system and $t$ counts all offline (adversary) permutation calls. Othe
 (including TurboSHAKE128 on any domain byte) do not break the security reduction; they simply contribute to
 $\sigma + t$. After the sponge-to-RO replacement, TreeWrap's security rests on the secrecy of `tw_key`: the
 adversary cannot evaluate the keyed PRF without querying the random oracle on an input prefixed with the
-256-bit key, regardless of what domain byte is used. See §4 for the corresponding implementer guidance.
+256-bit key, regardless of what domain byte is used. Consequently, TreeWrap's domain byte separation (`0x60`–`0x65`)
+is a proof convenience that simplifies the security argument, not a security requirement: if another Keccak-based
+construction independently uses the same domain byte values, security is not broken — all evaluations simply
+contribute to the shared $\sigma + t$ budget. See §4 for the corresponding implementer guidance.
 
 **Notation:**
 
