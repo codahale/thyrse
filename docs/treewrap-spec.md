@@ -303,6 +303,12 @@ KangarooTwelve/TurboSHAKE convention. More generally, to achieve advantage $\leq
 must satisfy $\sigma + t \leq 2^{(c+1-k)/2}$. For $c = 256$: advantage $\leq 2^{-1}$ at $\sigma + t = 2^{128}$,
 or advantage $\leq 2^{-128}$ at $\sigma + t = 2^{64}$.
 
+**Capacity vs. tag length.** The dominant term $(\sigma + t)^2 / 2^{c+1}$ caps overall security at $c/2 \approx 128$
+bits of work for constant advantage, regardless of the tag length. The full 256-bit ($C = 32$) tag provides margin
+against birthday-type terms (tag collisions at $Q^2 / 2^{257}$, KDF collisions at $Q^2 / 2^{257}$) and key-guessing
+($t / 2^{256}$), but does not raise the sponge ceiling. Readers should not infer "256-bit MAC security" from the
+32-byte tag — the security level is determined by the capacity, not the tag length.
+
 ### 6.3 Confidentiality (IND-CPA)
 
 *This property is stated for `TreeWrap-AEAD[KDF]`.*
