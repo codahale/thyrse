@@ -511,8 +511,9 @@ simplifies to $(\sigma + t)^2 / 2^c$.
 
 In Case 1, after the sponge→RO hop (cost $(\sigma + t)^2 / 2^{c+1}$), distinct (key, ciphertext) pairs produce
 tags that are pseudorandom and pairwise independent under the PRF reduction (by the tag collision resistance
-argument in §6.6). Since CMT-4 is a non-oracle
-game, the adversary can evaluate at most $\sigma + t$ distinct (key, ciphertext) pairs (each evaluation costs at
+argument in §6.6). CMT-4 is a single-stage game (the adversary outputs all inputs at once and a deterministic
+check follows), so the sponge indifferentiability composition theorem applies. Since the adversary can evaluate at
+most $\sigma + t$ distinct (key, ciphertext) pairs (each evaluation costs at
 least one Keccak-p call). The collision probability among these evaluations is the standard birthday bound on the
 $8C = 256$-bit tag output: $(\sigma + t)^2 / 2^{8C+1}$.
 
