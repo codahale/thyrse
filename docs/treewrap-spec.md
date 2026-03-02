@@ -428,8 +428,8 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
    implies a fresh `tw_key` (after hop 1), so each encryption query uses an independent key.
 
-Since $t / 2^{256} \ll (\sigma + t)^2 / 2^{257}$, the key-guessing term is absorbed into the sponge term, giving the
-stated bound.
+Since $t \leq \sigma + t$ implies $t / 2^{256} \leq (\sigma + t)^2 / 2^{c+1}$ for $\sigma + t \geq 2$, the
+key-guessing term is absorbed into the sponge term, giving the stated bound.
 
 ### 6.3.1 CCA Security (IND-CCA2)
 
@@ -470,7 +470,8 @@ $$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \
 
 **Proof sketch.** After the sponge→RO hop (cost $(\sigma+t)^2/2^{c+1}$), each fresh nonce yields an independent,
 uniformly random `tw_key` (injective `encode_string` encoding + RO independence; see §6.3 hop 1). The adversary may
-also guess the secret key $K$ with probability $t / 2^{256}$, absorbed by the sponge term. By the tag uniformity
+also guess the secret key $K$ with probability $t / 2^{256}$, absorbed by the sponge term (since
+$t \leq \sigma + t$ implies $t / 2^{256} \leq (\sigma + t)^2 / 2^{c+1}$ for $\sigma + t \geq 2$). By the tag uniformity
 corollary (§6.7), the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8\tau$ bits. Each of $S$
 forgery attempts succeeds with probability $1/2^{8\tau}$; a union bound gives $S/2^{8\tau}$.
 
