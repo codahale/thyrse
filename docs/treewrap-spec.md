@@ -340,18 +340,16 @@ stated bound.
 
 *This property is stated for `TreeWrap-AEAD[KDF]`.*
 
-IND-CCA2 security follows by composition. By the Bellare–Namprempre theorem (adapted to the encrypt-and-MAC setting
-with PRF tags):
+IND-CCA2 security follows from a joint reduction. By the Bellare–Namprempre composition theorem (adapted to the
+encrypt-and-MAC setting with PRF tags), the CCA2 game can be reduced to: (1) a single KDF→random hop, (2) a single
+sponge→RO hop, and (3) an ideal-world forgery game. The KDF and sponge transitions are paid once (not separately
+for CPA and CTXT), because both properties share the same underlying game hops.
 
-$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \varepsilon_{\mathrm{ind\text{-}cpa}} + \varepsilon_{\mathrm{int\text{-}ctxt}}$$
+In the composition mapping: the MAC key is `tw_key`, the MAC input is the full ciphertext (including chunk
+structure), and `N`/`AD` are bound to `tw_key` via the KDF. The `Decrypt` oracle enables $S$ tag-guess tests, each
+succeeding with probability $1/2^{8C}$.
 
-Substituting the bounds from §6.3 and §6.4:
-
-$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq 2\varepsilon_{\mathrm{kdf}} + \frac{2(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
-
-The factor of 2 on the first two terms arises from combining two independent reductions that each pay the KDF and
-sponge costs. Since $2(\sigma + t)^2 / 2^{c+1} = (\sigma + t)^2 / 2^c$, this remains well within the 128-bit
-security budget.
+$$\varepsilon_{\mathrm{ind\text{-}cca2}} \leq \varepsilon_{\mathrm{kdf}} + \frac{(\sigma + t)^2}{2^{c+1}} + \frac{S}{2^{8C}}$$
 
 ### 6.4 Authenticity (INT-CTXT)
 
