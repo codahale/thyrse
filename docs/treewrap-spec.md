@@ -346,9 +346,13 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
    uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$. (The equivalent sponge input
    depends on $\mathit{CT}$ per §6.12, but no circularity arises: the PRF guarantee is that each output byte is
-   uniform given only prior state, before the overwrite occurs.) The tag — squeezed with domain byte `0x61` for
-   $n = 1$, or computed via TurboSHAKE128 with domain byte `0x64` for $n > 1$ — is an independent PRF evaluation
-   on a distinct domain, so $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
+   uniform given only prior state, before the overwrite occurs.) For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
+   output under the secret key on a distinct domain. For $n > 1$, the tag is
+   $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ — an unkeyed random oracle evaluated on a
+   deterministic, injective encoding of the chain values. Because the chain values are pseudorandom PRF outputs
+   under the secret key (one per leaf), the input to the random oracle has high min-entropy and is hidden from
+   the adversary, so the tag output is indistinguishable from uniform. In both cases,
+   $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
    implies a fresh `tw_key` (after hop 1), so each encryption query uses an independent key.
 
 Since $t / 2^{256} \ll (\sigma + t)^2 / 2^{257}$, the key-guessing term is absorbed into the sponge term, giving the
@@ -504,11 +508,12 @@ denominator, but they measure different adversarial capabilities (offline key se
 The argument follows from the monolithic sponge indifferentiability reduction (§6.12). After replacing all sponge
 evaluations with random oracle evaluations, each leaf defines a keyed PRF $F_K(i, C_i)$ with the secret key as a
 prefix (§6.12, Step 2). Distinct leaf indices produce distinct PRF inputs, so for $n > 1$ all chain values are
-simultaneously pseudorandom. The tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$
-where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values (or just the single leaf
-output squeezed with domain byte `0x61` if $n=1$). Domain byte `0x64` separates the tag accumulation from the leaf
-ciphers (`0x60` – `0x63`), so the tag is a PRF composition: a keyed function applied to pseudorandom input, which
-remains pseudorandom.
+simultaneously pseudorandom. For $n = 1$, the tag is squeezed directly from the leaf state with domain byte `0x61`, which is a PRF output
+under the secret key. For $n > 1$, the tag is $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$
+where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64`
+separates tag accumulation from the leaf ciphers (`0x60` – `0x63`). TurboSHAKE128 is an unkeyed random oracle;
+the tag is pseudorandom because its input consists entirely of pseudorandom chain values (keyed leaf PRF outputs)
+that are hidden from the adversary.
 
 Protocols that use the tag as a contribution to ongoing state (rather than solely for authentication) require this
 stronger property.
@@ -653,11 +658,13 @@ computes $\mathrm{cv}[i] = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$ where $
 and $K$ is the secret key. Because $K$ is a 256-bit secret prefix unknown to the adversary, each leaf defines a
 keyed PRF: $F_K(i, C_i) = \mathcal{O}(K \| [i]_{\mathrm{64LE}} \| C_i)$. Distinct leaf indices produce distinct
 oracle inputs, so for $n > 1$ all $n$ chain values are simultaneously pseudorandom (each is a PRF output on a
-distinct input). The tag is then $G_K(\mathit{CT}) = \mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$
-where $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64`
-separates tag accumulation from leaf evaluations (`0x60`–`0x63`), so the tag is a PRF composition: a keyed function
-applied to pseudorandom input, which remains pseudorandom. For $n = 1$, the single leaf directly outputs the
-tag via domain byte `0x61`, which is again a PRF of the ciphertext under the secret key.
+distinct input). For $n = 1$, the single leaf directly outputs the tag via domain byte `0x61`, which is a PRF of the ciphertext
+under the secret key. For $n > 1$, the tag is
+$G_K(\mathit{CT}) = \mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where
+$\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64` separates
+tag accumulation from leaf evaluations (`0x60`–`0x63`). TurboSHAKE128 here is an unkeyed random oracle; the tag
+is pseudorandom because the chain values — keyed leaf PRF outputs on distinct inputs — are simultaneously
+pseudorandom and hidden from the adversary.
 
 The advantage of this reduction is bounded by:
 
