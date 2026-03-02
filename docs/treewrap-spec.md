@@ -583,20 +583,21 @@ For a single `TreeWrap-AEAD` query on a message of length $L$ bytes with
 $n = \max(1, \lceil L / B \rceil)$ chunks of sizes $\ell_0, \ldots, \ell_{n-1}$, the per-query contribution to
 $\sigma$ is:
 
-$$\sigma_{\mathrm{query}} = \underbrace{\left\lceil \frac{|\mathit{kdf\_input}|}{R} \right\rceil}_{\text{KDF}} + \underbrace{\sum_{i=0}^{n-1}\left(1 + \max\!\left(1,\, \left\lceil \frac{\ell_i}{R-1} \right\rceil\right)\right)}_{\text{leaves}} + \underbrace{\mathbb{1}_{n>1} \cdot \left\lceil \frac{|\mathit{final\_input}|}{R} \right\rceil}_{\text{tag accumulation}}$$
+$$\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_input}|}{R} \right\rfloor + 1\right)}_{\text{KDF}} + \underbrace{\sum_{i=0}^{n-1}\left(1 + \max\!\left(1,\, \left\lceil \frac{\ell_i}{R-1} \right\rceil\right)\right)}_{\text{leaves}} + \underbrace{\mathbb{1}_{n>1} \cdot \left(\left\lfloor \frac{|\mathit{final\_input}|}{R} \right\rfloor + 1\right)}_{\text{tag accumulation}}$$
 
 where:
 
 - **KDF term.** $|\mathit{kdf\_input}|$ is the byte length of `encode_string(K) ‖ encode_string(N) ‖ encode_string(AD)`.
   Each `encode_string` contributes `left_encode(|x|)` (1–2 bytes for practical lengths) plus the field itself. For a
   32-byte key, 12-byte nonce, and empty AD, $|\mathit{kdf\_input}| = (2+32) + (2+12) + (2+0) = 50$ bytes, giving
-  $\lceil 50 / 168 \rceil = 1$ Keccak-p call.
+  $\lfloor 50 / 168 \rfloor + 1 = 1$ Keccak-p call.
+  (The `+1` accounts for TurboSHAKE's pad+permute step even when the absorb phase ends exactly on a rate boundary.)
 - **Leaf term.** Each leaf costs $1$ (init `pad_permute`) $+$ $\max(1, \lceil \ell_i / (R-1) \rceil)$ (ciphertext
   block permutations and the final squeeze — at least 1 even for empty chunks). For a full $B = 8192$-byte chunk:
   $1 + \lceil 8192 / 167 \rceil = 1 + 50 = 51$.
 - **Tag accumulation term.** Present only when $n > 1$. $|\mathit{final\_input}| = 8 + nC +
   |\mathrm{right\_encode}(n)| + 2$ bytes. For $n = 2$: $|final\_input| = 8 + 64 + 2 + 2 = 76$ bytes, giving
-  $\lceil 76 / 168 \rceil = 1$.
+  $\lfloor 76 / 168 \rfloor + 1 = 1$.
 
 ## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
 
