@@ -792,11 +792,12 @@ string (§6.7). This stronger property supports protocols that absorb the tag in
 
 ## 8. References
 
+- Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007. Establishes
+  the flat sponge claim (sponge indifferentiability from a random oracle).
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
 - Daemen, J., Hoffert, S., Mella, S., Van Assche, G., and Van Keer, R. "Shaking up authenticated encryption." IACR
-  ePrint 2024/1618. TreeWrap's security reduction uses the keyed sponge PRF bound (Theorem 4) and the flat sponge
-  claim from this work.
+  ePrint 2024/1618. TreeWrap's security reduction uses the keyed sponge PRF bound (Theorem 4) from this work.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
