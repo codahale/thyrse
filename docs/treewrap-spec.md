@@ -613,7 +613,9 @@ The two terms account for different failure events, combined by a union bound:
   permutation queries. This is a *structural* distinguishing advantage — it measures whether the sponge behaves
   like a random oracle, not whether the adversary learns the key.
 - $t / 2^{256}$ is the key-guessing probability: the chance that one of the adversary's $t$ offline permutation
-  evaluations happens to hit the 256-bit key prefix, allowing it to predict the PRF output directly.
+  evaluations happens to hit the 256-bit key prefix, allowing it to predict the PRF output directly. (This
+  assumes the sponge indifferentiability simulator makes at most one random oracle query per permutation query,
+  which holds for the absorbing-phase simulator of Bertoni et al.)
 
 These are distinct events even though $t$ appears in both terms. The sponge term bounds the advantage of any
 distinguisher against the sponge construction (a generic structural property); the key-guessing term bounds the
