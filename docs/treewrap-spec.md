@@ -241,10 +241,11 @@ random. However, TreeWrap relies on the same heuristic assumption as KangarooTwe
 permutation-level properties do not translate into structural breaks of the sponge construction, and that the sponge
 indifferentiability claim holds up to the 128-bit target security level. No duplex-specific attacks on reduced-round
 Keccak are known to improve on generic sponge distinguishers, so the margin analysis for TurboSHAKE applies unchanged.
-Each property reduces to the Keccak sponge claim via TurboSHAKE128's indifferentiability from a random oracle.
-Leaf keystream pseudorandomness (needed for IND-CPA, §6.3) additionally reduces via the keyed duplex security
-theorem (Bertoni et al. 2011; Mennink–Reyhanitabar–Vizár 2015), which itself reduces to sponge
-indifferentiability — see §6.12 ("Keyed duplex interpretation") for the explicit correspondence.
+The reductions use two tools, both in the ideal permutation model with the same
+$(\sigma+t)^2/2^{c+1}$ bound: (1) the keyed duplex security theorem (Bertoni et al. 2011;
+Mennink–Reyhanitabar–Vizár 2015), which covers all leaf rate outputs — keystream and terminal squeezes; and
+(2) sponge indifferentiability, which covers one-shot TurboSHAKE128 evaluations (KDF, tag accumulation).
+Both reduce to the random-permutation assumption on Keccak-p[1600,12].
 
 ### 6.1 AEAD Construction
 
@@ -368,65 +369,55 @@ $$\varepsilon_{\mathrm{ind\text{-}cpa}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \f
 where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in §6.2). The second term is
 key guessing (see §6.7 for discussion); it is dominated by the sponge term for $\sigma + t \geq 2$.
 
-**Proof sketch** (two game hops):
+**Proof sketch** (ideal permutation model):
 
-1. **Sponge → RO** (cost: $(\sigma + t)^2 / 2^{c+1}$). By the ciphertext-write to XOR equivalence (§6.12, Step 1), each
-   leaf's interactive computation is expressible as a single standard sponge evaluation on an injective encoding
-   of its inputs. The sponge indifferentiability theorem then replaces all such evaluations — across all leaves,
-   the tag accumulation, and the KDF's TurboSHAKE128 evaluation (domain byte `0x65`) — with random oracle
-   evaluations in a single reduction. The KDF evaluation is covered by the same hop because it is a standard
-   TurboSHAKE128 call on the same Keccak-p permutation. Domain byte `0x65` ensures KDF inputs are disjoint from
-   leaf cipher inputs (`0x60`–`0x63`) and tag accumulation inputs (`0x64`).
+- **KDF.** Sponge indifferentiability replaces the KDF's TurboSHAKE128 evaluation (domain byte `0x65`) with a
+  random oracle. The injective `encode_string` encoding (§5.2) ensures distinct `(K, N, AD)` triples produce
+  distinct random oracle inputs, so each fresh nonce yields an independent, uniformly random `tw_key`. Output
+  collisions occur with probability at most $Q^2 / 2^{257}$ (birthday bound on 256-bit outputs), which is
+  dominated by the sponge term since $Q \leq \sigma$ (each query costs at least 3 Keccak-p calls; see §6.2).
+  Cost: $(\sigma + t)^2 / 2^{c+1}$.
 
-   After this hop, each fresh nonce yields an independent, uniformly random `tw_key`: the injective `encode_string`
-   encoding (§5.2) ensures distinct `(K, N, AD)` triples produce distinct random oracle inputs, and the random
-   oracle maps distinct inputs to independent uniform outputs. Output collisions occur with probability at most
-   $Q^2 / 2^{257}$ (birthday bound on 256-bit outputs), which is dominated by the sponge term since
-   $Q \leq \sigma$ (each query costs at least 3 Keccak-p calls; see §6.2).
+- **Leaf keystream.** By the ciphertext-write to XOR equivalence (§6.12, Step 1), each leaf is a keyed duplex
+  under secret `tw_key`. The duplex security theorem (Bertoni et al., "Duplexing the Sponge," SAC 2011,
+  Theorem 1; for tighter keyed bounds, Mennink–Reyhanitabar–Vizár, Eurocrypt 2015) guarantees that all
+  rate outputs — the keystream bytes XORed with plaintext — are pseudorandom in the ideal permutation model.
+  Each keystream byte $S[\mathit{pos}]$ is uniformly random before the corresponding ciphertext byte is
+  produced. Therefore $\mathit{CT}_j = P_j \oplus S[\mathit{pos}]$ where $S[\mathit{pos}]$ is uniform,
+  making $\mathit{CT}$ indistinguishable from uniform regardless of $P$. See §6.12 ("Keyed duplex security")
+  for the explicit duplex correspondence. Cost: $(\sigma+t)^2/2^{c+1}$ (same bound, same model — not an
+  additional hop).
 
-2. **RO world.** After the rewriting in hop 1, each leaf is a random oracle evaluation with `tw_key` as a secret
-   prefix. By construction, `tw_key` occupies the first 32 bytes of the equivalent sponge input (§6.12, Step 1),
-   and the encoding is injective (§6.12, "Injectivity of the encoding"). Each leaf therefore defines a keyed PRF
-   $F_K(i, P_i)$ where $K$ is the secret key prefix (§6.12, Step 2). In the RO world (after hop 1), the only
-   remaining advantage is key guessing: the adversary must query the random oracle on an input prefixed with the
-   secret 256-bit key, giving probability $t / 2^{256}$. The sponge indifferentiability term is already paid in
-   hop 1.
+- **Tag ($n = 1$).** The tag is a terminal squeeze with domain byte `0x61`, which is a distinct duplex
+  output covered by the same duplex security theorem.
 
-   After the sponge→RO hop (hop 1), the rewritten leaf is a keyed duplex whose intermediate rate outputs — the
-   keystream bytes XORed with plaintext — are pseudorandom by the duplex security theorem (Bertoni et al.,
-   "Duplexing the Sponge," SAC 2011, Theorem 1). For tighter bounds in the keyed setting, Mennink–Reyhanitabar–Vizár
-   (Eurocrypt 2015) provide direct ideal-permutation-model bounds for the full-state keyed duplex; the resulting
-   advantage bound remains $(\sigma+t)^2/2^{c+1}$. See §6.12 ("Keyed duplex interpretation") for the explicit duplex
-   correspondence. In the ideal world, each keystream byte $S[j]$ is therefore uniformly random before the
-   corresponding ciphertext byte is produced. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
-   uniform, making $\mathit{CT}$ indistinguishable from uniform regardless of $P$.
+- **Tag ($n > 1$).** The tag is
+  $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ — a one-shot sponge evaluation
+  (covered by sponge indifferentiability) on a deterministic, injective encoding of the chain values.
+  We argue tag pseudorandomness via a bad-event bound. Define event $B$: the adversary queries the random
+  oracle on $\mathit{final\_input}$. Since $\mathit{final\_input}$ contains $n$ chain values, each $8C$
+  bits, and the adversary makes at most $t$ random oracle queries, $\Pr[B] \leq t / 2^{8Cn}$. (In the
+  ideal world, the chain values are pseudorandom duplex outputs under the secret key, so this is a direct
+  counting bound.) Since $8Cn \geq 512 > 256$ for $n \geq 2$, this is dominated by the key-guessing term
+  $t / 2^{256}$ and does not appear separately in the bound. Conditioned on $\lnot B$, the random oracle
+  has not been evaluated at $\mathit{final\_input}$, so the tag is uniformly random and independent of the
+  adversary's view.
 
-   **No circularity (batch mode).** The equivalent sponge input for block $k$ contains the plaintext of block $k$,
-   which is determined before the PRF output (keystream) for that block is produced. The PRF guarantee is that each
-   output byte is uniform given only prior state, before the overwrite occurs. The resulting ciphertext is then
-   overwritten into the state, but this feedback only affects subsequent blocks, not the current PRF evaluation.
-   There is therefore no circular dependence between the PRF output and the plaintext appearing in its input.
+- **Joint pseudorandomness.** $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform.
+  A fresh nonce yields a fresh `tw_key`, so each encryption query uses an independent key.
 
-   Crucially, TreeWrap is a batch primitive: the entire plaintext is provided at once before encryption begins, so
-   the duplex inputs are fully determined before any output is produced. No adaptive-input extension of the duplex
-   security theorem is needed — the standard non-adaptive formulation (Bertoni et al. 2011, Theorem 1) applies
-   directly.
+  **No circularity (batch mode).** The equivalent sponge input for block $k$ contains the plaintext of block $k$,
+  which is determined before the PRF output (keystream) for that block is produced. The PRF guarantee is that each
+  output byte is uniform given only prior state, before the overwrite occurs. The resulting ciphertext is then
+  overwritten into the state, but this feedback only affects subsequent blocks, not the current PRF evaluation.
+  There is therefore no circular dependence between the PRF output and the plaintext appearing in its input.
 
-   For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
-   output under the secret key on a distinct domain. For $n > 1$, the tag is
-   $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ — an unkeyed random oracle evaluated on a
-   deterministic, injective encoding of the chain values. We argue tag pseudorandomness via a bad-event bound.
-   Define event $B$: the adversary queries the random oracle on $\mathit{final\_input}$. Since
-   $\mathit{final\_input}$ contains $n$ chain values, each $8C$ bits, and the adversary makes at most $t$
-   random oracle queries, $\Pr[B] \leq t / 2^{8Cn}$. (In the RO world, the chain values are truly uniform
-   from the adversary's perspective — they are random oracle outputs on inputs prefixed by the secret key —
-   so this is a direct counting bound, not a PRF advantage.) Since $8Cn \geq 512 > 256$ for $n \geq 2$,
-   this is dominated by the key-guessing term $t / 2^{256}$ and does not appear separately in the bound.
-   Conditioned on
-   $\lnot B$, the random oracle has not been evaluated at $\mathit{final\_input}$, so the tag is uniformly random
-   and independent of the adversary's view. In both cases ($n = 1$ and $n > 1$),
-   $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
-   implies a fresh `tw_key` (after hop 1), so each encryption query uses an independent key.
+  Crucially, TreeWrap is a batch primitive: the entire plaintext is provided at once before encryption begins, so
+  the duplex inputs are fully determined before any output is produced. No adaptive-input extension of the duplex
+  security theorem is needed — the standard non-adaptive formulation (Bertoni et al. 2011, Theorem 1) applies
+  directly. (An incremental implementation that streams plaintext and emits ciphertext block-by-block is equally
+  safe: the per-byte algebraic identity in Step 1 holds regardless of when each plaintext byte is determined, and
+  the duplex theorem natively covers adaptive inputs with the same $(\sigma+t)^2/2^{c+1}$ bound.)
 
 The key-guessing term $t / 2^{256}$ is stated explicitly in the bound for consistency with §6.7. Since
 $t \leq \sigma + t$ implies $t / 2^{256} \leq (\sigma + t)^2 / 2^{c+1}$ for $\sigma + t \geq 2$, the
@@ -442,7 +433,7 @@ $(N, \mathit{AD}, \mathit{CT} \| \mathit{tag})$ and returns `Decrypt(K, N, AD, C
 reuse any nonce, including nonces used in encryption queries. The adversary may not submit a ciphertext returned by
 `Encrypt` to `Decrypt` on the same `(N, AD)`.
 
-IND-CCA2 security follows from the standard encrypt-then-MAC composition, applied after the single sponge→RO hop.
+IND-CCA2 security follows from the standard encrypt-then-MAC composition, in the ideal permutation model.
 
 **Composition structure.** The encrypt-then-MAC composition requires two properties: (1) the tag is determined by the
 key and ciphertext, and (2) encryption and tagging use independent keying material. TreeWrap satisfies both:
@@ -457,7 +448,7 @@ key and ciphertext, and (2) encryption and tagging use independent keying materi
   ciphertext blocks carry domain byte `0x62`, while the final block carries `0x61` ($n = 1$) or `0x63`
   ($n > 1$). Because the domain bytes differ, these padded blocks differ, and the duplex security theorem
   guarantees that the rate output after each permutation is pseudorandom even given all previous outputs
-  (§6.12, "Keyed duplex interpretation"). The adversary's view of keystream bytes (produced after
+  (§6.12, "Keyed duplex security"). The adversary's view of keystream bytes (produced after
   domain-`0x62` blocks) is therefore computationally independent of the tag output (produced after
   domain-`0x61`/`0x63`/`0x64` blocks), since predicting either requires querying the random oracle on an
   input prefixed with the secret key. The encryption keystream and the tag are therefore jointly
@@ -487,7 +478,7 @@ $$\varepsilon_{\mathrm{int\text{-}ctxt}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \
 The $t / 2^{256}$ term is key guessing, dominated by the sponge term (see §6.3).
 
 **Proof sketch.** After the sponge→RO hop (cost $(\sigma+t)^2/2^{c+1}$), each fresh nonce yields an independent,
-uniformly random `tw_key` (injective `encode_string` encoding + RO independence; see §6.3 hop 1). The adversary may
+uniformly random `tw_key` (injective `encode_string` encoding + RO independence; see §6.3 "KDF"). The adversary may
 also guess the secret key $K$ with probability $t / 2^{256}$ (stated explicitly in the bound above). The tag
 uniformity corollary (§6.7) states that the tag is uniform over $8\tau$ bits for any ciphertext not previously
 queried under the same key. The INT-CTXT freshness condition — "CT‖tag was not previously returned by
@@ -655,7 +646,7 @@ simultaneously pseudorandom. For $n = 1$, the tag is squeezed directly from the 
 which is a PRF output under the secret key. For $n > 1$, the tag is
 $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ where $\mathit{final\_input}$ is a deterministic,
 injective encoding of the chain values. Domain byte `0x64` separates tag accumulation from the leaf ciphers
-(`0x60` – `0x63`). By the same bad-event argument as §6.3 hop 2: the adversary queries the random oracle at
+(`0x60` – `0x63`). By the same bad-event argument as §6.3 "Tag ($n > 1$)": the adversary queries the random oracle at
 $\mathit{final\_input}$ with probability at most $t / 2^{8Cn}$; conditioned on this not occurring, the tag is
 uniformly random.
 
@@ -740,28 +731,34 @@ rewriting that is information-theoretic, followed by a single application of the
 
 **Step 1: Ciphertext-write to XOR equivalence.** During encryption, each ciphertext byte
 $\mathit{CT}_j = P_j \oplus S[\mathit{pos}]$ is written into the state at position $\mathit{pos}$. Writing $\mathit{CT}_j$
-into $S[j]$ when $S[j]$ currently holds $Z[j]$ (the permutation output) is equivalent to XORing $S[j]$ with
-$\mathit{CT}_j \oplus Z[j]$. Since $\mathit{CT}_j = P_j \oplus Z[j]$, the equivalent XOR input is
-$\mathit{CT}_j \oplus Z[j] = P_j$ — the plaintext byte. This is a per-position algebraic identity with no
+into $S[\mathit{pos}]$ when $S[\mathit{pos}]$ currently holds $Z[\mathit{pos}]$ (the permutation output) is equivalent to XORing $S[\mathit{pos}]$ with
+$\mathit{CT}_j \oplus Z[\mathit{pos}]$. Since $\mathit{CT}_j = P_j \oplus Z[\mathit{pos}]$, the equivalent XOR input is
+$\mathit{CT}_j \oplus Z[\mathit{pos}] = P_j$ — the plaintext byte. This is a per-position algebraic identity with no
 computational cost.
 
 After rewriting each ciphertext write as the equivalent XOR, the remaining operations are: (a) XOR absorption of key/index
 material during `init` (already standard sponge absorption), and (b) `pad_permute` calls that XOR a domain byte at
 position $\mathit{pos}$ and `0x80` at position $R - 1$ — exactly TurboSHAKE's `pad10*1` padding. The capacity portion
 (bytes $R$ through 199) is never directly read or written. Therefore, after the rewriting, each leaf's full computation
-is a standard $\mathrm{Keccak}[256]$ sponge evaluation. Note that the concatenated sponge input consists of
+is a standard $\mathrm{Keccak}[256]$ sponge evaluation (a Sakura-style inner-node sponge: pre-padded
+$R$-byte blocks with no additional final padding — not a TurboSHAKE128 call). Note that the concatenated sponge input consists of
 $R$-byte blocks, each self-padded via `pad10*1`. When absorbed by a standard sponge $R$ bytes at a time, the
 absorption boundaries align with the block boundaries, reproducing the leaf's per-block `pad_permute` behavior
 exactly. The standard sponge's own final padding is never triggered because every block is already $R$-byte
 aligned — this is the same technique used by Sakura tree hashing.
 
-**Keyed duplex interpretation.** The rewritten leaf is equivalently a keyed duplex construction (Bertoni et al.,
+**Keyed duplex security.** The rewritten leaf is equivalently a keyed duplex construction (Bertoni et al.,
 "Duplexing the Sponge," SAC 2011): the init block absorbs key material ($K \| [i]_{\mathrm{64LE}}$), and each
 subsequent block absorbs plaintext and produces rate bytes that serve as keystream (squeezed before the next
-absorption). The duplex security theorem (ibid., Theorem 1) therefore covers not just the terminal squeeze (chain
-value or tag) but all intermediate rate outputs — precisely the bytes XORed with plaintext to form ciphertext.
-This observation is used in §6.3 hop 2 to justify keystream pseudorandomness. For tighter bounds in the keyed
+absorption). The duplex security theorem (ibid., Theorem 1) covers all rate outputs — both the intermediate
+keystream bytes (XORed with plaintext to form ciphertext) and the terminal squeeze (chain value or tag).
+This is the primary tool for confidentiality: keystream pseudorandomness follows directly from the duplex
+theorem in the ideal permutation model (cost: $(\sigma+t)^2/2^{c+1}$). For tighter bounds in the keyed
 setting, see Mennink–Reyhanitabar–Vizár (Eurocrypt 2015); the resulting bound remains $(\sigma+t)^2/2^{c+1}$.
+The $\mathrm{sponge\_input}$ formula below provides a complementary one-shot view of the same leaf computation,
+used for the injectivity argument and the plaintext$\leftrightarrow$ciphertext PRF equivalence (Step 2).
+Both perspectives are consistent: duplex security reduces to sponge indifferentiability, so they share the
+same root bound and the same ideal permutation model.
 
 **Equivalent sponge input.** Define $\mathrm{pad}(X, d)$ for $|X| \leq R - 1$ as the $R$-byte string obtained by
 starting with $X \| 0^{R-|X|}$, XORing $d$ at position $|X|$, and XORing $\texttt{0x80}$ at position $R - 1$.
@@ -771,12 +768,13 @@ giving $X \| (d \oplus \texttt{0x80})$. This matches the behavior of `pad_permut
 
 For a leaf with key $K$, index $i$, plaintext $P$, and final domain byte $d_f$ (`0x63` for chain value, `0x61` for
 single-node tag), partition $P$ into $(R-1)$-byte segments: $P = P_1 \| P_2 \| \cdots \| P_m \| P_*$, where
-$|P_j| = R - 1$ for $1 \leq j \leq m$ and $|P_*| < R - 1$ (the final segment, possibly empty). The equivalent
+$|P_j| = R - 1$ for $1 \leq j \leq m$ and $0 < |P_*| \leq R - 1$, with $P_* = \epsilon$ when $P = \epsilon$.
+Concretely, $m = \max(0,\, \lceil |P|/(R{-}1) \rceil - 1)$ for non-empty $P$, and $m = 0$ for empty $P$. The equivalent
 sponge input is a single byte string:
 
 $$\mathrm{sponge\_input}(K, i, P, d_f) = \mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60}) \;\|\; \mathrm{pad}(P_1,\, \texttt{0x62}) \;\|\; \cdots \;\|\; \mathrm{pad}(P_m,\, \texttt{0x62}) \;\|\; \mathrm{pad}(P_*,\, d_f)$$
 
-When $m = 0$ (plaintext shorter than $R - 1$ bytes, including the empty case), the intermediate blocks vanish and
+When $m = 0$ (plaintext of at most $R - 1$ bytes, including the empty case), the intermediate blocks vanish and
 the input is $\mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60}) \| \mathrm{pad}(P_*,\, d_f)$. In the
 empty-plaintext case ($P = \epsilon$, $P_* = \epsilon$), the final block is $d_f \| 0^{R-2} \| \texttt{0x80}$.
 This is well-defined and injective: it is distinct from any final block with non-empty $P_*$ (the domain byte
@@ -813,9 +811,14 @@ produce distinct 40-byte prefixes within the init block, so the blocks differ.
   position, which falls in some block (intermediate or final). That block's data field differs, so the padded block
   differs. (The data field occupies bytes $0, \ldots, |X|-1$ of $\mathrm{pad}(X, d)$; the domain byte at position
   $|X|$ and the terminator at position $R-1$ are identical for same-length data with the same domain byte.)
-- *3b: Different length, same block count* ($|P| \neq |P'|$ but $m = m'$, so $|P_*| \neq |P'_*|$). In the final
-  block, the domain byte $d_f$ appears at position $|P_*|$ in one and $|P'_*|$ in the other. Since
-  $d_f \in \{\texttt{0x61}, \texttt{0x63}\}$ and the intervening zero-padding differs, the final blocks differ.
+- *3b: Different length, same block count* ($|P| \neq |P'|$ but $m = m'$, so $|P_*| \neq |P'_*|$, with
+  $0 < |P_*|, |P'_*| \leq R - 1$). Two sub-cases. When both $|P_*|, |P'_*| < R - 1$: the domain byte $d_f$
+  appears at position $|P_*|$ in one final block and position $|P'_*|$ in the other, so the blocks differ.
+  When one segment has $|P_*| = R - 1$ and the other $|P'_*| < R - 1$: in $\mathrm{pad}(P_*, d_f)$, byte
+  $R - 1$ is $d_f \oplus \texttt{0x80}$ (domain byte and terminator share position $R - 1$; $d_f \oplus
+  \texttt{0x80} \in \{\texttt{0xE1}, \texttt{0xE3}\}$). In $\mathrm{pad}(P'_*, d_f)$, byte $R - 1$ is
+  $\texttt{0x80}$ (terminator alone). Since $d_f \oplus \texttt{0x80} \neq \texttt{0x80}$, the final blocks
+  differ at position $R - 1$.
 
 *Cross-$d_f$ injectivity.* The injectivity claim above is stated for fixed $d_f$. Across different $d_f$ values,
 sponge inputs for $n = 1$ leaves ($d_f = \texttt{0x61}$) and $n > 1$ leaves ($d_f = \texttt{0x63}$) are also
@@ -848,7 +851,7 @@ output under the secret key. For $n > 1$, the tag is
 $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, \tau)$ where
 $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64` separates
 tag accumulation from leaf evaluations (`0x60`–`0x63`). Tag pseudorandomness follows from the bad-event argument
-in §6.3 hop 2: the adversary queries the random oracle at $\mathit{final\_input}$ with probability at most
+in §6.3 "Tag ($n > 1$)": the adversary queries the random oracle at $\mathit{final\_input}$ with probability at most
 $t / 2^{8Cn}$; conditioned on this not occurring, the tag is uniformly random.
 
 Since encryption is a bijection for a fixed key (§6.5 Case 2), the PRF $F_K(i, P_i)$ is equivalently a PRF of the
