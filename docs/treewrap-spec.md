@@ -518,10 +518,13 @@ simplifies to $(\sigma + t)^2 / 2^c$.
    is a bijection within each chunk (`encrypt`/`decrypt` are inverses for the same key), so $M \neq M'$ implies
    $\mathit{CT} \neq \mathit{CT}'$. This contradicts the equal-ciphertext requirement.
 
+CMT-4 is a single-stage game: the adversary outputs all inputs at once and a deterministic check follows, with no
+oracle interaction. This is a necessary precondition for applying the sponge indifferentiability composition
+theorem (which requires that the distinguisher's use of the ideal primitive be simulatable without rewinding).
+
 In Case 1, after the sponge→RO hop (cost $(\sigma + t)^2 / 2^{c+1}$), distinct (key, ciphertext) pairs produce
 tags that are pseudorandom and pairwise independent under the PRF reduction (by the tag collision resistance
-argument in §6.6). CMT-4 is a single-stage game (the adversary outputs all inputs at once and a deterministic
-check follows), so the sponge indifferentiability composition theorem applies. Since the adversary can evaluate at
+argument in §6.6). Since the adversary can evaluate at
 most $\sigma + t$ distinct (key, ciphertext) pairs (each evaluation costs at
 least one Keccak-p call). The collision probability among these evaluations is the standard birthday bound on the
 $8\tau = 256$-bit tag output: $(\sigma + t)^2 / 2^{8\tau+1}$.
