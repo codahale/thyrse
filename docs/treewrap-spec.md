@@ -297,6 +297,8 @@ or advantage $\leq 2^{-128}$ at $\sigma + t = 2^{64}$.
 
 ### 6.3 Confidentiality (IND-CPA)
 
+*This property is stated for `TreeWrap-AEAD[KDF]`.*
+
 **Game.** The adversary has access to an `Encrypt` oracle under a random key `K`. The oracle takes
 $(N, \mathit{AD}, M_0, M_1)$ with $|M_0| = |M_1|$ and fresh `N`, and returns `Encrypt(K, N, AD, M_b)`. The adversary
 is nonce-respecting and guesses `b`.
@@ -336,6 +338,8 @@ stated bound.
 
 ### 6.3.1 CCA Security (IND-CCA2)
 
+*This property is stated for `TreeWrap-AEAD[KDF]`.*
+
 IND-CCA2 security follows by composition. By the Bellare–Namprempre theorem (adapted to the encrypt-and-MAC setting
 with PRF tags):
 
@@ -350,6 +354,8 @@ sponge costs. Since $2(\sigma + t)^2 / 2^{c+1} = (\sigma + t)^2 / 2^c$, this rem
 security budget.
 
 ### 6.4 Authenticity (INT-CTXT)
+
+*This property is stated for `TreeWrap-AEAD[KDF]`.*
 
 **Game.** The adversary has access to `Encrypt` and `Decrypt` oracles under a random key `K`. The adversary wins by
 producing $(N, \mathit{AD}, C)$ such that `Decrypt(K, N, AD, C)` returns `M ≠ ⊥` and `C` was not previously returned by
@@ -371,6 +377,9 @@ a union bound gives $S/2^{8C}$.
 > each forgery attempt succeeds with probability $1/2^{128}$.
 
 ### 6.5 Committing Security (CMT-4)
+
+*This property is stated for `TreeWrap-AEAD[KDF]`, but does not depend on tag verification — it applies equally to
+the bare TreeWrap primitive (see §6.5.1).*
 
 **Game.** The adversary produces $(K, N, \mathit{AD}, M) \neq (K', N', \mathit{AD}', M')$ such that
 `Encrypt(K, N, AD, M) = Encrypt(K', N', AD', M')`. This is a non-oracle game: the adversary chooses all inputs
@@ -415,7 +424,28 @@ pass over the data, unlike generic CMT-4 transforms applied to non-committing AE
 > committing security. Callers that truncate the tag and rely on committing security MUST ensure that the
 > adversary's computational budget remains well below $2^{4T}$ Keccak-p evaluations.
 
+### 6.5.1 Caller Obligations
+
+The theorems in §6.3–§6.5 are properties of the notional `TreeWrap-AEAD[KDF]` wrapper (§6.1), which internally
+derives unique keys, verifies tags, and withholds plaintext on verification failure. The bare TreeWrap primitive
+(`EncryptAndMAC`/`DecryptAndMAC`) does none of these — it takes a raw key, always returns plaintext, and always
+returns the computed tag without comparing it to anything. The following table summarizes what each AEAD security
+property requires of the caller, in increasing order of obligation:
+
+| Property              | Caller obligation                                                                                                                                                                                                                                                                                                                                      |
+|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **CMT-4** (§6.5)      | None. Committing security is inherent to the construction and does not depend on tag verification. The caller must still instantiate a KDF satisfying the collision resistance assumption (§6.1).                                                                                                                                                      |
+| **IND-CPA** (§6.3)    | The caller MUST ensure that each `EncryptAndMAC` invocation uses a unique key. In the notional AEAD, uniqueness follows from the KDF's PRF security applied to a fresh nonce. Callers that manage keys directly MUST guarantee uniqueness by other means. Key reuse leaks plaintext XOR differences within the first block (§6.1).                     |
+| **INT-CTXT** (§6.4)   | The caller MUST compare the returned tag against the expected value using a constant-time equality check (§6.11) and MUST reject the plaintext if the comparison fails. Without tag verification, the bare primitive provides no authenticity guarantee — any ciphertext decrypts to *some* plaintext with a valid-looking tag.                        |
+| **IND-CCA2** (§6.3.1) | The caller MUST NOT release or act on the plaintext returned by `DecryptAndMAC` before successful tag verification. The bare primitive intentionally supports release of unverified plaintext (RUP) for protocols that need it, but RUP forfeits CCA2 security: an attacker can flip ciphertext bits and observe the effect on the released plaintext. |
+
+The bare primitive directly provides, without any wrapper, the following properties under a uniformly random key:
+ciphertext pseudorandomness (a single-invocation consequence of the §6.3 core argument), tag PRF security (§6.7),
+tag collision resistance (§6.6), chunk reordering protection (§6.8), and committing security (§6.5).
+
 ### 6.6 Tag Collision Resistance
+
+*This property is stated for the bare TreeWrap primitive.*
 
 For $Q$ distinct (key, ciphertext) pairs, the probability that `EncryptAndMAC` (or `DecryptAndMAC`) produces a tag
 collision is bounded by:
@@ -463,6 +493,8 @@ Protocols that use the tag as a contribution to ongoing state (rather than solel
 stronger property.
 
 ### 6.8 Chunk Reordering
+
+*This property is stated for the bare TreeWrap primitive.*
 
 Each leaf is initialized with `key ‖ [index]₆₄LE`, binding it to its position. Reordering ciphertext chunks changes
 which leaf decrypts which data, producing different chain values and a different tag. Additionally, since leaf indices
