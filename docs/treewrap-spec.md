@@ -909,7 +909,7 @@ Setting the total advantage $\leq p$:
 | Property                    | Bound                                         | $p = 2^{-32}$             | $p = 2^{-50}$             |
 |-----------------------------|-----------------------------------------------|---------------------------|---------------------------|
 | Confidentiality (IND-CPA)   | $(\sigma+t)^2 / 2^{257} \leq p$               | $\sigma+t \leq 2^{112.5}$ | $\sigma+t \leq 2^{103.5}$ |
-| Integrity (INT-CTXT)        | $+ \; S / 2^{256}$                            | $S \leq 2^{224}$          | $S \leq 2^{206}$          |
+| Integrity (INT-CTXT)        | $(\sigma+t)^2 / 2^{257} + S / 2^{256} \leq p$ | $S \leq 2^{224}$          | $S \leq 2^{206}$          |
 | Auth. Encryption (IND-CCA2) | $(\sigma+t)^2 / 2^{257} + S / 2^{256} \leq p$ | same                      | same                      |
 
 **Multi-key.** The bounds above are already whole-system: $\sigma + t$ is the total Keccak-p call count across all $u$
