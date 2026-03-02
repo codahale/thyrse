@@ -899,8 +899,10 @@ Setting the total advantage $\leq p$:
 | Auth. Encryption (IND-CCA2) | $(\sigma+t)^2 / 2^{257} + S / 2^{256} \leq p$ | same                      | same                      |
 
 **Multi-key.** The bounds above are already whole-system: $\sigma + t$ is the total Keccak-p call count across all $u$
-keys (§6.2). With $u$ keys the per-key budget is $(\sigma + t)/u$, but no additional multi-key degradation term arises.
-This contrasts with AES-GCM, where multi-key security introduces per-key block-count limits that tighten as $u$ grows.
+keys (§6.2). With $u$ keys the per-key budget is $(\sigma + t)/u$, but no additional multi-key degradation term beyond
+key guessing ($u \cdot t / 2^{256}$, dominated by the sponge term) arises — in particular, the data-complexity term
+does not degrade per-key. This contrasts with AES-GCM, where multi-key security introduces per-key block-count limits
+that tighten as $u$ grows.
 
 **Comparison with AES-128-GCM.** At $p = 2^{-50}$ with 1500-byte messages, Günther, Thomson, and Wood (Table 2) limit
 AES-128-GCM to $2^{32.5}$ queries per key. TreeWrap at the same advantage permits $\sigma + t \leq 2^{103.5}$ Keccak-p
