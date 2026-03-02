@@ -220,6 +220,8 @@ different triple.
 Domain byte `0x65` separates key derivation from all other TreeWrap uses of TurboSHAKE128 (`0x60`–`0x64`).
 
 ```python
+import hmac
+
 def treewrap_aead_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x65, C)
     ct, tag = encrypt_and_mac(tw_key, M)
@@ -229,7 +231,7 @@ def treewrap_aead_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x65, C)
     ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
     pt, tag = decrypt_and_mac(tw_key, ct)
-    return pt if tag == tag_expected else None
+    return pt if hmac.compare_digest(tag, tag_expected) else None
 ```
 
 ## 6. Security Properties
