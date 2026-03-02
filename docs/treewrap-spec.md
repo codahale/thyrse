@@ -585,7 +585,8 @@ key), which produce distinct leaf sponge inputs via the injective encoding (§6.
 after the sponge-to-RO hop (§6.2), these distinct inputs produce independent random outputs except with
 probability bounded by the sponge indifferentiability term. Distinct chain
 value sequences produce distinct $\mathit{final\_input}$ values (the encoding is injective). Distinct inputs to
-TurboSHAKE128 collide with probability bounded by the birthday term.
+TurboSHAKE128 collide with probability bounded by the birthday term. Evaluations with $n = 1$ (domain `0x61`) and
+$n > 1$ (domain `0x64`) use disjoint RO domains, so cross-type collisions do not arise.
 
 ### 6.7 Tag PRF Security
 
