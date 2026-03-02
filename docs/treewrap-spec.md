@@ -129,7 +129,9 @@ After `init`, the cipher has absorbed the key and index and is ready for encrypt
 
 *Inputs:*
 
-- `key`: A C-byte key. MUST be pseudorandom and unique per invocation (see §6.1, §6.2).
+- `key`: A C-byte key. MUST be pseudorandom (computationally indistinguishable from uniform — required for the PRF
+  reductions in §6.3–§6.7) and unique per invocation (no two calls share a key — required for fresh-input
+  guarantees). See §6.1 and §6.2.
 - `plaintext`: Plaintext of any length (may be empty). Maximum length is $(2^{64} - 1) \cdot B$ bytes, since leaf
   indices are encoded as 8-byte little-endian integers.
 
@@ -790,8 +792,8 @@ This supports protocol frameworks that need the tag for transcript state advance
 
 **Nonce-free bare primitive.** The bare TreeWrap primitive takes only a key and plaintext. It does not accept a nonce or
 associated data. Nonce handling is the KDF's responsibility: the notional AEAD (§6.1) accepts nonces, but they are
-consumed by the KDF to derive a unique TreeWrap key, not passed to TreeWrap itself. The key MUST be pseudorandom and
-unique per invocation.
+consumed by the KDF to derive a unique TreeWrap key, not passed to TreeWrap itself. The key MUST be pseudorandom
+(indistinguishable from uniform) and unique per invocation (see §5.1).
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs — they prove authenticity but are not
 necessarily pseudorandom. TreeWrap's tag is a full PRF: under a random key, the tag is indistinguishable from a random
