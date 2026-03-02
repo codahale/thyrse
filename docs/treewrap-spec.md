@@ -618,8 +618,9 @@ the tag value directly — for example, absorbing it into ongoing transcript sta
 authentication.
 
 Under a uniformly random key, the TreeWrap tag is a pseudorandom function of the plaintext, equivalently of the
-ciphertext (since encryption is a bijection for a fixed key; see §6.12, Step 2). Specifically, for any fixed ciphertext,
-the tag output of `EncryptAndMAC` (or `DecryptAndMAC`) is indistinguishable from a uniformly random $\tau$-byte string.
+ciphertext (since encryption is a bijection for a fixed key; see §6.12, Step 2). Specifically, an adversary making
+multiple queries to `EncryptAndMAC` (or `DecryptAndMAC`) cannot distinguish the resulting tags from independent,
+uniformly random $\tau$-byte strings.
 
 $$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}}$$
 
