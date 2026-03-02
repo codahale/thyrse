@@ -785,6 +785,11 @@ produce distinct 40-byte prefixes within the init block, so the blocks differ.
   block, the domain byte $d_f$ appears at position $|P_*|$ in one and $|P'_*|$ in the other. Since
   $d_f \in \{\texttt{0x61}, \texttt{0x63}\}$ and the intervening zero-padding differs, the final blocks differ.
 
+*Cross-$d_f$ injectivity.* The injectivity claim above is stated for fixed $d_f$. Across different $d_f$ values,
+sponge inputs for $n = 1$ leaves ($d_f = \texttt{0x61}$) and $n > 1$ leaves ($d_f = \texttt{0x63}$) are also
+distinct: the final block contains $d_f$ at position $|P_*|$, and since $\texttt{0x61} \neq \texttt{0x63}$,
+any two evaluations with different $d_f$ produce different final blocks (even for identical $K$, $i$, and $P$).
+
 *Domain byte separation across block types.* The init block uses `0x60`, intermediate blocks use `0x62`, and the
 final block uses `0x61` or `0x63`. Since the block positions are recoverable (first block is always init, last is
 always final, middle are intermediate), no block from one type can be confused with another. This is not needed for
