@@ -496,6 +496,11 @@ game, the adversary can evaluate at most $\sigma + t$ distinct (key, ciphertext)
 least one Keccak-p call). The collision probability among these evaluations is the standard birthday bound on the
 $8C = 256$-bit tag output: $(\sigma + t)^2 / 2^{8C+1}$.
 
+The bound uses $\sigma + t$ as an upper bound on the number of distinct (key, ciphertext) evaluations. This is
+conservative: each full AEAD evaluation on a message of length $L$ costs at least $\lceil L / B \rceil$ Keccak-p
+calls, so the effective number of trials is at most $(\sigma + t) / \lceil L / B \rceil$ for messages of length $L$.
+The bound is therefore tighter for long messages.
+
 This committing property is inherent to the construction — it does not require any additional processing or a second
 pass over the data, unlike generic CMT-4 transforms applied to non-committing AE schemes.
 
