@@ -313,6 +313,22 @@ KangarooTwelve/TurboSHAKE convention. More generally, to achieve advantage $\leq
 must satisfy $\sigma + t \leq 2^{(c+1-k)/2}$. For $c = 256$: advantage $\leq 2^{-1}$ at $\sigma + t = 2^{128}$,
 or advantage $\leq 2^{-128}$ at $\sigma + t = 2^{64}$.
 
+**Reading the bounds.** Every theorem in §6.3–§6.7 contains the sponge indifferentiability term
+$(\sigma + t)^2 / 2^{c+1}$, which dominates all other terms at high query budgets. The following table translates
+this term into concrete security levels for $c = 256$:
+
+| Adversarial budget ($\sigma + t$) | Advantage upper bound | Interpretation                    |
+|-----------------------------------|-----------------------|-----------------------------------|
+| $2^{64}$                          | $2^{-128}$            | Negligible; cryptographic margin  |
+| $2^{80}$                          | $2^{-96}$             | Conservative practical target     |
+| $2^{128}$                         | $2^{-1}$              | Constant; theoretical break point |
+
+Practitioners targeting a conventional "$n$-bit security" guarantee — meaning advantage $\leq 2^{-n}$ at some
+specified work budget — should read the bounds with the formula $\sigma + t \leq 2^{(c+1-n)/2}$. For example,
+achieving advantage $\leq 2^{-32}$ (a common practical target) requires $\sigma + t \leq 2^{112}$, which
+comfortably accommodates any realistic workload. The additional terms in each theorem (tag guessing, key guessing,
+KDF advantage) are negligible relative to the sponge term at all practical budgets.
+
 **Capacity vs. tag length.** The dominant term $(\sigma + t)^2 / 2^{c+1}$ caps overall security at $c/2 \approx 128$
 bits of work for constant advantage, regardless of the tag length. The full 256-bit ($C = 32$) tag provides margin
 against birthday-type terms (tag collisions at $Q^2 / 2^{257}$, KDF collisions at $Q^2 / 2^{257}$) and key-guessing
