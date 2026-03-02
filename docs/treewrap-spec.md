@@ -518,7 +518,7 @@ property requires of the caller, in increasing order of obligation:
 
 | Property              | Caller obligation                                                                                                                                                                                                                                                                                                                                      |
 |-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **CMT-4** (§6.5)      | None. Committing security is inherent to the construction and does not depend on tag verification. The caller must still instantiate a KDF satisfying the collision resistance assumption (§6.1).                                                                                                                                                      |
+| **CMT-4** (§6.5)      | None. Committing security is inherent to the construction and does not depend on tag verification. The caller must still instantiate a KDF satisfying the collision resistance assumption (§6.5).                                                                                                                                                      |
 | **IND-CPA** (§6.3)    | The caller MUST ensure that each `EncryptAndMAC` invocation uses a unique key. In the notional AEAD, uniqueness follows from the KDF's PRF security applied to a fresh nonce. Callers that manage keys directly MUST guarantee uniqueness by other means. Key reuse leaks plaintext XOR differences within the first block (§6.1).                     |
 | **INT-CTXT** (§6.4)   | The caller MUST compare the returned tag against the expected value using a constant-time equality check (§6.11) and MUST reject the plaintext if the comparison fails. Without tag verification, the bare primitive provides no authenticity guarantee — any ciphertext decrypts to *some* plaintext with a valid-looking tag.                        |
 | **IND-CCA2** (§6.3.1) | The caller MUST NOT release or act on the plaintext returned by `DecryptAndMAC` before successful tag verification. The bare primitive intentionally supports release of unverified plaintext (RUP) for protocols that need it, but RUP forfeits CCA2 security: an attacker can flip ciphertext bits and observe the effect on the released plaintext. |
@@ -563,10 +563,24 @@ string.
 
 $$\varepsilon_{\mathrm{prf}} \leq \frac{(\sigma + t)^2}{2^{c+1}} + \frac{t}{2^{256}}$$
 
-The second term is the **key-guessing** advantage: each of $t$ offline Keccak-p evaluations hits the correct 256-bit
-key prefix with probability $1 / 2^{256}$. This is distinct from the tag-guessing term $S / 2^{8C}$ that appears in
-INT-CTXT (§6.4), which counts online verification attempts. Since $8C = 256$, the two terms happen to have the same
-denominator, but they measure different adversarial capabilities (offline key search vs. online forgery).
+The two terms account for different failure events, combined by a union bound:
+
+- $(\sigma + t)^2 / 2^{c+1}$ is the sponge indifferentiability cost: the probability that the adversary can
+  distinguish the Keccak sponge from a random oracle, using $\sigma$ online construction queries and $t$ offline
+  permutation queries. This is a *structural* distinguishing advantage — it measures whether the sponge behaves
+  like a random oracle, not whether the adversary learns the key.
+- $t / 2^{256}$ is the key-guessing probability: the chance that one of the adversary's $t$ offline permutation
+  evaluations happens to hit the 256-bit key prefix, allowing it to predict the PRF output directly.
+
+These are distinct events even though $t$ appears in both terms. The sponge term bounds the advantage of any
+distinguisher against the sponge construction (a generic structural property); the key-guessing term bounds the
+probability of a specific event (key recovery) that would break the PRF regardless of sponge quality. Neither
+subsumes the other, so both appear in the union bound. In practice, $t / 2^{256} \ll (\sigma + t)^2 / 2^{257}$
+for all relevant parameter ranges, so the key-guessing term is negligible.
+
+This is also distinct from the tag-guessing term $S / 2^{8C}$ in INT-CTXT (§6.4), which counts online
+verification attempts. Since $8C = 256$, the key-guessing and tag-guessing terms share the same denominator, but
+they measure different adversarial capabilities (offline key search vs. online forgery).
 
 The argument follows from the monolithic sponge indifferentiability reduction (§6.12). After replacing all sponge
 evaluations with random oracle evaluations, each leaf defines a keyed PRF $F_K(i, C_i)$ with the secret key as a
