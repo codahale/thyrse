@@ -496,9 +496,13 @@ The $t / 2^{256}$ term is key guessing, dominated by the sponge term (see §6.3)
 
 **Proof sketch.** After the sponge→RO hop (cost $(\sigma+t)^2/2^{c+1}$), each fresh nonce yields an independent,
 uniformly random `tw_key` (injective `encode_string` encoding + RO independence; see §6.3 hop 1). The adversary may
-also guess the secret key $K$ with probability $t / 2^{256}$ (stated explicitly in the bound above). By the tag uniformity
-corollary (§6.7), the tag on any unseen ciphertext under a fresh `tw_key` is uniform over $8\tau$ bits. Each of $S$
-forgery attempts succeeds with probability $1/2^{8\tau}$; a union bound gives $S/2^{8\tau}$.
+also guess the secret key $K$ with probability $t / 2^{256}$ (stated explicitly in the bound above). The tag
+uniformity corollary (§6.7) states that the tag is uniform over $8\tau$ bits for any ciphertext not previously
+queried under the same key. The INT-CTXT freshness condition — "CT‖tag was not previously returned by
+`Encrypt` on the same `(N, AD)`" — maps directly: same nonce and AD imply the same `tw_key` (via the KDF),
+and the game excludes the exact CT returned by `Encrypt`, so the forgery ciphertext is novel under that key.
+Each of $S$ forgery attempts therefore succeeds with probability $1/2^{8\tau}$; a union bound gives
+$S/2^{8\tau}$.
 
 > [!WARNING]
 > **Tag truncation.** When the caller truncates the tag to $T < \tau$ bytes, the forgery bound becomes
