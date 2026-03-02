@@ -268,7 +268,7 @@ sponge→RO hop:
 
 > [!WARNING]
 > **Key reuse.** Reusing `tw_key` compromises IND-CPA (leaks plaintext XOR differences within the first
-> block) and weakens INT-CTXT within the first block. Unlike polynomial-MAC AEADs (e.g., AES-GCM), key reuse
+> block, i.e., $R - 1 = 167$ bytes per chunk) and weakens INT-CTXT within the first block. Unlike polynomial-MAC AEADs (e.g., AES-GCM), key reuse
 > does not enable universal forgery — the sponge-based tag remains computationally unpredictable for novel
 > ciphertexts. Callers MUST ensure key uniqueness (e.g., via the KDF in §5.3 with fresh nonces).
 
@@ -276,7 +276,9 @@ sponge→RO hop:
 > **Release of unverified plaintext (RUP).** The bare `DecryptAndMAC` interface is inherently malleable:
 > flipping ciphertext bit $j$ in the first block flips plaintext bit $j$. This is a general property of stream
 > ciphers under RUP, not specific to key reuse. Without key reuse the malleability is *blind* (the attacker
-> cannot target specific values). Authentication depends entirely on the caller verifying the tag (see §6.5.1).
+> cannot target specific values), but even blind bit-flipping can be protocol-devastating if the caller acts
+> on unverified plaintext (e.g., as a format oracle). Authentication depends entirely on the caller verifying
+> the tag (see §6.5.1).
 
 ### 6.2 Security Model
 
