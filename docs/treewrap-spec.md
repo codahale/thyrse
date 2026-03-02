@@ -418,9 +418,12 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
    For $n = 1$, the tag is squeezed from the leaf state with domain byte `0x61`, which is a direct PRF
    output under the secret key on a distinct domain. For $n > 1$, the tag is
    $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ — an unkeyed random oracle evaluated on a
-   deterministic, injective encoding of the chain values. Because the chain values are pseudorandom PRF outputs
-   under the secret key (one per leaf), the input to the random oracle has high min-entropy and is hidden from
-   the adversary, so the tag output is indistinguishable from uniform. In both cases,
+   deterministic, injective encoding of the chain values. We argue tag pseudorandomness via a bad-event bound.
+   Define event $B$: the adversary queries the random oracle on $\mathit{final\_input}$. Since
+   $\mathit{final\_input}$ contains $n$ chain values, each a pseudorandom $8C$-bit PRF output under the secret
+   key, and the adversary makes at most $t$ random oracle queries, $\Pr[B] \leq t / 2^{8Cn}$. Conditioned on
+   $\lnot B$, the random oracle has not been evaluated at $\mathit{final\_input}$, so the tag is uniformly random
+   and independent of the adversary's view. In both cases ($n = 1$ and $n > 1$),
    $(\mathit{CT}, \mathit{tag})$ is jointly indistinguishable from uniform. A fresh nonce
    implies a fresh `tw_key` (after hop 1), so each encryption query uses an independent key.
 
@@ -613,8 +616,9 @@ simultaneously pseudorandom. For $n = 1$, the tag is squeezed directly from the 
 which is a PRF output under the secret key. For $n > 1$, the tag is
 $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where $\mathit{final\_input}$ is a deterministic,
 injective encoding of the chain values. Domain byte `0x64` separates tag accumulation from the leaf ciphers
-(`0x60` – `0x63`). TurboSHAKE128 is an unkeyed random oracle; the tag is pseudorandom because its input consists
-entirely of pseudorandom chain values (keyed leaf PRF outputs) that are hidden from the adversary.
+(`0x60` – `0x63`). By the same bad-event argument as §6.3 hop 2: the adversary queries the random oracle at
+$\mathit{final\_input}$ with probability at most $t / 2^{8Cn}$; conditioned on this not occurring, the tag is
+uniformly random.
 
 **Corollary (tag uniformity).** For any ciphertext not previously queried under the same key, the tag is uniformly
 distributed over $8C$ bits, independent of the adversary's view. This follows directly from the PRF property: a
@@ -780,9 +784,9 @@ distinct input). For $n = 1$, the single leaf directly outputs the tag via domai
 output under the secret key. For $n > 1$, the tag is
 $\mathrm{TurboSHAKE128}(\mathit{final\_input}, \texttt{0x64}, C)$ where
 $\mathit{final\_input}$ is a deterministic, injective encoding of the chain values. Domain byte `0x64` separates
-tag accumulation from leaf evaluations (`0x60`–`0x63`). TurboSHAKE128 here is an unkeyed random oracle; the tag
-is pseudorandom because the chain values — keyed leaf PRF outputs on distinct inputs — are simultaneously
-pseudorandom and hidden from the adversary.
+tag accumulation from leaf evaluations (`0x60`–`0x63`). Tag pseudorandomness follows from the bad-event argument
+in §6.3 hop 2: the adversary queries the random oracle at $\mathit{final\_input}$ with probability at most
+$t / 2^{8Cn}$; conditioned on this not occurring, the tag is uniformly random.
 
 Since encryption is a bijection for a fixed key (§6.5 Case 2), the PRF $F_K(i, P_i)$ is equivalently a PRF of the
 ciphertext: distinct ciphertexts under the same key correspond to distinct plaintexts, producing distinct sponge
