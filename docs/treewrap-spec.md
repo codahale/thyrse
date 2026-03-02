@@ -627,6 +627,13 @@ sponge input.
 4. **Ciphertext determines content.** For a fixed key and index, distinct ciphertexts trivially produce distinct sponge
    inputs — the ciphertext bytes differ in the corresponding blocks.
 
+**Edge cases.** When the ciphertext data ends exactly at position $R - 2$ (i.e., one byte before the end of the rate),
+the domain byte occupies $S[R-2]$ and the `0x80` padding terminator occupies $S[R-1]$, which is the standard `pad10*1`
+with no extra block — the encoding remains injective. When a chunk has zero-length ciphertext (empty plaintext), the
+leaf produces a single `pad_permute` with just the init block (domain byte `0x60`) followed by a final-block
+`pad_permute` with zero ciphertext bytes (domain byte `0x63` or `0x61`). The domain byte distinguishes this from
+intermediate blocks (`0x62`), so the encoding is still injective.
+
 The injectivity is a property of the encoding format, not of the encrypt operation. (The encrypt/decrypt bijection is a
 separate property, used in the CMT-4 proof §6.5 to show that distinct plaintexts produce distinct ciphertexts.)
 
