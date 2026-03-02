@@ -382,10 +382,22 @@ stated bound.
 
 *This property is stated for `TreeWrap-AEAD[KDF]`.*
 
-IND-CCA2 security follows from a joint reduction. By the Bellare–Namprempre composition theorem (adapted to the
-encrypt-and-MAC setting with PRF tags), the CCA2 game can be reduced to: (1) a single KDF→random hop, (2) a single
-sponge→RO hop, and (3) an ideal-world forgery game. The KDF and sponge transitions are paid once (not separately
-for CPA and CTXT), because both properties share the same underlying game hops.
+IND-CCA2 security follows from a joint reduction. By the Bellare–Namprempre composition theorem, the CCA2 game
+can be reduced to: (1) a single KDF→random hop, (2) a single sponge→RO hop, and (3) an ideal-world forgery game.
+The KDF and sponge transitions are paid once (not separately for CPA and CTXT), because both properties share the
+same underlying game hops.
+
+**Composition structure.** The composition theorem requires encrypt-then-MAC with key separation. TreeWrap satisfies
+both conditions, despite sharing `tw_key` across encryption and tagging:
+
+- **Encrypt-then-tag.** By the overwrite duplex equivalence (§6.12), the tag is a function of the *ciphertext*, not
+  the plaintext — the equivalent sponge input for each leaf contains the ciphertext bytes (§6.12, "Equivalent sponge
+  input"). This gives the encrypt-then-MAC structure that the composition theorem requires.
+- **Functional key separation.** Encryption and tagging share `tw_key` but operate on disjoint input domains:
+  intermediate ciphertext blocks use domain byte `0x62`, while tag output uses `0x61` ($n = 1$) or `0x63`/$\texttt{0x64}$
+  ($n > 1$). After the sponge→RO hop, distinct domain bytes produce disjoint sets of random oracle inputs, so the
+  encryption keystream and the tag are functionally independent PRF outputs. This provides the key-separation
+  property that the composition theorem requires, without needing physically separate keys.
 
 In the composition mapping: the MAC key is `tw_key`, the MAC input is the full ciphertext (including chunk
 structure), and `N`/`AD` are bound to `tw_key` via the KDF. The `Decrypt` oracle enables $S$ tag-guess tests, each
