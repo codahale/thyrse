@@ -280,8 +280,11 @@ sponge→RO hop:
 
 ### 6.2 Security Model
 
-**Random permutation model.** All bounds in this section model Keccak-p[1600,12] as a random permutation. This is a
-heuristic assumption (see §6 preamble).
+**Random permutation model.** All bounds in this section model Keccak-p[1600,12] as a random permutation. The
+adversary has oracle access to both the construction and the underlying permutation; $t$ counts the adversary's
+direct permutation queries. As in all ideal-model analyses, interpreting $t$ as real-world computational cost
+assumes the random permutation model is a faithful abstraction of Keccak-p[1600,12] — a heuristic shared by all
+Keccak-based security analyses (see §6 preamble).
 
 **Whole-system permutation budget.** The sponge indifferentiability theorem replaces all Keccak-p evaluations —
 by TreeWrap, by other system components, and by the adversary — with random oracle evaluations in a single
