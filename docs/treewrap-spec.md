@@ -708,36 +708,60 @@ position $\mathit{pos}$ and `0x80` at position $R - 1$ — exactly TurboSHAKE's 
 (bytes $R$ through 199) is never directly read or written. Therefore, after the rewriting, each leaf's full computation
 is a standard $\mathrm{Keccak}[256]$ sponge evaluation.
 
-**Equivalent sponge input.** For a leaf with key $K$, index $i$, and plaintext $P$ partitioned into $(R - 1)$-byte
-segments $P_1, P_2, \ldots, P_m$, the equivalent sponge input consists of the following $R$-byte blocks:
+**Equivalent sponge input.** Define $\mathrm{pad}(X, d)$ as the $R$-byte string $X \| d \| 0^{R-2-|X|} \| \texttt{0x80}$,
+where $|X| \leq R - 2$ (the data, domain byte, and terminator fit in one rate block). This is `pad10*1` applied to
+$X$ with domain byte $d$.
 
-- **Init block:** $K \| [i]_{\mathrm{64LE}}$ (40 bytes), padded with domain byte `0x60`.
-- **Intermediate blocks:** Each full $(R - 1)$-byte plaintext segment $P_j$, padded with domain byte `0x62`.
-- **Final block:** The remaining plaintext bytes (possibly zero length), padded with domain byte `0x63` (chain value
-  output) or `0x61` (single-node tag output).
+For a leaf with key $K$, index $i$, plaintext $P$, and final domain byte $d_f$ (`0x63` for chain value, `0x61` for
+single-node tag), partition $P$ into $(R-1)$-byte segments: $P = P_1 \| P_2 \| \cdots \| P_m \| P_*$, where
+$|P_j| = R - 1$ for $1 \leq j \leq m$ and $|P_*| < R - 1$ (the final segment, possibly empty). The equivalent
+sponge input is a single byte string:
 
-This equivalent sponge input is a function of $(K, i, P)$ — the **plaintext**, not the ciphertext. This follows
-directly from the per-byte identity: the XOR-equivalent of overwriting with ciphertext absorbs plaintext. However, for
-a fixed key, encryption is a bijection ($P \neq P'$ implies $C \neq C'$ for the same key; see §6.5 Case 2), so the
-sponge input is equivalently determined by $(K, i, C)$. The tag is therefore both a PRF of the plaintext and a PRF of
-the ciphertext (see Step 2).
+$$\mathrm{sponge\_input}(K, i, P, d_f) = \mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60}) \;\|\; \mathrm{pad}(P_1,\, \texttt{0x62}) \;\|\; \cdots \;\|\; \mathrm{pad}(P_m,\, \texttt{0x62}) \;\|\; \mathrm{pad}(P_*,\, d_f)$$
 
-**Injectivity of the encoding.** The encoding $(K, i, P) \mapsto \text{sponge input}$ is injective because:
+When $m = 0$ (plaintext shorter than $R - 1$ bytes, including the empty case), the intermediate blocks vanish and
+the input is $\mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60}) \| \mathrm{pad}(P_*,\, d_f)$.
 
-1. **Fixed-size prefix.** $K \| [i]_{\mathrm{64LE}}$ is always exactly 40 bytes, so the boundary between init material
-   and plaintext is unambiguous.
-2. **Unambiguous block boundaries.** `pad10*1` after each block ensures no block can be a suffix or prefix of another.
-3. **Distinct domain bytes.** `0x60` (init), `0x62` (intermediate), `0x61`/`0x63` (final) prevent init blocks from
-   being confused with plaintext blocks.
-4. **Plaintext determines content.** For a fixed key and index, distinct plaintexts trivially produce distinct sponge
-   inputs — the plaintext bytes differ in the corresponding blocks.
+This is a function of $(K, i, P)$ — the **plaintext**, not the ciphertext. This follows directly from the per-byte
+identity: the XOR-equivalent of overwriting with ciphertext absorbs plaintext. However, for a fixed key, encryption
+is a bijection ($P \neq P'$ implies $C \neq C'$ for the same key; see §6.5 Case 2), so the sponge input is
+equivalently determined by $(K, i, C)$. The tag is therefore both a PRF of the plaintext and a PRF of the ciphertext
+(see Step 2).
 
-**Edge cases.** When plaintext data ends exactly at position $R - 2$ (i.e., one byte before the end of the rate),
-the domain byte occupies $S[R-2]$ and the `0x80` padding terminator occupies $S[R-1]$, which is the standard `pad10*1`
-with no extra block — the encoding remains injective. When a chunk has zero-length plaintext (empty message), the
-leaf produces a single `pad_permute` with just the init block (domain byte `0x60`) followed by a final-block
-`pad_permute` with zero data bytes (domain byte `0x63` or `0x61`). The domain byte distinguishes this from
-intermediate blocks (`0x62`), so the encoding is still injective.
+**Injectivity of the encoding.** The encoding $(K, i, P) \mapsto \mathrm{sponge\_input}(K, i, P, d_f)$ is injective.
+We show that distinct inputs produce distinct byte strings by case analysis.
+
+*Claim:* If $(K, i, P) \neq (K', i', P')$ (with the same $d_f$), then
+$\mathrm{sponge\_input}(K, i, P, d_f) \neq \mathrm{sponge\_input}(K', i', P', d_f)$.
+
+*Block structure recovery.* Each $\mathrm{pad}(X, d)$ block is exactly $R$ bytes, so the sponge input decomposes
+uniquely into $R$-byte blocks. The block count is $m + 2$ (one init, $m$ intermediate, one final). Since $m$ is
+determined by $|P|$ and the block boundaries are at fixed $R$-byte offsets, both the number of blocks and the
+partition into blocks are uniquely recoverable.
+
+*Case 1: Different block counts* ($|P| \neq |P'|$ and the difference crosses an $(R-1)$-byte segment boundary).
+The sponge inputs have different lengths and are therefore distinct.
+
+*Case 2: Same block count, different init material* ($(K, i) \neq (K', i')$). The init block is
+$\mathrm{pad}(K \| [i]_{\mathrm{64LE}},\, \texttt{0x60})$. Since $|K| = C$ and $|[i]_{\mathrm{64LE}}| = 8$ are
+fixed, and $C + 8 = 40 < R - 1 = 167$, the init material always fits in a single block. Distinct $(K, i)$ pairs
+produce distinct 40-byte prefixes within the init block, so the blocks differ.
+
+*Case 3: Same init material, different plaintexts* ($(K, i) = (K', i')$, $P \neq P'$). Sub-cases:
+
+- *3a: Same length* ($|P| = |P'|$, so same $m$ and same $|P_*| = |P'_*|$). The plaintexts differ at some byte
+  position, which falls in some block (intermediate or final). That block's data field differs, so the padded block
+  differs. (The data field occupies bytes $0, \ldots, |X|-1$ of $\mathrm{pad}(X, d)$; the domain byte at position
+  $|X|$ and the terminator at position $R-1$ are identical for same-length data with the same domain byte.)
+- *3b: Different length, same block count* ($|P| \neq |P'|$ but $m = m'$, so $|P_*| \neq |P'_*|$). In the final
+  block, the domain byte $d_f$ appears at position $|P_*|$ in one and $|P'_*|$ in the other. Since
+  $d_f \in \{\texttt{0x61}, \texttt{0x63}\}$ and the intervening zero-padding differs, the final blocks differ.
+
+*Domain byte separation across block types.* The init block uses `0x60`, intermediate blocks use `0x62`, and the
+final block uses `0x61` or `0x63`. Since the block positions are recoverable (first block is always init, last is
+always final, middle are intermediate), no block from one type can be confused with another. This is not needed for
+injectivity of the same-$d_f$ encoding, but it ensures that leaf sponge inputs are also disjoint from tag
+accumulation inputs (domain byte `0x64`) and KDF inputs (domain byte `0x65`) — a property used in §6.3 and §6.3.1.
 
 The injectivity is a property of the encoding format. The encrypt/decrypt bijection is a separate property (used in
 the CMT-4 proof §6.5 and to establish that the PRF of plaintext is equivalently a PRF of ciphertext).
