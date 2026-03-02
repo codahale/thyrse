@@ -849,6 +849,29 @@ consumed by the concrete TurboSHAKE128-based KDF to derive a unique TreeWrap key
 necessarily pseudorandom. TreeWrap's tag is a full PRF: under a random key, the tag is indistinguishable from a random
 string (§6.7). This stronger property supports protocols that absorb the tag into ongoing state.
 
+### 7.1. Usage Limits
+
+Günther, Thomson, and Wood tabulate concrete usage limits for AES-GCM and ChaCha20-Poly1305 as functions of a
+target advantage $p$. TreeWrap's security bounds (§6) are dominated by a single sponge indifferentiability term
+$(\sigma + t)^2 / 2^{c+1}$ with $c = 256$, which yields structurally simpler limits. Here $\sigma + t$ counts all
+Keccak-p[1600,12] calls across every key in the system (§6.2).
+
+Setting the total advantage $\leq p$:
+
+| Property                    | Bound                                         | $p = 2^{-32}$             | $p = 2^{-50}$             |
+|-----------------------------|-----------------------------------------------|---------------------------|---------------------------|
+| Confidentiality (IND-CPA)   | $(\sigma+t)^2 / 2^{257} \leq p$               | $\sigma+t \leq 2^{112.5}$ | $\sigma+t \leq 2^{103.5}$ |
+| Integrity (INT-CTXT)        | $+ \; S / 2^{256}$                            | $S \leq 2^{224}$          | $S \leq 2^{206}$          |
+| Auth. Encryption (IND-CCA2) | $(\sigma+t)^2 / 2^{257} + S / 2^{256} \leq p$ | same                      | same                      |
+
+**Multi-key.** The bounds above are already whole-system: $\sigma + t$ is the total Keccak-p call count across all $u$
+keys (§6.2). With $u$ keys the per-key budget is $(\sigma + t)/u$, but no additional multi-key degradation term arises.
+This contrasts with AES-GCM, where multi-key security introduces per-key block-count limits that tighten as $u$ grows.
+
+**Comparison with AES-128-GCM.** At $p = 2^{-50}$ with 1500-byte messages, Günther, Thomson, and Wood (Table 2) limit
+AES-128-GCM to $2^{32.5}$ queries per key. TreeWrap at the same advantage permits $\sigma + t \leq 2^{103.5}$ Keccak-p
+calls system-wide — roughly $2^{100}$ messages even at maximum tree depth — a difference of over 67 orders of magnitude.
+
 ## 8. References
 
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007. Establishes
@@ -858,6 +881,10 @@ string (§6.7). This stronger property supports protocols that absorb the tag in
 - RFC 9861: TurboSHAKE and KangarooTwelve.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
+- Günther, F., Thomson, M., and Wood, C. A. "Usage Limits on AEAD Algorithms." draft-irtf-cfrg-aead-limits-11. Concrete
+  usage limit tables for AES-GCM and ChaCha20-Poly1305; referenced in §7.1.
+- Luykx, A. and Paterson, K. G. "Limits on Authenticated Encryption Use in TLS." IACR ePrint 2024/051 (originally 2016).
+  Derives the underlying AES-GCM and ChaCha20-Poly1305 bounds that Günther et al. tabulate.
 
 ## 9. Test Vectors
 
