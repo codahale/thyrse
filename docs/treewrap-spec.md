@@ -243,15 +243,12 @@ key derivation function. This AEAD exists solely for security analysis — TreeW
 in the AEAD maps to TreeWrap's key uniqueness requirement via the KDF: distinct `(N, AD)` pairs under the same `K`
 produce distinct `tw_key` values (except with negligible probability).
 
-**KDF assumptions:**
+**KDF assumption:**
 
-1. **PRF security.** `KDF(K, ·, ·)` is indistinguishable from a random function for uniform `K`.
-   Advantage: $\varepsilon_{\mathrm{kdf}}$.
-
-2. **Collision resistance.** $\mathrm{Adv}^{\mathrm{coll}}_{\mathrm{KDF}}(t) \leq
-   \varepsilon_{\mathrm{kdf\text{-}coll}}$, where the advantage is the maximum probability over all adversaries
-   running in time $t$ of outputting distinct $(K, N, \mathit{AD}) \neq (K', N', \mathit{AD}')$ such that
-   $\mathrm{KDF}(K, N, \mathit{AD}) = \mathrm{KDF}(K', N', \mathit{AD}')$.
+**PRF security.** `KDF(K, ·, ·)` is indistinguishable from a random function for uniform `K`.
+Advantage: $\varepsilon_{\mathrm{kdf}}$. This is the only KDF assumption required for confidentiality (§6.3) and
+authenticity (§6.4). Committing security (§6.5) requires an additional collision resistance property of the KDF,
+stated in that section.
 
 > [!WARNING]
 > **Key reuse damage.** If the KDF produces the same `tw_key` for two different plaintexts $M \neq M'$, the overwrite
@@ -464,6 +461,14 @@ the bare TreeWrap primitive (see §6.5.1).*
 `Encrypt(K, N, AD, M) = Encrypt(K', N', AD', M')`. This is a non-oracle game: the adversary chooses all inputs
 (including keys) and performs all computation itself. Consequently, the adversary's ability to search for collisions
 is bounded by its total computational budget, not by a count of online queries.
+
+**Additional KDF assumption (CMT-4 only).** The CMT-4 bound depends on the KDF's collision resistance under
+adversary-chosen keys — a property distinct from PRF security (§6.1), which holds under a *fixed* secret key.
+Define $\varepsilon_{\mathrm{kdf\text{-}coll}}$ as the maximum probability over all adversaries running in time $t$ of
+outputting distinct $(K, N, \mathit{AD}) \neq (K', N', \mathit{AD}')$ such that
+$\mathrm{KDF}(K, N, \mathit{AD}) = \mathrm{KDF}(K', N', \mathit{AD}')$. For a KDF instantiated as a hash (e.g.,
+TurboSHAKE128) of a recoverable encoding of its inputs, collision resistance follows from the sponge's collision
+resistance: $\varepsilon_{\mathrm{kdf\text{-}coll}} \leq (\sigma + t)^2 / 2^{c+1}$.
 
 **Theorem.**
 
