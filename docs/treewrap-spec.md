@@ -373,9 +373,10 @@ where $\sigma + t$ is the total adversarial Keccak-p budget (notation defined in
 3. **RO world.** After the rewriting in hop 2, each leaf is a random oracle evaluation with `tw_key` as a secret
    prefix. By construction, `tw_key` occupies the first 32 bytes of the equivalent sponge input (§6.12, Step 1),
    and the encoding is injective (§6.12, "Injectivity of the encoding"). Each leaf therefore defines a keyed PRF
-   $F_K(i, P_i)$ where $K$ is the secret key prefix (§6.12, Step 2). In the RO world (after hop 2), the
-   key-guessing probability is $t / 2^{256}$ (by Theorem 4 of Daemen et al., ePrint 2024/1618, with the sponge
-   indifferentiability term already paid in hop 2).
+   $F_K(i, P_i)$ where $K$ is the secret key prefix (§6.12, Step 2). In the RO world (after hop 2), the only
+   remaining advantage is key guessing: the adversary must query the random oracle on an input prefixed with the
+   secret 256-bit key, giving probability $t / 2^{256}$. The sponge indifferentiability term is already paid in
+   hop 2.
 
    In the ideal world, the keystream byte at each position is uniformly random *before* the corresponding ciphertext
    byte is produced and fed back into the state. Therefore $\mathit{CT}_j = P_j \oplus S[j]$ where $S[j]$ is
@@ -796,8 +797,6 @@ string (§6.7). This stronger property supports protocols that absorb the tag in
   the flat sponge claim (sponge indifferentiability from a random oracle).
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
-- Daemen, J., Hoffert, S., Mella, S., Van Assche, G., and Van Keer, R. "Shaking up authenticated encryption." IACR
-  ePrint 2024/1618. TreeWrap's security reduction uses the keyed sponge PRF bound (Theorem 4) from this work.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
