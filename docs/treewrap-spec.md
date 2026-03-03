@@ -329,7 +329,8 @@ transcript-dependent sponge output in the same model, and no extra hybrid model 
 
 #### 6.3.2 Tag Collision Resistance
 
-For $Q$ distinct ciphertext inputs under one fixed secret key:
+For $Q$ distinct ciphertext inputs under one fixed secret key
+($Q$ = number of compared tag outputs in the collision game):
 
 $$
 \varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}}.
@@ -363,7 +364,9 @@ $$
 Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$:
 
 - $F$ behaves as a lazy-sampled random function on distinct context strings $X$.
-- For $q_{\mathrm{ctx}}$ distinct contexts, derived-key collisions follow the birthday bound:
+- For $q_{\mathrm{ctx}}$ distinct contexts
+  ($q_{\mathrm{ctx}}$ = number of distinct context strings $X$ queried to the KDF),
+  derived-key collisions follow the birthday bound:
 
 $$
 \varepsilon_{\mathrm{ctx-coll}} \le \frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}.
@@ -417,7 +420,8 @@ $$
 
 #### 6.5.2 INT-CTXT
 
-For any new ciphertext under the same $(K,N,AD)$, the adversary must guess a $\tau$-byte tag:
+For $S$ decryption/verification forgery attempts on new ciphertexts under the same $(K,N,AD)$, the adversary must guess
+a $\tau$-byte tag:
 
 $$
 \varepsilon_{\mathrm{int-ctxt}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
@@ -455,7 +459,7 @@ $(N,AD) \neq (N',AD')$.
 Distinct AEAD contexts under fixed $K$ imply distinct encoded context strings $X \neq X'$. In $\mathsf{G}_1$, either:
 
 - $R(X)=R(X')$ (context-key collision event, bounded by $\varepsilon_{\mathrm{ctx-coll}}$), or
-- $R(X)\neq R(X')$, and equal outputs require a collision in $\tau$-byte tag outputs across distinct keyed transcripts.
+- $R(X)\neq R(X')$, and an equal-output event is counted in the $Q$-trial birthday term over $\tau$-byte tags.
 
 #### Case B: Same AEAD context, different messages
 
