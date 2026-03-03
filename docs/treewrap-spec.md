@@ -292,7 +292,7 @@ Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 **Lemma 1 (Leaf duplex pseudorandomness).**
 For each leaf index $i$, the leaf computation is a keyed duplex instance initialized with
 `K_tw || [i]_64LE`; its rate outputs (keystream bytes and terminal squeeze bytes) are pseudorandom up to
-$\varepsilon_{\mathrm{indiff}}$.
+$\varepsilon_{\mathrm{indiff}}$ (see §8: Sponge/duplex analyses and keyed-duplex bounds).
 
 **Lemma 2 (State-direction equivalence).**
 For fixed $(K_{tw}, i, C_i)$, `encrypt` and `decrypt` induce identical internal states because both write ciphertext
@@ -343,6 +343,9 @@ and the derived-key map:
 $$
 F(X) = \mathrm{TurboSHAKE128}(X,\;0x65,\;C).
 $$
+
+Modeling dependence for this lift is the TurboSHAKE/Sakura tree-hash analysis line in §8 (RFC 9861, TurboSHAKE paper,
+and KangarooTwelve paper), combined with the sponge/duplex ideal-permutation framework.
 
 We analyze KDF and TreeWrap in one ideal-permutation experiment. Let $\mathsf{Bad}_{\mathrm{perm}}$ be the global
 bad event for this experiment (the usual sponge/duplex transcript-collision event across all online/offline
@@ -434,7 +437,7 @@ IND-CCA2 formulations.
 
 This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap.
 It is a composition argument over published sponge/duplex and TurboSHAKE/KangarooTwelve analyses, not a new standalone
-primitive-security theorem.
+primitive-security theorem (see §8: Bellare-Hoang for CMT-4 and the cited Keccak/TurboSHAKE/KangarooTwelve analyses).
 
 **Game.** Sample one secret master key $K$ once and give the adversary encryption-oracle access under $K$. The adversary
 outputs two distinct tuples
@@ -509,7 +512,7 @@ Implementations MUST maintain the following per-key-epoch counters:
 - $q_{\mathrm{enc}}$: number of encryption invocations.
 - $\sigma_{\mathrm{total}} = \sigma_{\mathrm{treewrap-aead}} + \sigma_{\mathrm{other\ keccak\ uses\ in\ scope}}$.
 - $q_{\mathrm{nonce}}$: number of random nonces used (only for random-nonce deployments).
-- $S$: number of failed decryption/verification attempts processed.
+- $S$: number of failed decryption/verification attempts processed (forgery attempts).
 
 Required baseline profile (MUST):
 
@@ -917,6 +920,7 @@ sigma_total = sigma_treewrap + sigma_turboshake + sigma_k12 + sigma_other_keccak
 ```
 
 where each term is the count of online Keccak-p[1600,12] calls made by that component in the window.
+This is the same $\sigma_{\mathrm{total}}$ counter model used normatively in §6.10.
 
 Then evaluate:
 
