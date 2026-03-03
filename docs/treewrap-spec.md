@@ -374,6 +374,21 @@ $$
 In $\mathsf{G}_1$, each distinct context gets a random per-context key; conditioned on no context-key collision event,
 queries reduce directly to bare TreeWrap under random keys.
 
+**Single-accounting rule used below.** For each goal $\Pi \in \{\text{IND-CPA},\text{INT-CTXT},\text{IND-CCA2}\}$,
+we upper-bound:
+
+$$
+\mathrm{Adv}_{\Pi}
+\le
+\Pr[\mathsf{Bad}_{\mathrm{perm}}]
++ \Pr[\mathsf{CtxColl}]
++ \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\!\mid_{\neg \mathsf{Bad}_{\mathrm{perm}}\wedge \neg \mathsf{CtxColl}}.
+$$
+
+Under $\neg \mathsf{Bad}_{\mathrm{perm}}$, $F$ is a random function on contexts and bare-TreeWrap lemmas are interpreted
+in the same experiment. Therefore, $\Pr[\mathsf{Bad}_{\mathrm{perm}}]$ is charged once as
+$\varepsilon_{\mathrm{indiff}}$; no second independent indifferentiability term is added.
+
 #### 6.5.1 IND-CPA (nonce-respecting)
 
 Under fresh nonces per encryption query, confidentiality follows from bare TreeWrap pseudorandom keystream behavior
