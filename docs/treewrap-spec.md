@@ -402,31 +402,31 @@ The proof uses nonce-respecting IND-CPA plus decryption-failure indistinguishabi
 Nonce reuse for the same $(K,N,AD)$ is out of scope for this claim and breaks standard deterministic-encapsulation
 IND-CCA2 formulations.
 
-### 6.6 CMT-4 for TreeWrap-AEAD
+### 6.6 CMT-4 for TreeWrap-AEAD (fixed master key)
 
 This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap.
 
-**Game.** Adversary outputs
-$(K,N,AD,M) \neq (K',N',AD',M')$
+**Game.** Sample one secret master key $K$ once. The adversary outputs two distinct tuples
+$(N,AD,M) \neq (N',AD',M')$
 such that
-$\mathrm{Encrypt}(K,N,AD,M) = \mathrm{Encrypt}(K',N',AD',M')$.
+$\mathrm{Encrypt}(K,N,AD,M) = \mathrm{Encrypt}(K,N',AD',M')$.
 
 Split into two exhaustive cases.
 
 #### Case A: Different AEAD contexts
 
-$(K,N,AD) \neq (K',N',AD')$.
+$(N,AD) \neq (N',AD')$.
 
-Distinct contexts imply distinct encoded context strings $X \neq X'$. In $\mathsf{G}_1$, either:
+Distinct AEAD contexts under fixed $K$ imply distinct encoded context strings $X \neq X'$. In $\mathsf{G}_1$, either:
 
 - $R(X)=R(X')$ (context-key collision event, bounded by $\varepsilon_{\mathrm{ctx-coll}}$), or
 - $R(X)\neq R(X')$, and equal outputs require a collision in $\tau$-byte tag outputs across distinct keyed transcripts.
 
 #### Case B: Same AEAD context, different messages
 
-Same $(K,N,AD)$ implies same derived key.
-If $M \neq M'$, then by Lemma 3 (fixed-key bijection), ciphertexts differ, so full outputs can only match if tags
-collide on distinct transcripts.
+Same $(N,AD)$ implies the same derived key (for fixed master key $K$).
+If $M \neq M'$, then by Lemma 3 (fixed-key bijection), ciphertexts differ, so the full AEAD outputs `ct‖tag` cannot be
+equal (except via the global bad event already accounted for by $\varepsilon_{\mathrm{indiff}}$).
 
 Combining both cases:
 
