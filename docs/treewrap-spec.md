@@ -255,6 +255,22 @@ This section gives a single, explicit reduction path:
 All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity
 $c = 256$ bits and $\tau = 32$ tag bytes.
 
+**Assumption scope.** Concrete bounds in this section are conditional on Keccak-p[1600,12] behaving as an ideal
+permutation at the claimed workloads. This is a modeling assumption, not a proof about reduced-round Keccak-p itself.
+
+> [!IMPORTANT]
+> This is an assumption, not a proof about reduced-round Keccak-p[1600,12] itself, as is typical for modern symmetric
+> cryptography analyses.
+>
+> Public cryptanalysis on Keccak-family permutations includes reduced-round results with explicit round counts: practical
+> collision-style attacks on Keccak-f[1600] are publicly known up to 6 rounds, and structural distinguishers are known at
+> higher round counts in the raw-permutation setting (including 8-round distinguishers and 16-round zero-sum
+> distinguishers).
+>
+> These results do not directly invalidate the TreeWrap heuristic because TreeWrap uses a keyed sponge/duplex setting
+> with 256-bit capacity, strict domain separation, and workload limits; nevertheless, future cryptanalysis could change
+> the practical margin, so deployments should treat the concrete bounds as conditional.
+
 ### 6.1 Model and Notation
 
 Let:
@@ -572,6 +588,7 @@ string (§6.3.1). This stronger property supports protocols that absorb the tag 
 Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost
 $\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), planning approximation $\sigma + t \approx \sigma$,
 per-key accounting (single key / key epoch), and a 128-bit TreeWrap nonce profile for random-nonce deployments.
+These figures are conditional on the §6 ideal-permutation assumption for Keccak-p[1600,12].
 
 | Scheme        | Limit type | Approx protected volume |
 |---------------|------------|-------------------------|
