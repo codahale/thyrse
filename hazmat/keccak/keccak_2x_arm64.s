@@ -111,7 +111,6 @@ TEXT ·p1600x2(SB), NOSPLIT, $0-16
 	MOVD	b+8(FP), R3
 	MOVD	$round_consts<>(SB), R1
 	ADD	$96, R1           // start at round 12
-	MOVD	$12, R2
 
 	// Load state A into lower halves of V0-V24
 	VLD1.P	32(R0), [V0.D1, V1.D1, V2.D1, V3.D1]
@@ -171,12 +170,18 @@ TEXT ·p1600x2(SB), NOSPLIT, $0-16
 	VLD1	(R3), [V25.D1]
 	VZIP1	V25.D2, V24.D2, V24.D2
 
-	// Permutation loop (12 rounds)
-	PCALIGN	$16
-loop2x:
 	KECCAK_ROUND
-	SUB	$1, R2, R2
-	CBNZ	R2, loop2x
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
+	KECCAK_ROUND
 
 	// Store state A (lower halves)
 	VST1.P	[V0.D1, V1.D1, V2.D1, V3.D1], 32(R0)
