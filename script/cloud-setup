@@ -13,6 +13,5 @@ gcloud compute ssh thyrse --zone=us-central1-a --command 'tar -xzf *.tar.gz'
 gcloud compute ssh thyrse --zone=us-central1-a --command "echo 'export PATH=\"\$PATH:~/go/bin\"' >> ~/.bashrc"
 gcloud compute ssh thyrse --zone=us-central1-a --command "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
 gcloud compute ssh thyrse --zone=us-central1-a --command 'git clone https://github.com/codahale/thyrse'
-gcloud compute ssh thyrse --zone=us-central1-a --command 'curl -fsSL https://claude.ai/install.sh | bash'
 # shellcheck disable=SC2016
 gcloud compute ssh thyrse --zone=us-central1-a --command 'PATH=$PATH:~/go/bin go install golang.org/x/perf/cmd/benchstat@latest'
