@@ -1,6 +1,6 @@
 //go:build arm64 && !purego
 
-package keccak
+package legacykeccak
 
 import (
 	"bytes"

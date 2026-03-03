@@ -1,5 +1,5 @@
 // Package keccak provides an optimized implementation of the Keccak-f[1600,12] permutation.
-package keccak
+package legacykeccak
 
 // Lanes is the number of permutations the host machine can perform in parallel.
 var Lanes = 1

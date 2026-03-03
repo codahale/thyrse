@@ -7,7 +7,7 @@ package turboshake
 import (
 	"crypto/subtle"
 
-	"github.com/codahale/thyrse/hazmat/keccak"
+	"github.com/codahale/thyrse/hazmat/legacykeccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
 
@@ -47,7 +47,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		h.pos += w
 		p = p[w:]
 		if h.pos == Rate {
-			keccak.P1600(&h.s)
+			legacykeccak.P1600(&h.s)
 			h.pos = 0
 		}
 	}
@@ -61,14 +61,14 @@ func (h *Hasher) Read(p []byte) (int, error) {
 	if !h.squeezing {
 		h.s[h.pos] ^= h.ds
 		h.s[Rate-1] ^= 0x80
-		keccak.P1600(&h.s)
+		legacykeccak.P1600(&h.s)
 		h.pos = 0
 		h.squeezing = true
 	}
 	n := len(p)
 	for len(p) > 0 {
 		if h.pos == Rate {
-			keccak.P1600(&h.s)
+			legacykeccak.P1600(&h.s)
 			h.pos = 0
 		}
 		r := copy(p, h.s[h.pos:Rate])
@@ -114,7 +114,7 @@ func Chain(a, b *Hasher, ds byte) {
 	a.s[Rate-1] ^= 0x80
 	b.s[b.pos] ^= ds
 	b.s[Rate-1] ^= 0x80
-	keccak.P1600x2(&a.s, &b.s)
+	legacykeccak.P1600x2(&a.s, &b.s)
 	a.pos, b.pos = 0, 0
 	a.squeezing, b.squeezing = true, true
 }

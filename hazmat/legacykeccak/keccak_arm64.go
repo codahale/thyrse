@@ -4,7 +4,7 @@
 
 //go:build !purego
 
-package keccak
+package legacykeccak
 
 import (
 	"github.com/klauspost/cpuid/v2"

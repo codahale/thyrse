@@ -8,7 +8,7 @@ package kt128
 import (
 	"slices"
 
-	"github.com/codahale/thyrse/hazmat/keccak"
+	"github.com/codahale/thyrse/hazmat/legacykeccak"
 	"github.com/codahale/thyrse/hazmat/turboshake"
 	"github.com/codahale/thyrse/internal/mem"
 )
@@ -72,7 +72,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		h.treeMode = true
 	}
 
-	lanes := keccak.Lanes
+	lanes := legacykeccak.Lanes
 
 	// Large-write fast path: process chunks directly from p to avoid copying.
 	if len(p) > lanes*BlockSize {
@@ -304,13 +304,13 @@ func leafCVX1(data []byte, cv []byte) {
 		pos += n
 		off += n
 		if pos == turboshake.Rate {
-			keccak.P1600(&s)
+			legacykeccak.P1600(&s)
 			pos = 0
 		}
 	}
 	s[pos] ^= leafDS
 	s[turboshake.Rate-1] ^= 0x80
-	keccak.P1600(&s)
+	legacykeccak.P1600(&s)
 	copy(cv, s[:cvSize])
 }
 
@@ -326,7 +326,7 @@ func leafCVsX2(data []byte, cv []byte) {
 		pos += n
 		off += n
 		if pos == turboshake.Rate {
-			keccak.P1600x2(&s0, &s1)
+			legacykeccak.P1600x2(&s0, &s1)
 			pos = 0
 		}
 	}
@@ -334,7 +334,7 @@ func leafCVsX2(data []byte, cv []byte) {
 	s0[turboshake.Rate-1] ^= 0x80
 	s1[pos] ^= leafDS
 	s1[turboshake.Rate-1] ^= 0x80
-	keccak.P1600x2(&s0, &s1)
+	legacykeccak.P1600x2(&s0, &s1)
 	copy(cv[:cvSize], s0[:cvSize])
 	copy(cv[cvSize:], s1[:cvSize])
 }
@@ -353,7 +353,7 @@ func leafCVsX4(data []byte, cv []byte) {
 		pos += n
 		off += n
 		if pos == turboshake.Rate {
-			keccak.P1600x4(&s0, &s1, &s2, &s3)
+			legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
 			pos = 0
 		}
 	}
@@ -365,7 +365,7 @@ func leafCVsX4(data []byte, cv []byte) {
 	s2[turboshake.Rate-1] ^= 0x80
 	s3[pos] ^= leafDS
 	s3[turboshake.Rate-1] ^= 0x80
-	keccak.P1600x4(&s0, &s1, &s2, &s3)
+	legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
 	copy(cv[:cvSize], s0[:cvSize])
 	copy(cv[cvSize:2*cvSize], s1[:cvSize])
 	copy(cv[2*cvSize:3*cvSize], s2[:cvSize])

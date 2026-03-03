@@ -1,4 +1,4 @@
-package keccak //nolint:testpackage // testing internals
+package legacykeccak //nolint:testpackage // testing internals
 
 import (
 	"bytes"

@@ -4,7 +4,7 @@
 
 //go:build (!amd64 && !arm64) || purego
 
-package keccak
+package legacykeccak
 
 func p1600(a *[200]byte) {
 	f1600Generic(a, 12)

@@ -4,7 +4,7 @@
 
 //go:build amd64 && !purego && avx2 && !avx512
 
-package keccak
+package legacykeccak
 
 //go:noescape
 //goland:noinspection GoUnusedParameter
