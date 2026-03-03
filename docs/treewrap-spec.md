@@ -375,7 +375,7 @@ Use one hybrid:
 
 - Game $\mathsf{G}_0$: real `TreeWrap-AEAD`.
 - Game $\mathsf{G}_1$: replace $F(X)$ with a lazy-sampled random function
-  $R:\{0,1\}^\* \rightarrow \{0,1\}^{8C}$ on context strings $X$.
+  $R:\{0,1\}^* \rightarrow \{0,1\}^{8C}$ on context strings $X$.
 
 By §6.4 (same global ideal-permutation model),
 
@@ -390,11 +390,7 @@ queries reduce directly to bare TreeWrap under random keys.
 we upper-bound:
 
 $$
-\mathrm{Adv}_{\Pi}
-\le
-\Pr[\mathsf{Bad}_{\mathrm{perm}}]
-+ \Pr[\mathsf{CtxColl}]
-+ \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\!\mid_{\neg \mathsf{Bad}_{\mathrm{perm}}\wedge \neg \mathsf{CtxColl}}.
+\mathrm{Adv}_{\Pi} \le \Pr[\mathsf{Bad}_{\mathrm{perm}}] + \Pr[\mathsf{CtxColl}] + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\!\mid_{\neg \mathsf{Bad}_{\mathrm{perm}}\wedge \neg \mathsf{CtxColl}}.
 $$
 
 Under $\neg \mathsf{Bad}_{\mathrm{perm}}$, $F$ is a random function on contexts and bare-TreeWrap lemmas are interpreted
