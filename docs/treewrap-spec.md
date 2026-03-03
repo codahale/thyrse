@@ -573,10 +573,10 @@ $$
 $$
 
 With uniformly random 128-bit nonces and collision target $p = 2^{-50}$, the nonce budget is approximately
-$q_{\mathrm{nonce}} \le 2^{64}$ encryptions per key (birthday approximation), so at 1500 bytes/message:
+$q_{\mathrm{nonce}} \lesssim 2^{39.5}$ encryptions per key (birthday approximation), so at 1500 bytes/message:
 
 $$
-\text{nonce-collision-limited volume} \approx 2^{64} \cdot 1500\ \text{bytes} \approx 2^{44.6}\ \text{GiB}.
+\text{nonce-collision-limited volume} \approx 2^{39.5} \cdot 1500\ \text{bytes} \approx 2^{20.1}\ \text{GiB}.
 $$
 
 TreeWrap supports longer nonces (e.g., 192 or 256 bits) with the same construction; this increases the random-nonce
