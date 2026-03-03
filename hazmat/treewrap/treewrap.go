@@ -468,11 +468,14 @@ func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 	leafPad(&s1, key, baseIndex+1)
 	keccak.P1600x2(&s0, &s1)
 
+	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
+	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
+
 	off := 0
 	for off < ChunkSize {
 		n := min(blockRate, ChunkSize-off)
-		mem.XORAndCopy(ct[off:off+n], pt[off:off+n], s0[:n])
-		mem.XORAndCopy(ct[ChunkSize+off:ChunkSize+off+n], pt[ChunkSize+off:ChunkSize+off+n], s1[:n])
+		mem.XORAndCopy(ct0[off:off+n], pt0[off:off+n], s0[:n])
+		mem.XORAndCopy(ct1[off:off+n], pt1[off:off+n], s1[:n])
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= intermediateDS
@@ -501,13 +504,18 @@ func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 	leafPad(&s3, key, baseIndex+3)
 	keccak.P1600x4(&s0, &s1, &s2, &s3)
 
+	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
+	pt2, pt3 := pt[2*ChunkSize:3*ChunkSize], pt[3*ChunkSize:4*ChunkSize]
+	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
+	ct2, ct3 := ct[2*ChunkSize:3*ChunkSize], ct[3*ChunkSize:4*ChunkSize]
+
 	off := 0
 	for off < ChunkSize {
 		n := min(blockRate, ChunkSize-off)
-		mem.XORAndCopy(ct[off:off+n], pt[off:off+n], s0[:n])
-		mem.XORAndCopy(ct[ChunkSize+off:ChunkSize+off+n], pt[ChunkSize+off:ChunkSize+off+n], s1[:n])
-		mem.XORAndCopy(ct[2*ChunkSize+off:2*ChunkSize+off+n], pt[2*ChunkSize+off:2*ChunkSize+off+n], s2[:n])
-		mem.XORAndCopy(ct[3*ChunkSize+off:3*ChunkSize+off+n], pt[3*ChunkSize+off:3*ChunkSize+off+n], s3[:n])
+		mem.XORAndCopy(ct0[off:off+n], pt0[off:off+n], s0[:n])
+		mem.XORAndCopy(ct1[off:off+n], pt1[off:off+n], s1[:n])
+		mem.XORAndCopy(ct2[off:off+n], pt2[off:off+n], s2[:n])
+		mem.XORAndCopy(ct3[off:off+n], pt3[off:off+n], s3[:n])
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= intermediateDS
@@ -569,11 +577,14 @@ func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 	leafPad(&s1, key, baseIndex+1)
 	keccak.P1600x2(&s0, &s1)
 
+	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
+	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
+
 	off := 0
 	for off < ChunkSize {
 		n := min(blockRate, ChunkSize-off)
-		mem.XORAndReplace(pt[off:off+n], ct[off:off+n], s0[:n])
-		mem.XORAndReplace(pt[ChunkSize+off:ChunkSize+off+n], ct[ChunkSize+off:ChunkSize+off+n], s1[:n])
+		mem.XORAndReplace(pt0[off:off+n], ct0[off:off+n], s0[:n])
+		mem.XORAndReplace(pt1[off:off+n], ct1[off:off+n], s1[:n])
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= intermediateDS
@@ -602,13 +613,18 @@ func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 	leafPad(&s3, key, baseIndex+3)
 	keccak.P1600x4(&s0, &s1, &s2, &s3)
 
+	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
+	ct2, ct3 := ct[2*ChunkSize:3*ChunkSize], ct[3*ChunkSize:4*ChunkSize]
+	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
+	pt2, pt3 := pt[2*ChunkSize:3*ChunkSize], pt[3*ChunkSize:4*ChunkSize]
+
 	off := 0
 	for off < ChunkSize {
 		n := min(blockRate, ChunkSize-off)
-		mem.XORAndReplace(pt[off:off+n], ct[off:off+n], s0[:n])
-		mem.XORAndReplace(pt[ChunkSize+off:ChunkSize+off+n], ct[ChunkSize+off:ChunkSize+off+n], s1[:n])
-		mem.XORAndReplace(pt[2*ChunkSize+off:2*ChunkSize+off+n], ct[2*ChunkSize+off:2*ChunkSize+off+n], s2[:n])
-		mem.XORAndReplace(pt[3*ChunkSize+off:3*ChunkSize+off+n], ct[3*ChunkSize+off:3*ChunkSize+off+n], s3[:n])
+		mem.XORAndReplace(pt0[off:off+n], ct0[off:off+n], s0[:n])
+		mem.XORAndReplace(pt1[off:off+n], ct1[off:off+n], s1[:n])
+		mem.XORAndReplace(pt2[off:off+n], ct2[off:off+n], s2[:n])
+		mem.XORAndReplace(pt3[off:off+n], ct3[off:off+n], s3[:n])
 		off += n
 		if off < ChunkSize {
 			s0[blockRate] ^= intermediateDS
