@@ -70,6 +70,7 @@ func init() {
 		Lanes = 4
 	} else if cpuid.CPU.Has(cpuid.AVX2) {
 		Lanes = 4
+	} else {
+		Lanes = 2
 	}
-	Lanes = 2
 }
