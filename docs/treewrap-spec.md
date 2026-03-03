@@ -504,18 +504,34 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits
 (a key epoch) and rotate to a fresh master key before exceeding them.
 
-- **Total Keccak workload cap.** For each key epoch, implementations MUST track
-  $\sigma_{\mathrm{total}} = \sigma_{\mathrm{treewrap-aead}} + \sigma_{\mathrm{other\ keccak\ uses\ in\ scope}}$
-  and enforce a configured measurable cap $\sigma_{\mathrm{total}} \le \sigma_{\mathrm{cap}}$.
-  A conservative default of $\sigma_{\mathrm{cap}} \le 2^{60}$ is RECOMMENDED; higher caps (up to $2^{64}$) are an
-  expert-only profile.
-  Security interpretation remains the §6 bound family evaluated at observed $\sigma_{\mathrm{total}}$ and the chosen
-  adversary offline budget parameter $t$.
-- **Nonce discipline.** Nonces MUST be unique per key epoch. Deterministic nonces (counter/sequence) are RECOMMENDED.
-- **Random-nonce cap (if used).** If nonces are sampled uniformly at random from a $b$-bit nonce space, implementations
-  MUST also cap encryptions per key epoch to satisfy
-  $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b+1} \le p_{\mathrm{nonce}}$ for the deployment's chosen collision risk
-  target $p_{\mathrm{nonce}}$.
+Implementations MUST maintain the following per-key-epoch counters:
+
+- $q_{\mathrm{enc}}$: number of encryption invocations.
+- $\sigma_{\mathrm{total}} = \sigma_{\mathrm{treewrap-aead}} + \sigma_{\mathrm{other\ keccak\ uses\ in\ scope}}$.
+- $q_{\mathrm{nonce}}$: number of random nonces used (only for random-nonce deployments).
+- $S$: number of failed decryption/verification attempts processed.
+
+Required baseline profile (MUST):
+
+- Enforce $\sigma_{\mathrm{total}} \le 2^{60}$.
+- Define and enforce an encryption-invocation cap $q_{\mathrm{enc}} \le q_{\mathrm{enc,cap}}$ per key epoch.
+- Enforce nonce uniqueness per key epoch (deterministic nonces such as counters/sequences are RECOMMENDED; random-nonce
+  deployments SHOULD use a large nonce space, e.g., 192 or 256 bits).
+- For deterministic nonces, choose $q_{\mathrm{enc,cap}}$ so nonce values cannot wrap or repeat within the epoch.
+- If random nonces are used, additionally enforce
+  $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b+1} \le p_{\mathrm{nonce}}$ for chosen nonce-collision target
+  $p_{\mathrm{nonce}}$.
+- Define and enforce a failed-verification budget $S_{\mathrm{cap}}$ per key epoch. If $S > S_{\mathrm{cap}}$,
+  implementations MUST stop accepting further decryption attempts for that epoch and rotate to a fresh key epoch before
+  resuming.
+- On any cap exceedance (workload, invocation, nonce, or failed-verification policy), implementations MUST rotate to a
+  fresh key epoch before any further encryption.
+
+Expert profile (non-normative): deployments with stronger review/monitoring may choose workload caps above $2^{60}$, up
+to $2^{64}$, using the same counter model.
+
+Security interpretation remains the §6 bound family evaluated at observed counters, with adversary offline budget
+parameter $t$ treated as an analysis parameter (not an operationally measurable quantity).
 
 Appendix C remains non-normative operational guidance for instrumentation and budgeting workflows.
 
