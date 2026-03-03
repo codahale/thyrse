@@ -213,6 +213,9 @@ TreeWrap key from `(K, N, AD)` using TurboSHAKE128, then delegates to `EncryptAn
 construction exists for security analysis — calling protocols may use it directly or implement equivalent key
 derivation.
 
+**Master-key requirement.** `K` MUST have at least 128 bits of min-entropy and MUST be at least 16 bytes long.
+Uniformly random 32-byte keys are RECOMMENDED.
+
 **Key derivation:**
 
 ```
