@@ -281,6 +281,8 @@ Let:
 - $Q$: total number of compared outputs in a birthday-style counting argument (per security experiment / key epoch).
 - $q_{\mathrm{ctx}}$: number of distinct context strings $X$ queried to the KDF in one security experiment.
 
+Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
+
 Define the common structural term:
 
 $$
@@ -372,6 +374,9 @@ Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$ in $\mathsf{G}_1$:
 $$
 \varepsilon_{\mathrm{ctx-coll}} \le \frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}.
 $$
+
+This context-collision term is per experiment/per key epoch; multi-key or multi-user deployment totals are obtained by
+summing per-key-epoch probabilities (union bound).
 
 ### 6.5 Generic AEAD Transfer Lemma and Goal Corollaries
 
@@ -523,6 +528,9 @@ to $2^{64}$, using the same counter model.
 
 Security interpretation remains the §6 bound family evaluated at observed counters, with adversary offline budget
 parameter $t$ treated as an analysis parameter (not an operationally measurable quantity).
+
+For deployments spanning multiple master keys/users in one reporting window, estimate total risk by summing per-key
+epoch bound values over that window (union bound).
 
 Non-normative sensitivity profiles for reviewers:
 
