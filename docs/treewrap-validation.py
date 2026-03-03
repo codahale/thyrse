@@ -150,6 +150,22 @@ def compute_aead_expected(ns: dict[str, Any], case: dict[str, Any]) -> dict[str,
     else:
         out["ct_prefix32_hex"] = hx(ct[:32])
         out["tag_hex"] = hx(tag)
+
+    checks = case.get("checks", {})
+    if checks.get("nonce_reuse_xor_leak"):
+        alt_msg = make_message(case["alt_message"])
+        alt_ct_tag = enc(key, nonce, ad, alt_msg)
+        out["reuse_ct_tag_hex"] = hx(alt_ct_tag)
+
+    if checks.get("swap_nonce_ad"):
+        swapped_ct_tag = enc(key, ad, nonce, msg)
+        out["swap_nonce_ad_ct_tag_hex"] = hx(swapped_ct_tag)
+
+    if checks.get("ad_empty_vs_zero_byte"):
+        alt_ad = bytes_from_hex(case.get("alt_ad_hex", "00"))
+        alt_ct_tag = enc(key, nonce, alt_ad, msg)
+        out["alt_ad_ct_tag_hex"] = hx(alt_ct_tag)
+
     return out
 
 
@@ -232,6 +248,46 @@ def validate_aead_case(ns: dict[str, Any], case: dict[str, Any], failures: list[
         bad_tag = bytes([tag[0] ^ 0x01]) + tag[1:]
         if dec(key, nonce, ad, ct + bad_tag) is not None:
             failures.append(f"{cid}: bad tag accepted")
+
+    if checks.get("nonce_reuse_xor_leak"):
+        alt_msg = make_message(case["alt_message"])
+        alt_ct_tag = enc(key, nonce, ad, alt_msg)
+        if hx(alt_ct_tag) != exp.get("reuse_ct_tag_hex", ""):
+            failures.append(f"{cid}: reuse_ct_tag mismatch")
+        if dec(key, nonce, ad, alt_ct_tag) != alt_msg:
+            failures.append(f"{cid}: reused nonce alt round-trip mismatch")
+        alt_ct = alt_ct_tag[:-tau]
+        if len(alt_ct) != len(ct) or len(alt_msg) != len(msg):
+            failures.append(f"{cid}: nonce reuse xor precondition length mismatch")
+        else:
+            xor_ct = bytes(a ^ b for a, b in zip(ct, alt_ct))
+            xor_msg = bytes(a ^ b for a, b in zip(msg, alt_msg))
+            if xor_ct != xor_msg:
+                failures.append(f"{cid}: nonce reuse xor relation mismatch")
+
+    if checks.get("swap_nonce_ad"):
+        if len(ad) != len(nonce):
+            failures.append(f"{cid}: swap_nonce_ad requires |AD| == |N|")
+        else:
+            swapped_ct_tag = enc(key, ad, nonce, msg)
+            if hx(swapped_ct_tag) != exp.get("swap_nonce_ad_ct_tag_hex", ""):
+                failures.append(f"{cid}: swap_nonce_ad_ct_tag mismatch")
+            if swapped_ct_tag == ct_tag:
+                failures.append(f"{cid}: swapping nonce/ad produced identical ct||tag")
+            if dec(key, ad, nonce, ct_tag) is not None:
+                failures.append(f"{cid}: swapping nonce/ad accepted original ct||tag")
+
+    if checks.get("ad_empty_vs_zero_byte"):
+        alt_ad = bytes_from_hex(case.get("alt_ad_hex", "00"))
+        alt_ct_tag = enc(key, nonce, alt_ad, msg)
+        if hx(alt_ct_tag) != exp.get("alt_ad_ct_tag_hex", ""):
+            failures.append(f"{cid}: alt_ad_ct_tag mismatch")
+        if alt_ct_tag == ct_tag:
+            failures.append(f"{cid}: empty AD and alternate AD produced identical ct||tag")
+        if dec(key, nonce, alt_ad, ct_tag) is not None:
+            failures.append(f"{cid}: alternate AD accepted original ct||tag")
+        if dec(key, nonce, alt_ad, alt_ct_tag) != msg:
+            failures.append(f"{cid}: alternate AD round-trip mismatch")
 
 
 def update_vectors(ns: dict[str, Any], vectors: dict[str, Any]) -> dict[str, Any]:
@@ -353,6 +409,16 @@ def render_section_9(vectors: dict[str, Any]) -> str:
         lines.append("")
         lines.append("`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.")
         lines.append("Changing `N`, `AD`, or `tag` causes decryption to return `None`.")
+        checks = case.get("checks", {})
+        if checks.get("nonce_reuse_xor_leak"):
+            lines.append("Reusing the same `(K, N, AD)` with a different message is deterministic and yields")
+            lines.append("`ct1 xor ct2 = m1 xor m2` for equal-length messages (validated by this vector).")
+            lines.append("Nonce reuse is out of scope for §6 nonce-respecting claims.")
+        if checks.get("swap_nonce_ad"):
+            lines.append("Swapping `N` and `AD` (same byte length) yields a different `ct‖tag` and does not")
+            lines.append("validate the original `ct‖tag`.")
+        if checks.get("ad_empty_vs_zero_byte"):
+            lines.append("Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖tag`.")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

@@ -143,6 +143,93 @@
           "ct_prefix32_hex": "f5774bff15f14fd3b08bc8e48c63cad9d84b348b1c3097551db20dce21b0b36d",
           "tag_hex": "ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f"
         }
+      },
+      {
+        "id": "9.7.4",
+        "title": "Nonce Reuse Behavior (Equal-Length Messages)",
+        "key_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+        "nonce_hex": "ffeeddccbbaa998877665544",
+        "ad_hex": "a1a2a3a4",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 64
+        },
+        "alt_message": {
+          "mode": "hex",
+          "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true,
+          "nonce_reuse_xor_leak": true
+        },
+        "expected": {
+          "ct_tag_hex": "b846bc924f26508d37919646aa5e687082a1e200f33d3ab75edfc5a0cff110d4ee5afa9a9d088462af37c8b7b01029ba1db288f616c7d2a0d0febf918d1f4d5fa0fe05304729364477e5844d6886885148044629740668b6e98045d4eed0cf58",
+          "reuse_ct_tag_hex": "b847be914b23568a3f989c4da653667f92b0f013e7282ca046c6dfbbd3ec0ecbce7bd8b9b92da245871ee29c9c3d07952d83bac522f2e497e8c785aab122736070cfdabb513d92394912c83a3c04164314c22fea92ee5b56f8af5095b86a5a3c"
+        }
+      },
+      {
+        "id": "9.7.5",
+        "title": "Swapped Nonce and AD Domains",
+        "key_hex": "0f0e0d0c0b0a09080706050403020100112233445566778899aabbccddeeff00",
+        "nonce_hex": "000102030405060708090a0b",
+        "ad_hex": "101112131415161718191a1b",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 48
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true,
+          "swap_nonce_ad": true
+        },
+        "expected": {
+          "ct_tag_hex": "9e1b2d6fd419fb7a548c9a7ef468162f0bccedc9ca14433e71c41ed8b7ba73b2f04d1b9bcb94c78e827f1723d34aea41f9a6a7dff365fec7fefe1727ab9c5f46a328c71e9d6c596f43a6959bf4ec1f9e",
+          "swap_nonce_ad_ct_tag_hex": "8da762791537317c2f4b43536fc2b09cbebcbbd639dff24b807f037a1a1f1e87396196fa5b3a466d1477788967c553b226c3dcd794fbf0c9b41c435e46adfed11dc1c9499ad2b8841b8534a8a6d1a65c"
+        }
+      },
+      {
+        "id": "9.7.6",
+        "title": "Empty AD vs One-Byte AD 00",
+        "key_hex": "8899aabbccddeeff001122334455667700112233445566778899aabbccddeeff",
+        "nonce_hex": "0c0d0e0f1011121314151617",
+        "ad_hex": "",
+        "alt_ad_hex": "00",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 32
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true,
+          "ad_empty_vs_zero_byte": true
+        },
+        "expected": {
+          "ct_tag_hex": "3bb057de1cbbd42d6941f1e3ccd15d1814be5b030400af4c921a7196a0c8ca0c4049f9c968a78fc2edc8f9fb234325462260e4dc066a342a0ed0c90e1c5ee798",
+          "alt_ad_ct_tag_hex": "2008690d18e63585fc0e7c347dc22b021292a9afb46b35338e39d03203889f9bbd3439851eece2b9f0a683f3ffad0a9778dded208dd1d30dae1db5dd233b6c6e"
+        }
+      },
+      {
+        "id": "9.7.7",
+        "title": "Long AD (128 Bytes)",
+        "key_hex": "102132435465768798a9babbdcddedef00112233445566778899aabbccddeeff",
+        "nonce_hex": "ababacadaeafb0b1b2b3b4b5",
+        "ad_hex": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 17
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true
+        },
+        "expected": {
+          "ct_tag_hex": "b00ed273058b5e5f22a44343c0d67362fda6620cf0fee302c74ce22a3fff5f89d2203a38db880837a0d035775e22938452"
+        }
       }
     ]
   }

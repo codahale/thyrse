@@ -752,8 +752,8 @@ These vectors validate the `treewrap_aead_encrypt` / `treewrap_aead_decrypt` wra
 | M len  | 0                                                                  |
 | ct‖tag | `25b1c33a42d3dd8546c0de7df2edc6d3fa1d39b4e1ee9696b6a046c6f853d54e` |
 
-`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext. Changing `N`, `AD`, or `tag` causes decryption
-to return `None`.
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 9.7.2 33-Byte Message With 5-Byte AD
 
@@ -765,8 +765,8 @@ to return `None`.
 | M len  | 33 (`00 01 02 ... mod 256`)                                                                                                          |
 | ct‖tag | `d88f1d9d2b6f31316427abef58ef07ef047d4e9d3faec99c677a5b7d895b682fe8b98d90320dd7d3773160424f8b1a7aa4522038c5871e62689cdb90ef8820aa64` |
 
-`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext. Changing `N`, `AD`, or `tag` causes decryption
-to return `None`.
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 9.7.3 Multi-Chunk Message (8193 Bytes)
 
@@ -778,6 +778,64 @@ to return `None`.
 | M len   | 8193 (`00 01 02 ... mod 256`)                                      |
 | ct[:32] | `f5774bff15f14fd3b08bc8e48c63cad9d84b348b1c3097551db20dce21b0b36d` |
 | tag     | `ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f` |
+
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+
+#### 9.7.4 Nonce Reuse Behavior (Equal-Length Messages)
+
+| Field  | Value                                                                                                                                                                                              |
+|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| K      | 32 bytes `00 11 22 ... ff`                                                                                                                                                                         |
+| N      | 12 bytes `ff ee dd cc bb aa 99 88 77 66 55 44`                                                                                                                                                     |
+| AD     | a1 a2 a3 ... a4                                                                                                                                                                                    |
+| M len  | 64 (`00 01 02 ... mod 256`)                                                                                                                                                                        |
+| ct‖tag | `b846bc924f26508d37919646aa5e687082a1e200f33d3ab75edfc5a0cff110d4ee5afa9a9d088462af37c8b7b01029ba1db288f616c7d2a0d0febf918d1f4d5fa0fe05304729364477e5844d6886885148044629740668b6e98045d4eed0cf58` |
+
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+Reusing the same `(K, N, AD)` with a different message is deterministic and yields
+`ct1 xor ct2 = m1 xor m2` for equal-length messages (validated by this vector).
+Nonce reuse is out of scope for §6 nonce-respecting claims.
+
+#### 9.7.5 Swapped Nonce and AD Domains
+
+| Field  | Value                                                                                                                                                              |
+|--------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| K      | 32 bytes `0f 0e 0d ... 00`                                                                                                                                         |
+| N      | 12 bytes `00 01 02 ... 0b`                                                                                                                                         |
+| AD     | 10 11 12 ... 1b                                                                                                                                                    |
+| M len  | 48 (`00 01 02 ... mod 256`)                                                                                                                                        |
+| ct‖tag | `9e1b2d6fd419fb7a548c9a7ef468162f0bccedc9ca14433e71c41ed8b7ba73b2f04d1b9bcb94c78e827f1723d34aea41f9a6a7dff365fec7fefe1727ab9c5f46a328c71e9d6c596f43a6959bf4ec1f9e` |
+
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+Swapping `N` and `AD` (same byte length) yields a different `ct‖tag` and does not
+validate the original `ct‖tag`.
+
+#### 9.7.6 Empty AD vs One-Byte AD 00
+
+| Field  | Value                                                                                                                              |
+|--------|------------------------------------------------------------------------------------------------------------------------------------|
+| K      | 32 bytes `88 99 aa ... ff`                                                                                                         |
+| N      | 12 bytes `0c 0d 0e ... 17`                                                                                                         |
+| AD     | (empty)                                                                                                                            |
+| M len  | 32 (`00 01 02 ... 1f`)                                                                                                             |
+| ct‖tag | `3bb057de1cbbd42d6941f1e3ccd15d1814be5b030400af4c921a7196a0c8ca0c4049f9c968a78fc2edc8f9fb234325462260e4dc066a342a0ed0c90e1c5ee798` |
+
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖tag`.
+
+#### 9.7.7 Long AD (128 Bytes)
+
+| Field  | Value                                                                                                |
+|--------|------------------------------------------------------------------------------------------------------|
+| K      | 32 bytes `10 21 32 ... ff`                                                                           |
+| N      | 12 bytes `ab ab ac ad ae af b0 b1 b2 b3 b4 b5`                                                       |
+| AD     | ab ab ab ... ab                                                                                      |
+| M len  | 17 (`00 01 02 ... 10`)                                                                               |
+| ct‖tag | `b00ed273058b5e5f22a44343c0d67362fda6620cf0fee302c74ce22a3fff5f89d2203a38db880837a0d035775e22938452` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
