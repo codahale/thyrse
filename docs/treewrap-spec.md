@@ -2,8 +2,8 @@
 
 <table>
   <tr><th>Status</th><td>Draft</td></tr>
-  <tr><th>Version</th><td>0.7</td></tr>
-  <tr><th>Date</th><td>2026-03-01</td></tr>
+  <tr><th>Version</th><td>0.8</td></tr>
+  <tr><th>Date</th><td>2026-03-02</td></tr>
   <tr><th>Security Target</th><td>128-bit</td></tr>
 </table>
 
