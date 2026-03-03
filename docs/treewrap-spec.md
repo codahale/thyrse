@@ -489,7 +489,24 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 - Tag verification MUST use constant-time equality.
 - Partial-block logic may branch on public length, not on secret data.
 
-### 6.11 Implementation Design Callouts (Non-Normative)
+### 6.11 Operational Usage Limits (Normative)
+
+To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits
+(a key epoch) and rotate to a fresh master key before exceeding them.
+
+- **Total Keccak workload cap.** For each key epoch, implementations MUST track
+  $\sigma_{\mathrm{total}} = \sigma_{\mathrm{treewrap-aead}} + \sigma_{\mathrm{other\ keccak\ uses\ in\ scope}}$
+  and enforce $(\sigma_{\mathrm{total}} + t) \le 2^{64}$. A conservative default of
+  $(\sigma_{\mathrm{total}} + t) \le 2^{60}$ is RECOMMENDED.
+- **Nonce discipline.** Nonces MUST be unique per key epoch. Deterministic nonces (counter/sequence) are RECOMMENDED.
+- **Random-nonce cap (if used).** If nonces are sampled uniformly at random from a $b$-bit nonce space, implementations
+  MUST also cap encryptions per key epoch to satisfy
+  $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b+1} \le p_{\mathrm{nonce}}$ for the deployment's chosen collision risk
+  target $p_{\mathrm{nonce}}$.
+
+Appendix C remains non-normative operational guidance for instrumentation and budgeting workflows.
+
+### 6.12 Implementation Design Callouts (Non-Normative)
 
 The following implementation decisions are performance-critical and align with high-throughput production designs:
 
