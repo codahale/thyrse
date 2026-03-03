@@ -534,7 +534,7 @@ string (§6.3.1). This stronger property supports protocols that absorb the tag 
 
 Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost
 $\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), planning approximation $\sigma + t \approx \sigma$,
-and per-key accounting (single key / key epoch).
+per-key accounting (single key / key epoch), and a 128-bit TreeWrap nonce profile for random-nonce deployments.
 
 | Scheme        | Limit type | Approx protected volume |
 |---------------|------------|-------------------------|
@@ -543,6 +543,22 @@ and per-key accounting (single key / key epoch).
 
 The AES-128-GCM figure is from Günther, Thomson, and Wood (Table 2) converted to GiB. The TreeWrap figure is the
 corresponding conversion of the §6 bound under the assumptions above.
+
+For deployment planning, use:
+
+$$
+\text{practical per-key volume} = \min(\text{proof-bound volume},\ \text{nonce-collision-limited volume}).
+$$
+
+With uniformly random 128-bit nonces and collision target $p = 2^{-50}$, the nonce budget is approximately
+$q_{\mathrm{nonce}} \le 2^{64}$ encryptions per key (birthday approximation), so at 1500 bytes/message:
+
+$$
+\text{nonce-collision-limited volume} \approx 2^{64} \cdot 1500\ \text{bytes} \approx 2^{44.6}\ \text{GiB}.
+$$
+
+TreeWrap supports longer nonces (e.g., 192 or 256 bits) with the same construction; this increases the random-nonce
+collision budget in the usual birthday way.
 
 ## 8. References
 
