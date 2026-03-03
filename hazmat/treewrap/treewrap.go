@@ -45,8 +45,8 @@ type Encryptor struct {
 	s        [200]byte
 	h        turboshake.Hasher
 	cvBuf    [4 * cvSize]byte
+	tagStarted bool
 	finalized bool
-	cvCount  int
 	idx      int
 	pos      int
 	chunkOff int
@@ -138,7 +138,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	for idx+4 <= nFlush {
 		off := idx * ChunkSize
 		encryptX4(&e.key, uint64(e.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], e.cvBuf[:])
-		feedCVs(&e.h, e.cvBuf[:4*cvSize], &e.cvCount)
+		e.feedCVs(e.cvBuf[:4*cvSize])
 		e.idx += 4
 		idx += 4
 	}
@@ -146,7 +146,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	for idx+2 <= nFlush {
 		off := idx * ChunkSize
 		encryptX2(&e.key, uint64(e.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], e.cvBuf[:2*cvSize])
-		feedCVs(&e.h, e.cvBuf[:2*cvSize], &e.cvCount)
+		e.feedCVs(e.cvBuf[:2*cvSize])
 		e.idx += 2
 		idx += 2
 	}
@@ -154,7 +154,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		encryptX1(&e.key, uint64(e.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], e.cvBuf[:cvSize])
-		feedCVs(&e.h, e.cvBuf[:cvSize], &e.cvCount)
+		e.feedCVs(e.cvBuf[:cvSize])
 		e.idx++
 		idx++
 	}
@@ -166,7 +166,7 @@ func (e *Encryptor) finalizeCV() {
 	e.s[turboshake.Rate-1] ^= 0x80
 	keccak.P1600(&e.s)
 	copy(e.cvBuf[:cvSize], e.s[:cvSize])
-	feedCVs(&e.h, e.cvBuf[:cvSize], &e.cvCount)
+	e.feedCVs(e.cvBuf[:cvSize])
 	e.idx++
 	e.chunkOff = 0
 	e.pos = 0
@@ -207,7 +207,7 @@ func (e *Encryptor) Finalize() [TagSize]byte {
 		e.finalizeCV()
 	}
 
-	return finalizeTag(&e.h, e.idx)
+	return e.finalizeTag()
 }
 
 // Decryptor incrementally decrypts data and computes the authentication tag. It implements a streaming interface where
@@ -219,8 +219,8 @@ type Decryptor struct {
 	s        [200]byte
 	h        turboshake.Hasher
 	cvBuf    [4 * cvSize]byte
+	tagStarted bool
 	finalized bool
-	cvCount  int
 	idx      int
 	pos      int
 	chunkOff int
@@ -312,7 +312,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	for idx+4 <= nFlush {
 		off := idx * ChunkSize
 		decryptX4(&d.key, uint64(d.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], d.cvBuf[:])
-		feedCVs(&d.h, d.cvBuf[:4*cvSize], &d.cvCount)
+		d.feedCVs(d.cvBuf[:4*cvSize])
 		d.idx += 4
 		idx += 4
 	}
@@ -320,7 +320,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	for idx+2 <= nFlush {
 		off := idx * ChunkSize
 		decryptX2(&d.key, uint64(d.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], d.cvBuf[:2*cvSize])
-		feedCVs(&d.h, d.cvBuf[:2*cvSize], &d.cvCount)
+		d.feedCVs(d.cvBuf[:2*cvSize])
 		d.idx += 2
 		idx += 2
 	}
@@ -328,7 +328,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		decryptX1(&d.key, uint64(d.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], d.cvBuf[:cvSize])
-		feedCVs(&d.h, d.cvBuf[:cvSize], &d.cvCount)
+		d.feedCVs(d.cvBuf[:cvSize])
 		d.idx++
 		idx++
 	}
@@ -340,7 +340,7 @@ func (d *Decryptor) finalizeCV() {
 	d.s[turboshake.Rate-1] ^= 0x80
 	keccak.P1600(&d.s)
 	copy(d.cvBuf[:cvSize], d.s[:cvSize])
-	feedCVs(&d.h, d.cvBuf[:cvSize], &d.cvCount)
+	d.feedCVs(d.cvBuf[:cvSize])
 	d.idx++
 	d.chunkOff = 0
 	d.pos = 0
@@ -382,7 +382,7 @@ func (d *Decryptor) Finalize() [TagSize]byte {
 		d.finalizeCV()
 	}
 
-	return finalizeTag(&d.h, d.idx)
+	return d.finalizeTag()
 }
 
 // EncryptAndMAC encrypts plaintext, appends the ciphertext to dst, and returns the resulting slice along with a
@@ -416,21 +416,39 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 // subtree interleaving).
 var sakuraTopology = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the Sakura
-// chaining hop indicator. cvCount tracks how many CVs have been written so far.
-func feedCVs(h *turboshake.Hasher, cvs []byte, cvCount *int) {
-	if *cvCount == 0 {
-		_, _ = h.Write(sakuraTopology[:])
+// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the
+// Sakura chaining hop indicator.
+func (e *Encryptor) feedCVs(cvs []byte) {
+	if !e.tagStarted {
+		_, _ = e.h.Write(sakuraTopology[:])
+		e.tagStarted = true
 	}
-	_, _ = h.Write(cvs)
-	*cvCount += len(cvs) / cvSize
+	_, _ = e.h.Write(cvs)
+}
+
+// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the
+// Sakura chaining hop indicator.
+func (d *Decryptor) feedCVs(cvs []byte) {
+	if !d.tagStarted {
+		_, _ = d.h.Write(sakuraTopology[:])
+		d.tagStarted = true
+	}
+	_, _ = d.h.Write(cvs)
 }
 
 // finalizeTag writes the Sakura terminator and squeezes the tag.
-func finalizeTag(h *turboshake.Hasher, n int) (tag [TagSize]byte) {
-	_, _ = h.Write(lengthEncode(uint64(n)))
-	_, _ = h.Write([]byte{0xFF, 0xFF})
-	_, _ = h.Read(tag[:])
+func (e *Encryptor) finalizeTag() (tag [TagSize]byte) {
+	_, _ = e.h.Write(lengthEncode(uint64(e.idx)))
+	_, _ = e.h.Write([]byte{0xFF, 0xFF})
+	_, _ = e.h.Read(tag[:])
+	return tag
+}
+
+// finalizeTag writes the Sakura terminator and squeezes the tag.
+func (d *Decryptor) finalizeTag() (tag [TagSize]byte) {
+	_, _ = d.h.Write(lengthEncode(uint64(d.idx)))
+	_, _ = d.h.Write([]byte{0xFF, 0xFF})
+	_, _ = d.h.Read(tag[:])
 	return tag
 }
 
