@@ -37,26 +37,98 @@ const (
 	tagDS          = 0x64                // Domain separation byte for tag computation.
 )
 
+type cryptor struct {
+	key        [KeySize]byte
+	s          [200]byte
+	h          turboshake.Hasher
+	cvBuf      [4 * cvSize]byte
+	tagStarted bool
+	finalized  bool
+	idx        int
+	pos        int
+	chunkOff   int
+}
+
+// finalizeCV squeezes the chain value from the current chunk's sponge state.
+func (c *cryptor) finalizeCV() {
+	c.s[c.pos] ^= finalDS
+	c.s[turboshake.Rate-1] ^= 0x80
+	keccak.P1600(&c.s)
+	copy(c.cvBuf[:cvSize], c.s[:cvSize])
+	c.feedCVs(c.cvBuf[:cvSize])
+	c.idx++
+	c.chunkOff = 0
+	c.pos = 0
+}
+
+// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the
+// Sakura chaining hop indicator.
+func (c *cryptor) feedCVs(cvs []byte) {
+	if !c.tagStarted {
+		_, _ = c.h.Write(sakuraTopology[:])
+		c.tagStarted = true
+	}
+	_, _ = c.h.Write(cvs)
+}
+
+// finalizeTag writes the Sakura terminator and squeezes the tag.
+func (c *cryptor) finalizeTag() (tag [TagSize]byte) {
+	_, _ = c.h.Write(lengthEncode(uint64(c.idx)))
+	_, _ = c.h.Write([]byte{0xFF, 0xFF})
+	_, _ = c.h.Read(tag[:])
+	return tag
+}
+
+func (c *cryptor) finalizeInternal() [TagSize]byte {
+	if c.finalized {
+		panic("treewrap: Finalize called more than once")
+	}
+	c.finalized = true
+
+	if c.chunkOff == 0 && c.idx == 0 {
+		// Empty input: process one empty chunk with singleNodeDS fast-path.
+		var s0 [200]byte
+		leafPad(&s0, &c.key, 0)
+		keccak.P1600(&s0)
+		s0[0] ^= singleNodeDS
+		s0[turboshake.Rate-1] ^= 0x80
+		keccak.P1600(&s0)
+		var tag [TagSize]byte
+		copy(tag[:], s0[:TagSize])
+		return tag
+	}
+
+	if c.idx == 0 {
+		// Fast path for n=1: derive tag directly from the single chunk.
+		var tag [TagSize]byte
+		c.s[c.pos] ^= singleNodeDS
+		c.s[turboshake.Rate-1] ^= 0x80
+		keccak.P1600(&c.s)
+		copy(tag[:], c.s[:TagSize])
+		return tag
+	}
+
+	if c.chunkOff > 0 {
+		c.finalizeCV()
+	}
+
+	return c.finalizeTag()
+}
+
 // Encryptor incrementally encrypts data and computes the authentication tag. It implements a streaming interface where
 // each call to [Encryptor.XORKeyStream] immediately produces ciphertext. Call [Encryptor.Finalize] after all data has
 // been processed to obtain the authentication tag.
 type Encryptor struct {
-	key      [KeySize]byte
-	s        [200]byte
-	h        turboshake.Hasher
-	cvBuf    [4 * cvSize]byte
-	tagStarted bool
-	finalized bool
-	idx      int
-	pos      int
-	chunkOff int
+	cryptor
 }
 
 // NewEncryptor returns a new Encryptor initialized with the given key.
 func NewEncryptor(key *[KeySize]byte) Encryptor {
 	return Encryptor{
-		key: *key,
-		h:   turboshake.New(tagDS),
+		cryptor: cryptor{
+			key: *key,
+			h:   turboshake.New(tagDS),
+		},
 	}
 }
 
@@ -160,54 +232,10 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	}
 }
 
-// finalizeCV squeezes the chain value from the current chunk's sponge state.
-func (e *Encryptor) finalizeCV() {
-	e.s[e.pos] ^= finalDS
-	e.s[turboshake.Rate-1] ^= 0x80
-	keccak.P1600(&e.s)
-	copy(e.cvBuf[:cvSize], e.s[:cvSize])
-	e.feedCVs(e.cvBuf[:cvSize])
-	e.idx++
-	e.chunkOff = 0
-	e.pos = 0
-}
-
 // Finalize returns the authentication tag. It must be called exactly once after all data has been processed via
 // [Encryptor.XORKeyStream].
 func (e *Encryptor) Finalize() [TagSize]byte {
-	if e.finalized {
-		panic("treewrap: Encryptor.Finalize called more than once")
-	}
-	e.finalized = true
-
-	if e.chunkOff == 0 && e.idx == 0 {
-		// Empty input: process one empty chunk with singleNodeDS fast-path.
-		var s0 [200]byte
-		leafPad(&s0, &e.key, 0)
-		keccak.P1600(&s0)
-		s0[0] ^= singleNodeDS
-		s0[turboshake.Rate-1] ^= 0x80
-		keccak.P1600(&s0)
-		var tag [TagSize]byte
-		copy(tag[:], s0[:TagSize])
-		return tag
-	}
-
-	if e.idx == 0 {
-		// Fast path for n=1: derive tag directly from the single chunk.
-		var tag [TagSize]byte
-		e.s[e.pos] ^= singleNodeDS
-		e.s[turboshake.Rate-1] ^= 0x80
-		keccak.P1600(&e.s)
-		copy(tag[:], e.s[:TagSize])
-		return tag
-	}
-
-	if e.chunkOff > 0 {
-		e.finalizeCV()
-	}
-
-	return e.finalizeTag()
+	return e.finalizeInternal()
 }
 
 // Decryptor incrementally decrypts data and computes the authentication tag. It implements a streaming interface where
@@ -215,22 +243,16 @@ func (e *Encryptor) Finalize() [TagSize]byte {
 // been processed to obtain the expected authentication tag. The caller MUST verify the tag using constant-time
 // comparison before using the plaintext.
 type Decryptor struct {
-	key      [KeySize]byte
-	s        [200]byte
-	h        turboshake.Hasher
-	cvBuf    [4 * cvSize]byte
-	tagStarted bool
-	finalized bool
-	idx      int
-	pos      int
-	chunkOff int
+	cryptor
 }
 
 // NewDecryptor returns a new Decryptor initialized with the given key.
 func NewDecryptor(key *[KeySize]byte) Decryptor {
 	return Decryptor{
-		key: *key,
-		h:   turboshake.New(tagDS),
+		cryptor: cryptor{
+			key: *key,
+			h:   turboshake.New(tagDS),
+		},
 	}
 }
 
@@ -334,55 +356,11 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	}
 }
 
-// finalizeCV squeezes the chain value from the current chunk's sponge state.
-func (d *Decryptor) finalizeCV() {
-	d.s[d.pos] ^= finalDS
-	d.s[turboshake.Rate-1] ^= 0x80
-	keccak.P1600(&d.s)
-	copy(d.cvBuf[:cvSize], d.s[:cvSize])
-	d.feedCVs(d.cvBuf[:cvSize])
-	d.idx++
-	d.chunkOff = 0
-	d.pos = 0
-}
-
 // Finalize returns the expected authentication tag. It must be called exactly once after all data has been processed
 // via [Decryptor.XORKeyStream]. The caller MUST verify the tag using constant-time comparison before using the
 // plaintext.
 func (d *Decryptor) Finalize() [TagSize]byte {
-	if d.finalized {
-		panic("treewrap: Decryptor.Finalize called more than once")
-	}
-	d.finalized = true
-
-	if d.chunkOff == 0 && d.idx == 0 {
-		// Empty input: process one empty chunk with singleNodeDS fast-path.
-		var s0 [200]byte
-		leafPad(&s0, &d.key, 0)
-		keccak.P1600(&s0)
-		s0[0] ^= singleNodeDS
-		s0[turboshake.Rate-1] ^= 0x80
-		keccak.P1600(&s0)
-		var tag [TagSize]byte
-		copy(tag[:], s0[:TagSize])
-		return tag
-	}
-
-	if d.idx == 0 {
-		// Fast path for n=1: derive tag directly from the single chunk.
-		var tag [TagSize]byte
-		d.s[d.pos] ^= singleNodeDS
-		d.s[turboshake.Rate-1] ^= 0x80
-		keccak.P1600(&d.s)
-		copy(tag[:], d.s[:TagSize])
-		return tag
-	}
-
-	if d.chunkOff > 0 {
-		d.finalizeCV()
-	}
-
-	return d.finalizeTag()
+	return d.finalizeInternal()
 }
 
 // EncryptAndMAC encrypts plaintext, appends the ciphertext to dst, and returns the resulting slice along with a
@@ -415,42 +393,6 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 // the final node without further tree reduction). The seven zero bytes encode default tree parameters (i.e., no
 // subtree interleaving).
 var sakuraTopology = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-
-// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the
-// Sakura chaining hop indicator.
-func (e *Encryptor) feedCVs(cvs []byte) {
-	if !e.tagStarted {
-		_, _ = e.h.Write(sakuraTopology[:])
-		e.tagStarted = true
-	}
-	_, _ = e.h.Write(cvs)
-}
-
-// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the
-// Sakura chaining hop indicator.
-func (d *Decryptor) feedCVs(cvs []byte) {
-	if !d.tagStarted {
-		_, _ = d.h.Write(sakuraTopology[:])
-		d.tagStarted = true
-	}
-	_, _ = d.h.Write(cvs)
-}
-
-// finalizeTag writes the Sakura terminator and squeezes the tag.
-func (e *Encryptor) finalizeTag() (tag [TagSize]byte) {
-	_, _ = e.h.Write(lengthEncode(uint64(e.idx)))
-	_, _ = e.h.Write([]byte{0xFF, 0xFF})
-	_, _ = e.h.Read(tag[:])
-	return tag
-}
-
-// finalizeTag writes the Sakura terminator and squeezes the tag.
-func (d *Decryptor) finalizeTag() (tag [TagSize]byte) {
-	_, _ = d.h.Write(lengthEncode(uint64(d.idx)))
-	_, _ = d.h.Write([]byte{0xFF, 0xFF})
-	_, _ = d.h.Read(tag[:])
-	return tag
-}
 
 // lengthEncode encodes x as in KangarooTwelve: big-endian with no leading zeros, followed by a byte giving the length
 // of the encoding.
