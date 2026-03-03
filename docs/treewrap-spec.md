@@ -63,8 +63,9 @@ TurboSHAKE128. It uses six domain separation bytes, reserved for TreeWrap:
 > components (TreeWrap, TurboSHAKE128, KangarooTwelve), see Appendix C (non-normative).
 
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
-into the rate rather than XORing plaintext into it. This supports a direct keyed-duplex style analysis (§6), and for
-full-rate blocks, a write-only state update is faster than read-XOR-write on most architectures.
+into the rate rather than XORing plaintext into it. This is the Overwrite-mode style analyzed in Bertoni et al.
+(§6.2, Algorithm 5; Theorem 2) and used directly in §6. For full-rate blocks, a write-only state update is also faster
+than read-XOR-write on most architectures.
 
 The leaf cipher is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
 Appendix B.
@@ -290,10 +291,11 @@ $$
 
 Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 
-**Lemma 1 (Leaf duplex pseudorandomness).**
-For each leaf index $i$, the leaf computation is a keyed duplex instance initialized with `K_tw || LEU64(i)`; its rate
-outputs (keystream bytes and terminal squeeze bytes) are pseudorandom up to $\varepsilon_{\mathrm{indiff}}$ (see §8:
-Sponge/duplex analyses and keyed-duplex bounds).
+**Lemma 1 (Leaf overwrite pseudorandomness).**
+For each leaf index $i$, the leaf computation is an overwrite-mode sponge/duplex instance initialized with
+`K_tw || LEU64(i)`; its rate outputs (keystream bytes and terminal squeeze bytes) are pseudorandom up to
+$\varepsilon_{\mathrm{indiff}}$. This is the Overwrite construction line of Bertoni et al. (§6.2, Algorithm 5), where
+Theorem 2 states security matching the underlying Sponge claim in the same ideal-permutation model.
 
 **Lemma 2 (State-direction equivalence).**
 For fixed $(K_{tw}, i, C_i)$, `encrypt` and `decrypt` induce identical internal states because both write ciphertext
@@ -625,8 +627,9 @@ collision budget in the usual birthday way.
   usage limit tables for AES-GCM and ChaCha20-Poly1305; referenced in §7.1.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
   and Other Applications." SAC 2011. IACR ePrint 2011/499. Proves that duplex outputs are pseudorandom under the sponge
-  indifferentiability assumption (Theorem 1); establishes that all intermediate rate outputs — not just terminal
-  squeezes — are covered by the duplex security bound.
+  indifferentiability assumption (Theorem 1) and gives overwrite-mode security (Section 6.2, Algorithm 5, Theorem 2:
+  Overwrite is as secure as Sponge); establishes that all intermediate rate outputs — not just terminal squeezes — are
+  covered by the duplex security bound.
 - Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Beyond the Birthday
   Bound." Eurocrypt 2015. Provides direct ideal-permutation-model bounds for the keyed duplex, giving a tighter
   reduction than routing through sponge indifferentiability.
