@@ -22,9 +22,9 @@ that authenticate ciphertext through external mechanisms such as signatures.
 TreeWrap is a pure function with no internal state. The caller manages key uniqueness and associated data.
 
 > [!WARNING]
-> **Safe default.** If you want nonce-based authenticated-encryption semantics, use `TreeWrap-AEAD` (§5.2).
-> The bare `EncryptAndMAC`/`DecryptAndMAC` interface is intended for protocols that explicitly manage per-invocation
-> key uniqueness and tag-verification policy.
+> **Safe default.** If you want nonce-based authenticated-encryption semantics, use `TreeWrap-AEAD` (§5.2). The bare
+> `EncryptAndMAC`/`DecryptAndMAC` interface is intended for protocols that explicitly manage per-invocation key
+> uniqueness and tag-verification policy.
 
 ## 2. Parameters
 
@@ -36,13 +36,13 @@ TreeWrap is a pure function with no internal state. The caller manages key uniqu
 | τ      | 32                | Tag size (bytes); equal to C for this instantiation   |
 | B      | 8192              | Chunk size (bytes), matching KangarooTwelve           |
 
-**Parameter constraints.** $C + 8 \leq R - 1$ (init material `key ‖ [index]₆₄LE` = $C + 8 = 40$ bytes fits in a
+**Parameter constraints.** $C + 8 \leq R - 1$ (init material `key || LEU64(index)` = $C + 8 = 40$ bytes fits in a
 single rate block). $\max(\tau, C) < R$ (tag and chain value outputs fit in a single squeeze block).
 
 ## 3. Dependencies
 
-**`TurboSHAKE128(M, D, ℓ)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D`
-(0x01 – 0x7F), and an output length `ℓ` in bytes.
+**`TurboSHAKE128(M, D, ℓ)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D` (0x01 – 0x7F),
+and an output length `ℓ` in bytes.
 
 ## 4. Leaf Cipher
 
@@ -63,11 +63,11 @@ TurboSHAKE128. It uses six domain separation bytes, reserved for TreeWrap:
 > components (TreeWrap, TurboSHAKE128, KangarooTwelve), see Appendix C (non-normative).
 
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
-into the rate rather than XORing plaintext into it. This supports a direct keyed-duplex style analysis (§6),
-and for full-rate blocks, a write-only state update is faster than read-XOR-write on most architectures.
+into the rate rather than XORing plaintext into it. This supports a direct keyed-duplex style analysis (§6), and for
+full-rate blocks, a write-only state update is faster than read-XOR-write on most architectures.
 
-The leaf cipher is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are
-defined in Appendix B.
+The leaf cipher is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
+Appendix B.
 
 ```python
 R = 168   # Sponge rate (bytes).
@@ -123,22 +123,22 @@ class LeafCipher:
         return bytes(self.S[:C])
 ```
 
-**Notes.** `pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at `R-1`). `init`
-uses domain byte `0x60`, distinct from the intermediate byte `0x62`, ensuring key absorption is
-domain-separated from ciphertext blocks. Both `encrypt` and `decrypt` overwrite the rate with ciphertext,
-so state evolution is identical regardless of direction. `single_node_tag` and `chain_value` begin with
-`pad_permute` to mix all data before squeezing; both outputs fit in a single squeeze block since
-$\max(\tau, C) = 32 \ll R = 168$.
+> [!NOTE]
+> `pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at `R-1`). `init` uses domain byte
+> `0x60`, distinct from the intermediate byte `0x62`, ensuring key absorption is domain-separated from ciphertext
+> blocks. Both `encrypt` and `decrypt` overwrite the rate with ciphertext, so state evolution is identical regardless of
+> direction. `single_node_tag` and `chain_value` begin with `pad_permute` to mix all data before squeezing; both outputs
+> fit in a single squeeze block since $\max(\tau, C) = 32 \ll R = 168$.
 
 ## 5. TreeWrap
 
 ### Notation
 
-- `‖`: Byte string concatenation.
-- `[i]₆₄LE`: The 8-byte little-endian encoding of integer `i`.
+- `||`: Byte string concatenation.
+- `LEU64(i)`: The 8-byte little-endian encoding of integer `i`.
 
-The NIST SP 800-185 encodings (`left_encode`, `right_encode`, `encode_string`) are defined as Python functions
-in Appendix B.
+The NIST SP 800-185 encodings (`left_encode`, `right_encode`, `encode_string`) are defined as Python functions in
+Appendix B.
 
 ### 5.1 EncryptAndMAC / DecryptAndMAC
 
@@ -147,10 +147,10 @@ in Appendix B.
 
 *Inputs:*
 
-- `key`: A C-byte key. MUST be pseudorandom (computationally indistinguishable from uniform) and unique per
-  invocation (no two calls share a key). See the security analysis in §6.
-- `plaintext` / `ciphertext`: Data of any length (may be empty). Maximum length is $(2^{64} - 1) \cdot B$ bytes,
-  since leaf indices are encoded as 8-byte little-endian integers.
+- `key`: A C-byte key. MUST be pseudorandom (computationally indistinguishable from uniform) and unique per invocation
+  (no two calls share a key). See the security analysis in §6.
+- `plaintext` / `ciphertext`: Data of any length (may be empty). Maximum length is $(2^{64} - 1) \cdot B$ bytes, since
+  leaf indices are encoded as 8-byte little-endian integers.
 
 *Outputs:*
 
@@ -161,7 +161,7 @@ in Appendix B.
 > [!WARNING]
 > **Safe default for callers.** Prefer `TreeWrap-AEAD` (§5.2) unless you explicitly need bare
 > `EncryptAndMAC`/`DecryptAndMAC` semantics. Bare TreeWrap requires the caller to enforce per-invocation unique
-> pseudorandom keys and to perform correct tag verification policy.
+> pseudorandom keys and to perform the correct tag verification policy.
 
 *Procedure:*
 
@@ -200,32 +200,33 @@ def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
 ```
 
 All leaf operations are independent and may execute in parallel. Tag computation begins as soon as all chain values are
-available. `decrypt_and_mac` produces the same tag as `encrypt_and_mac` because both `encrypt` and `decrypt`
-write ciphertext into the sponge rate (§4). The caller is responsible for comparing the returned tag against an
-expected value; TreeWrap does not perform tag verification. For production implementations, avoid repeated byte-string
-concatenation (`final_input += ...`) when building the final node input; prefer preallocation or list/join style
-buffer construction.
+available. `decrypt_and_mac` produces the same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write
+ciphertext into the sponge rate (§4). The caller is responsible for comparing the returned tag against an expected
+value; TreeWrap does not perform tag verification.
+
+> [!CAUTION]
+> For production implementations, avoid repeated byte-string concatenation (`final_input += ...`) when building the
+> final node input; prefer preallocation or list/join style buffer construction.
 
 ### 5.2 TreeWrap-AEAD
 
 TreeWrap-AEAD is a concrete AEAD construction built on top of the bare TreeWrap primitive. It derives a per-invocation
-TreeWrap key from `(K, N, AD)` using TurboSHAKE128, then delegates to `EncryptAndMAC`/`DecryptAndMAC`. This
-construction exists for security analysis — calling protocols may use it directly or implement equivalent key
-derivation.
+TreeWrap key from `(K, N, AD)` using TurboSHAKE128, then delegates to `EncryptAndMAC`/`DecryptAndMAC`. This construction
+exists for security analysis — calling protocols may use it directly or implement equivalent key derivation.
 
-**Master-key requirement.** `K` MUST have at least 128 bits of min-entropy and MUST be at least 16 bytes long.
-Uniformly random 32-byte keys are RECOMMENDED.
+**Master-key requirement.** `K` MUST have at least 128 bits of min-entropy and MUST be at least 16 bytes long. Uniformly
+random 32-byte keys are RECOMMENDED.
 
 **Key derivation:**
 
 ```
-tw_key ← TurboSHAKE128(encode_string(K) ‖ encode_string(N) ‖ encode_string(AD), 0x65, C)
+tw_key ← TurboSHAKE128(encode_string(K) || encode_string(N) || encode_string(AD), 0x65, C)
 ```
 
 The `encode_string` encoding (§5, NIST SP 800-185) makes the concatenation injective: each field is prefixed with its
 `left_encode`d bit-length (`left_encode(8*len(x))`), so no `(K, N, AD)` triple can produce the same TurboSHAKE128 input
 as a different triple. Domain byte `0x65` separates key derivation from all other TreeWrap uses of TurboSHAKE128
-(`0x60`–`0x64`).
+(`0x60` – `0x64`).
 
 ```python
 import hmac
@@ -252,8 +253,8 @@ This section gives a single, explicit reduction path:
    `tw_key <- TurboSHAKE128(encode_string(K) || encode_string(N) || encode_string(AD), 0x65, C)`
    and standard verification semantics.
 
-All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity
-$c = 256$ bits and $\tau = 32$ tag bytes.
+All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $c = 256$ bits and $\tau = 32$ tag
+bytes.
 
 **Assumption scope.** Concrete bounds in this section are conditional on Keccak-p[1600,12] behaving as an ideal
 permutation at the claimed workloads. This is a modeling assumption, not a proof about reduced-round Keccak-p itself.
@@ -290,9 +291,9 @@ $$
 Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 
 **Lemma 1 (Leaf duplex pseudorandomness).**
-For each leaf index $i$, the leaf computation is a keyed duplex instance initialized with
-`K_tw || [i]_64LE`; its rate outputs (keystream bytes and terminal squeeze bytes) are pseudorandom up to
-$\varepsilon_{\mathrm{indiff}}$ (see §8: Sponge/duplex analyses and keyed-duplex bounds).
+For each leaf index $i$, the leaf computation is a keyed duplex instance initialized with `K_tw || LEU64([i)`; its rate
+outputs (keystream bytes and terminal squeeze bytes) are pseudorandom up to $\varepsilon_{\mathrm{indiff}}$ (see §8:
+Sponge/duplex analyses and keyed-duplex bounds).
 
 **Lemma 2 (State-direction equivalence).**
 For fixed $(K_{tw}, i, C_i)$, `encrypt` and `decrypt` induce identical internal states because both write ciphertext
@@ -327,8 +328,8 @@ $$
 \varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}}.
 $$
 
-The second term is the birthday bound on $8\tau$-bit pseudorandom outputs. By Lemma 3, this is equivalently a
-fixed-key bound over distinct plaintext inputs.
+The second term is the birthday bound on $8\tau$-bit pseudorandom outputs. By Lemma 3, this is equivalently a fixed-key
+bound over distinct plaintext inputs.
 
 ### 6.4 Single-Model KDF Lift Lemma
 
@@ -347,9 +348,9 @@ $$
 Modeling dependence for this lift is the TurboSHAKE/Sakura tree-hash analysis line in §8 (RFC 9861, TurboSHAKE paper,
 and KangarooTwelve paper), combined with the sponge/duplex ideal-permutation framework.
 
-We analyze KDF and TreeWrap in one ideal-permutation experiment. Let $\mathsf{Bad}_{\mathrm{perm}}$ be the global
-bad event for this experiment (the usual sponge/duplex transcript-collision event across all online/offline
-Keccak-p calls used by both KDF and TreeWrap). Then:
+We analyze KDF and TreeWrap in one ideal-permutation experiment. Let $\mathsf{Bad}_{\mathrm{perm}}$ be the global bad
+event for this experiment (the usual sponge/duplex transcript-collision event across all online/offline Keccak-p calls
+used by both KDF and TreeWrap). Then:
 
 $$
 \Pr[\mathsf{Bad}_{\mathrm{perm}}] \le \varepsilon_{\mathrm{indiff}}.
@@ -374,8 +375,8 @@ here.
 Use one hybrid:
 
 - Game $\mathsf{G}_0$: real `TreeWrap-AEAD`.
-- Game $\mathsf{G}_1$: replace $F(X)$ with a lazy-sampled random function
-  $R:\{0,1\}^* \rightarrow \{0,1\}^{8C}$ on context strings $X$.
+- Game $\mathsf{G}_1$: replace $F(X)$ with a lazy-sampled random function $R:\{0,1\}^* \rightarrow \{0,1\}^{8C}$ on
+  context strings $X$.
 
 By §6.4 (same global ideal-permutation model),
 
@@ -386,21 +387,21 @@ $$
 In $\mathsf{G}_1$, each distinct context gets a random per-context key; conditioned on no context-key collision event,
 queries reduce directly to bare TreeWrap under random keys.
 
-**Single-accounting rule used below.** For each goal $\Pi \in \{\text{IND-CPA},\text{INT-CTXT},\text{IND-CCA2}\}$,
-we upper-bound:
+**Single-accounting rule used below.** For each goal $\Pi \in \{\text{IND-CPA},\text{INT-CTXT},\text{IND-CCA2}\}$, we
+upper-bound:
 
 $$
 \mathrm{Adv}_{\Pi} \le \Pr[\mathsf{Bad}_{\mathrm{perm}}] + \Pr[\mathsf{CtxColl}] + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\!\mid_{\neg \mathsf{Bad}_{\mathrm{perm}}\wedge \neg \mathsf{CtxColl}}.
 $$
 
 Under $\neg \mathsf{Bad}_{\mathrm{perm}}$, $F$ is a random function on contexts and bare-TreeWrap lemmas are interpreted
-in the same experiment. Therefore, $\Pr[\mathsf{Bad}_{\mathrm{perm}}]$ is charged once as
-$\varepsilon_{\mathrm{indiff}}$; no second independent indifferentiability term is added.
+in the same experiment. Therefore, $\Pr[\mathsf{Bad}_{\mathrm{perm}}]$ is charged once
+as $\varepsilon_{\mathrm{indiff}}$; no second independent indifferentiability term is added.
 
 #### 6.5.1 IND-CPA (nonce-respecting)
 
 Under fresh nonces per encryption query, confidentiality follows from bare TreeWrap pseudorandom keystream behavior
-(Lemmas 1-3), plus the context-key collision term from §6.4:
+(Lemmas 1–3), plus the context-key collision term from §6.4:
 
 $$
 \varepsilon_{\mathrm{ind-cpa}} \le \varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx-coll}}.
@@ -425,21 +426,19 @@ $$
 \varepsilon_{\mathrm{ind-cca2}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
 $$
 
-The proof uses nonce-respecting IND-CPA plus decryption-failure indistinguishability from random tag guessing.
-Nonce reuse for the same $(K,N,AD)$ is out of scope for this claim and breaks standard deterministic-encapsulation
-IND-CCA2 formulations.
+The proof uses nonce-respecting IND-CPA plus decryption-failure indistinguishability from random tag guessing. Nonce
+reuse for the same $(K,N,AD)$ is out of scope for this claim and breaks standard deterministic-encapsulation IND-CCA2
+formulations.
 
 ### 6.6 CMT-4 for TreeWrap-AEAD (fixed master key)
 
-This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap.
-It is a composition argument over published sponge/duplex and TurboSHAKE/KangarooTwelve analyses, not a new standalone
+This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap. It is a
+composition argument over published sponge/duplex and TurboSHAKE/KangarooTwelve analyses, not a new standalone
 primitive-security theorem (see §8: Bellare-Hoang for CMT-4 and the cited Keccak/TurboSHAKE/KangarooTwelve analyses).
 
 **Game.** Sample one secret master key $K$ once and give the adversary encryption-oracle access under $K$. The adversary
-outputs two distinct tuples
-$(N,AD,M) \neq (N',AD',M')$
-such that
-$\mathrm{Encrypt}(K,N,AD,M) = \mathrm{Encrypt}(K,N',AD',M')$.
+outputs two distinct tuples $(N,AD,M) \neq (N',AD',M')$ such
+that $\mathrm{Encrypt}(K,N,AD,M) = \mathrm{Encrypt}(K,N',AD',M')$.
 
 Split into two exhaustive cases.
 
@@ -455,9 +454,8 @@ Distinct AEAD contexts under fixed $K$ imply distinct encoded context strings $X
 
 #### Case B: Same AEAD context, different messages
 
-Same $(N,AD)$ implies the same derived key (for fixed master key $K$).
-If $M \neq M'$, then by Lemma 3 (fixed-key bijection), ciphertexts differ, so the full AEAD outputs `ct‖tag` cannot be
-equal.
+Same $(N,AD)$ implies the same derived key (for fixed master key $K$). If $M \neq M'$, then by Lemma 3 (fixed-key
+bijection), ciphertexts differ, so the full AEAD outputs `ct || tag` cannot be equal.
 
 Combining both cases:
 
@@ -486,7 +484,7 @@ single global model term, and CMT-4 additionally includes the explicit context-t
 
 ### 6.8 Chunk Reordering, Length Changes, and Empty Input
 
-- Reordering chunks changes leaf-index binding (`key || [index]_64LE`), so recomputed tag changes.
+- Reordering chunks changes leaf-index binding (`key || LEU64(index)`), so recomputed tag changes.
 - Truncation/extension changes chunk count $n$, changing `right_encode(n)` in final accumulation input.
 - Empty plaintext uses $n=1$: one leaf with `single_node_tag()`, no final accumulation node.
 
@@ -500,8 +498,8 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 
 ### 6.10 Operational Usage Limits (Normative)
 
-To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits
-(a key epoch) and rotate to a fresh master key before exceeding them.
+To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits (a key
+epoch) and rotate to a fresh master key before exceeding them.
 
 Implementations MUST maintain the following per-key-epoch counters:
 
@@ -554,7 +552,7 @@ The following implementation decisions are performance-critical and align with h
   large messages without extra buffering copies.
 - **Reuse one scheduling pipeline for both directions.** Encrypt and decrypt should share the same chunk scheduling,
   index binding, and chain-value accumulation pipeline.
-- **Keep domain bytes and index mapping exact.** `0x60`–`0x65` constants and `key || [index]_64LE` binding are
+- **Keep domain bytes and index mapping exact.** `0x60`–`0x65` constants and `key || LEU64(index)` binding are
   structural for interoperability and security analysis.
 - **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
   patterns when constructing final-node inputs.
@@ -573,8 +571,7 @@ This supports protocol frameworks that need the tag for transcript state advance
 **Nonce-free bare primitive.** The bare TreeWrap primitive takes only a key and plaintext. It does not accept a nonce or
 associated data. Nonce handling is the KDF's responsibility: `TreeWrap-AEAD` (§5.2) accepts nonces, but they are
 consumed by the concrete TurboSHAKE128-based KDF to derive a unique TreeWrap key, not passed to TreeWrap itself. The key
-MUST be pseudorandom
-(indistinguishable from uniform) and unique per invocation (see §5.1).
+MUST be pseudorandom (indistinguishable from uniform) and unique per invocation (see §5.1).
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs — they prove authenticity but are not
 necessarily pseudorandom. TreeWrap's tag is a full PRF: under a random key, the tag is indistinguishable from a random
@@ -582,19 +579,19 @@ string (§6.3.1). This stronger property supports protocols that absorb the tag 
 
 ### 7.1. Usage Limits
 
-Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost
-$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls),
-per-key accounting (single key / key epoch), and a 128-bit TreeWrap nonce profile for random-nonce deployments.
-These figures are conditional on the §6 ideal-permutation assumption for Keccak-p[1600,12].
+Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost $\approx 11$ Keccak-p
+calls/message (1 KDF + 10 leaf calls), per-key accounting (single key / key epoch), and a 128-bit TreeWrap nonce profile
+for random-nonce deployments. These figures are conditional on the §6 ideal-permutation assumption for
+Keccak-p[1600,12].
 
-| Scheme        | Limit type        | Approx protected volume |
-|---------------|-------------------|-------------------------|
-| AES-128-GCM   | per key           | $\approx 2^{13.1}$ GiB  |
-| TreeWrap-AEAD | proof bound only  | $\approx 2^{80.6}$ GiB  |
+| Scheme        | Limit type       | Approx protected volume |
+|---------------|------------------|-------------------------|
+| AES-128-GCM   | per key          | $\approx 2^{13.1}$ GiB  |
+| TreeWrap-AEAD | proof bound only | $\approx 2^{80.6}$ GiB  |
 
 The AES-128-GCM figure is from Günther, Thomson, and Wood (Table 2) converted to GiB. The TreeWrap figure is the
-corresponding conversion of the §6 bound under the assumptions above.
-It is not the practical limit when random nonces are used; practical limits follow the minimum rule below.
+corresponding conversion of the §6 bound under the assumptions above. It is not the practical limit when random nonces
+are used; practical limits follow the minimum rule below.
 
 For deployment planning, use:
 
@@ -649,8 +646,6 @@ collision budget in the usual birthday way.
 
 ## 9. Test Vectors
 
-All vectors in this section are generated from `docs/treewrap-test-vectors.json`.
-
 All bare TreeWrap vectors use:
 
 - **Key:** 32 bytes `00 01 02 ... 1f`
@@ -660,52 +655,52 @@ Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. 
 
 ### 9.1 Empty Plaintext (MAC-only, n = 1)
 
-| Field | Value |
-|-------|-------|
-| len | 0 |
-| ct | (empty) |
-| tag | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
+| Field | Value                                                              |
+|-------|--------------------------------------------------------------------|
+| len   | 0                                                                  |
+| ct    | (empty)                                                            |
+| tag   | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
 
 ### 9.2 One-Byte Plaintext (n = 1)
 
-| Field | Value |
-|-------|-------|
-| len | 1 |
-| ct | `f1` |
-| tag | `c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35` |
+| Field | Value                                                              |
+|-------|--------------------------------------------------------------------|
+| len   | 1                                                                  |
+| ct    | `f1`                                                               |
+| tag   | `c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35` |
 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
 `8e419b1ad3363b42ebdf788c914c94e826a0d4864b6eb828c33ac460a60f7cee`.
 
 ### 9.3 B-Byte Plaintext (exactly one chunk, n = 1)
 
-| Field | Value |
-|-------|-------|
-| len | 8192 |
+| Field   | Value                                                              |
+|---------|--------------------------------------------------------------------|
+| len     | 8192                                                               |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag | `16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2` |
+| tag     | `16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2` |
 
 Flipping bit 0 of `ct[0]` yields tag
 `252c145ed845841ee9156ed46febaf03ad213d727256c761a36db0bf10901ea8`.
 
 ### 9.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
 
-| Field | Value |
-|-------|-------|
-| len | 8193 |
+| Field   | Value                                                              |
+|---------|--------------------------------------------------------------------|
+| len     | 8193                                                               |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag | `334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1` |
+| tag     | `334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1` |
 
 Flipping bit 0 of `ct[0]` yields tag
 `76398352ca9c7594808135f297f085bda06bb1ccd0f328246e22cedc7ecfdf65`.
 
 ### 9.5 4B-Byte Plaintext (four full chunks, n = 4)
 
-| Field | Value |
-|-------|-------|
-| len | 32768 |
+| Field   | Value                                                              |
+|---------|--------------------------------------------------------------------|
+| len     | 32768                                                              |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag | `0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0` |
+| tag     | `0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0` |
 
 Flipping bit 0 of `ct[0]` yields tag
 `579b5003e457831607da1ac382aea6cda97b0dcd2fd8fbbbe0c5124b0ce36260`.
@@ -724,40 +719,40 @@ These vectors validate the `treewrap_aead_encrypt` / `treewrap_aead_decrypt` wra
 
 #### 9.7.1 Empty Message
 
-| Field | Value |
-|-------|-------|
-| K | 32 bytes `00 01 02 ... 1f` |
-| N | 12 bytes `00 01 02 ... 0b` |
-| AD | (empty) |
-| M len | 0 |
+| Field  | Value                                                              |
+|--------|--------------------------------------------------------------------|
+| K      | 32 bytes `00 01 02 ... 1f`                                         |
+| N      | 12 bytes `00 01 02 ... 0b`                                         |
+| AD     | (empty)                                                            |
+| M len  | 0                                                                  |
 | ct‖tag | `25b1c33a42d3dd8546c0de7df2edc6d3fa1d39b4e1ee9696b6a046c6f853d54e` |
 
-`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
-Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext. Changing `N`, `AD`, or `tag` causes decryption
+to return `None`.
 
 #### 9.7.2 33-Byte Message With 5-Byte AD
 
-| Field | Value |
-|-------|-------|
-| K | 32 bytes `00 01 02 ... 1f` |
-| N | 12 bytes `a0 a1 a2 ... ab` |
-| AD | 10 11 12 ... 14 |
-| M len | 33 (`00 01 02 ... mod 256`) |
+| Field  | Value                                                                                                                                |
+|--------|--------------------------------------------------------------------------------------------------------------------------------------|
+| K      | 32 bytes `00 01 02 ... 1f`                                                                                                           |
+| N      | 12 bytes `a0 a1 a2 ... ab`                                                                                                           |
+| AD     | 10 11 12 ... 14                                                                                                                      |
+| M len  | 33 (`00 01 02 ... mod 256`)                                                                                                          |
 | ct‖tag | `d88f1d9d2b6f31316427abef58ef07ef047d4e9d3faec99c677a5b7d895b682fe8b98d90320dd7d3773160424f8b1a7aa4522038c5871e62689cdb90ef8820aa64` |
 
-`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
-Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext. Changing `N`, `AD`, or `tag` causes decryption
+to return `None`.
 
 #### 9.7.3 Multi-Chunk Message (8193 Bytes)
 
-| Field | Value |
-|-------|-------|
-| K | 32 bytes `42 43 44 ... 61` |
-| N | 12 bytes `c0 c1 c2 ... cb` |
-| AD | 00 01 02 ... 10 |
-| M len | 8193 (`00 01 02 ... mod 256`) |
+| Field   | Value                                                              |
+|---------|--------------------------------------------------------------------|
+| K       | 32 bytes `42 43 44 ... 61`                                         |
+| N       | 12 bytes `c0 c1 c2 ... cb`                                         |
+| AD      | 00 01 02 ... 10                                                    |
+| M len   | 8193 (`00 01 02 ... mod 256`)                                      |
 | ct[:32] | `f5774bff15f14fd3b08bc8e48c63cad9d84b348b1c3097551db20dce21b0b36d` |
-| tag | `ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f` |
+| tag     | `ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -772,7 +767,8 @@ $$\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_i
 
 where:
 
-- **KDF term.** $|\mathit{kdf\_input}|$ is the byte length of `encode_string(K) ‖ encode_string(N) ‖ encode_string(AD)`.
+- **KDF term.** $|\mathit{kdf\_input}|$ is the byte length of
+  `encode_string(K) || encode_string(N) || encode_string(AD)`.
   Each `encode_string` contributes `left_encode(8|x|)` (2–3 bytes for practical lengths) plus the field itself. For a
   32-byte key, 12-byte nonce, and empty AD, $|\mathit{kdf\_input}| = (3+32) + (2+12) + (2+0) = 51$ bytes, giving
   $\lfloor 51 / 168 \rfloor + 1 = 1$ Keccak-p call.
@@ -887,7 +883,7 @@ def left_encode(x: int) -> bytes:
     return bytes([n]) + x.to_bytes(n, "big")
 
 def encode_string(x: bytes) -> bytes:
-    """SP 800-185: left_encode(len(x) * 8) ‖ x."""
+    """SP 800-185: left_encode(len(x) * 8) || x."""
     return left_encode(len(x) * 8) + x
 ```
 

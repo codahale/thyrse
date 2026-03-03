@@ -270,8 +270,6 @@ def render_section_9(vectors: dict[str, Any]) -> str:
 
     lines.append("## 9. Test Vectors")
     lines.append("")
-    lines.append("All vectors in this section are generated from `docs/treewrap-test-vectors.json`.")
-    lines.append("")
 
     key = bytes_from_hex(bare["key_hex"])
     lines.append("All bare TreeWrap vectors use:")
