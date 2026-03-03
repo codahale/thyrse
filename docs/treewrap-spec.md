@@ -318,43 +318,66 @@ $$
 The second term is the birthday bound on $8\tau$-bit pseudorandom outputs. By Lemma 3, this is equivalently a
 fixed-key bound over distinct plaintext inputs.
 
-### 6.4 AEAD KDF Separation Lemma
+### 6.4 Single-Model KDF Lift Lemma
 
-Define
-
-$$
-K_{tw} = \mathrm{TurboSHAKE128}(\mathrm{encode\_string}(K)\,\|\,\mathrm{encode\_string}(N)\,\|\,\mathrm{encode\_string}(AD),\;0x65,\;C).
-$$
-
-Because `encode_string` is injective on byte strings, distinct triples
-$(K,N,AD) \neq (K',N',AD')$ produce distinct KDF inputs.
-In the idealized world, these inputs map to independent pseudorandom $K_{tw}$ values, up to
-$\varepsilon_{\mathrm{indiff}}$.
-
-If a separate explicit KDF-output birthday term is carried, it is:
+Define the AEAD context encoding:
 
 $$
-\varepsilon_{\mathrm{kdf-coll}} \le \frac{Q^2}{2^{8C+1}},
+X = \mathrm{encode\_string}(K)\,\|\,\mathrm{encode\_string}(N)\,\|\,\mathrm{encode\_string}(AD),
 $$
 
-and may be left explicit or absorbed into a conservative global margin statement.
+and the derived-key map:
+
+$$
+F(X) = \mathrm{TurboSHAKE128}(X,\;0x65,\;C).
+$$
+
+We analyze KDF and TreeWrap in one ideal-permutation experiment. Let $\mathsf{Bad}_{\mathrm{perm}}$ be the global
+bad event for this experiment (the usual sponge/duplex transcript-collision event across all online/offline
+Keccak-p calls used by both KDF and TreeWrap). Then:
+
+$$
+\Pr[\mathsf{Bad}_{\mathrm{perm}}] \le \varepsilon_{\mathrm{indiff}}.
+$$
+
+Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$:
+
+- $F$ behaves as a lazy-sampled random function on distinct context strings $X$.
+- For $q_{\mathrm{ctx}}$ distinct contexts, derived-key collisions follow the birthday bound:
+
+$$
+\varepsilon_{\mathrm{ctx-coll}} \le \frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}.
+$$
+
+This gives a single-model lift from AEAD contexts to per-context TreeWrap keys, with no separate model transition.
 
 ### 6.5 TreeWrap-AEAD Confidentiality and Integrity
 
 The AEAD wrapper definition is given in §5.2 (`treewrap_aead_encrypt` / `treewrap_aead_decrypt`) and is used unchanged
-here. In both directions it derives
+here.
 
-$$K_{tw} = \mathrm{TurboSHAKE128}(\mathrm{encode\_string}(K)\|\mathrm{encode\_string}(N)\|\mathrm{encode\_string}(AD), 0x65, C)$$
+Use one hybrid:
 
-then calls `encrypt_and_mac` / `decrypt_and_mac`, with constant-time tag comparison on decryption.
+- Game $\mathsf{G}_0$: real `TreeWrap-AEAD`.
+- Game $\mathsf{G}_1$: replace $F(X)$ with a lazy-sampled random function
+  $R:\{0,1\}^\* \rightarrow \{0,1\}^{8C}$ on context strings $X$.
+
+By §6.4 (same global ideal-permutation model),
+
+$$
+\left|\Pr[\mathsf{G}_0=1]-\Pr[\mathsf{G}_1=1]\right| \le \varepsilon_{\mathrm{indiff}}.
+$$
+
+In $\mathsf{G}_1$, each distinct context gets a random per-context key; conditioned on no context-key collision event,
+queries reduce directly to bare TreeWrap under random keys.
 
 #### 6.5.1 IND-CPA (nonce-respecting)
 
-Under fresh nonces per encryption query, each query receives a fresh derived key (Lemma 6.4), then confidentiality
-follows from bare TreeWrap pseudorandom keystream behavior (Lemmas 1-3):
+Under fresh nonces per encryption query, confidentiality follows from bare TreeWrap pseudorandom keystream behavior
+(Lemmas 1-3), plus the context-key collision term from §6.4:
 
 $$
-\varepsilon_{\mathrm{ind-cpa}} \le \varepsilon_{\mathrm{indiff}} \;(+\;\varepsilon_{\mathrm{kdf-coll}}\ \text{if carried explicitly}).
+\varepsilon_{\mathrm{ind-cpa}} \le \varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx-coll}}.
 $$
 
 #### 6.5.2 INT-CTXT
@@ -362,7 +385,7 @@ $$
 For any new ciphertext under the same $(K,N,AD)$, the adversary must guess a $\tau$-byte tag:
 
 $$
-\varepsilon_{\mathrm{int-ctxt}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} \;(+\;\varepsilon_{\mathrm{kdf-coll}}\ \text{if explicit}).
+\varepsilon_{\mathrm{int-ctxt}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
 $$
 
 If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$.
@@ -372,14 +395,14 @@ If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$.
 Standard EtM reduction gives:
 
 $$
-\varepsilon_{\mathrm{ind-cca2}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} \;(+\;\varepsilon_{\mathrm{kdf-coll}}\ \text{if explicit}).
+\varepsilon_{\mathrm{ind-cca2}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
 $$
 
 The proof uses IND-CPA plus decryption-failure indistinguishability from random tag guessing.
 
 ### 6.6 CMT-4 for TreeWrap-AEAD
 
-This theorem combines AEAD context separation from the KDF with fixed-key committing behavior from bare TreeWrap.
+This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap.
 
 **Game.** Adversary outputs
 $(K,N,AD,M) \neq (K',N',AD',M')$
@@ -392,9 +415,10 @@ Split into two exhaustive cases.
 
 $(K,N,AD) \neq (K',N',AD')$.
 
-By Lemma 6.4, derived keys are independent except with probability bounded by the KDF separation error.
-Conditioned on distinct derived keys, equal outputs require a collision in the final $\tau$-byte tag across distinct
-keyed transcripts, bounded by birthday probability over adversarial trials.
+Distinct contexts imply distinct encoded context strings $X \neq X'$. In $\mathsf{G}_1$, either:
+
+- $R(X)=R(X')$ (context-key collision event, bounded by $\varepsilon_{\mathrm{ctx-coll}}$), or
+- $R(X)\neq R(X')$, and equal outputs require a collision in $\tau$-byte tag outputs across distinct keyed transcripts.
 
 #### Case B: Same AEAD context, different messages
 
@@ -405,27 +429,31 @@ collide on distinct transcripts.
 Combining both cases:
 
 $$
-\varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{indiff}} + \frac{(\sigma+t)^2}{2^{8\tau+1}} \;(+\;\varepsilon_{\mathrm{kdf-coll}}\ \text{if explicit}).
+\varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}} + \varepsilon_{\mathrm{ctx-coll}}.
 $$
 
-For $\tau=32$, the birthday denominator is $2^{257}$, same scale as $\varepsilon_{\mathrm{indiff}}$.
+Here $Q$ is the number of CMT-4 collision trials / compared outputs in the game.
 
-### 6.7 KDF Collision Resistance Contribution to CMT-4
+For $\tau = C = 32$, both birthday denominators are $2^{257}$.
 
-To make the composition explicit, write the CMT-4 bound as:
+### 6.7 Explicit CMT-4 Decomposition
+
+Write the bound as:
 
 $$
-\varepsilon_{\mathrm{cmt4}} \le \underbrace{\varepsilon_{\mathrm{indiff}}}_{\text{sponge/duplex idealization}} + \underbrace{\frac{(\sigma+t)^2}{2^{8\tau+1}}}_{\text{tag birthday collisions}} + \underbrace{\varepsilon_{\mathrm{kdf-coll}}}_{\text{distinct $(K,N,AD)$ mapping to same derived key}}.
+\varepsilon_{\mathrm{cmt4}} \le
+\underbrace{\varepsilon_{\mathrm{indiff}}}_{\text{single global ideal-permutation bad event}} +
+\underbrace{\frac{Q^2}{2^{8\tau+1}}}_{\text{tag birthday collisions}} +
+\underbrace{\frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}}_{\text{distinct contexts mapping to same derived key}}.
 $$
 
 Interpretation:
 
-- The $\varepsilon_{\mathrm{kdf-coll}}$ term is the AEAD-specific contribution. It covers only the event that two
-  distinct AEAD contexts derive the same `K_tw`.
-- Conditioned on no KDF collision, CMT-4 reduces to bare TreeWrap committing behavior under distinct keys (Case A) or
-  same key with different messages (Case B in §6.6).
-- Thus, KDF collision resistance is the bridge from AEAD context uniqueness to TreeWrap's fixed-key committing
-  guarantees.
+- The first term is the one model-level error budget used throughout §6.
+- The second term is bare TreeWrap's fixed-key tag-collision term.
+- The third term is AEAD-specific: collisions in the context-to-key map.
+- Therefore, CMT-4 for TreeWrap-AEAD requires both the single-model sponge/duplex bound and a collision-resistant
+  context-to-derived-key mapping.
 
 ### 6.8 Caller Obligations for Bare TreeWrap
 
@@ -439,8 +467,8 @@ therefore requires caller discipline.
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification. |
 | CMT-4                        | No extra runtime check required beyond the algorithm definition.    |
 
-For wrapped deployments, note the distinction in §6.7: KDF pseudorandomness supports confidentiality/authenticity
-arguments, while CMT-4 additionally requires collision-resistant context-to-`K_tw` mapping.
+For wrapped deployments, use the §6.7 decomposition directly: confidentiality/authenticity and CMT-4 share the same
+single global model term, and CMT-4 additionally includes the explicit context-to-`K_tw` collision term.
 
 ### 6.9 Chunk Reordering, Length Changes, and Empty Input
 
@@ -470,7 +498,7 @@ The following implementation decisions are performance-critical and align with h
   finalized together, use a paired permutation path (`x2`) to reduce permutation-call overhead.
 - **Stream chain values incrementally.** Feed chain values into a running TurboSHAKE128 hasher as each batch completes;
   only finalization depends on having absorbed all chain values.
-- **Preserve empty/single-chunk fast paths.** Keep dedicated `n = 0` (empty input) and `n = 1` paths to avoid
+- **Preserve empty/single-chunk fast paths.** Keep dedicated empty-input and `n = 1` paths to avoid
   unnecessary tree-accumulation overhead on latency-sensitive inputs.
 - **Use incremental stateful processing.** Maintain chunk-local state across partial writes/reads so callers can stream
   large messages without extra buffering copies.
