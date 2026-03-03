@@ -262,10 +262,11 @@ permutation at the claimed workloads. This is a modeling assumption, not a proof
 > This is an assumption, not a proof about reduced-round Keccak-p[1600,12] itself, as is typical for modern symmetric
 > cryptography analyses.
 >
-> Public cryptanalysis on Keccak-family permutations includes reduced-round results with explicit round counts: practical
-> collision-style attacks on Keccak-f[1600] are publicly known up to 6 rounds, and structural distinguishers are known at
-> higher round counts in the raw-permutation setting (including 8-round distinguishers and 16-round zero-sum
-> distinguishers).
+> Public cryptanalysis on Keccak-family primitives includes reduced-round results with explicit round counts: practical
+> collision-style results are publicly known through 5 rounds in standard Keccak instances, with 6-round collision
+> solutions publicly reported for reduced-round contest instances, and structural distinguishers are known at higher
+> round counts in the raw-permutation setting (including 8-round distinguishers and 16-round zero-sum distinguishers).
+> (See the Keccak Team third-party table and reduced-round references in §8.)
 >
 > These results do not directly invalidate the TreeWrap heuristic because TreeWrap uses a keyed sponge/duplex setting
 > with 256-bit capacity, strict domain separation, and workload limits; nevertheless, future cryptanalysis could change
@@ -621,6 +622,8 @@ collision budget in the usual birthday way.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
+- Keccak Team. "Third-party cryptanalysis." https://keccak.team/third_party.html. Curated summary table of published
+  cryptanalysis results and round counts across Keccak-family modes and raw permutations.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
 - Günther, F., Thomson, M., and Wood, C. A. "Usage Limits on AEAD Algorithms." draft-irtf-cfrg-aead-limits-11. Concrete
@@ -632,6 +635,16 @@ collision budget in the usual birthday way.
 - Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Beyond the Birthday
   Bound." Eurocrypt 2015. Provides direct ideal-permutation-model bounds for the keyed duplex, giving a tighter
   reduction than routing through sponge indifferentiability.
+- Dinur, I., Dunkelman, O., and Shamir, A. "Improved practical attacks on round-reduced Keccak." Journal of
+  Cryptology 27(2), 2014. Reports practical 4-round collisions and 5-round near-collision results in standard
+  Keccak-224/256 settings.
+- Keccak Team. "Keccak Crunchy Crypto Collision and Pre-image Contest."
+  https://keccak.team/crunchy_contest.html. Public contest record for reduced-round Keccak[c=160] instances, including
+  6-round collision solutions.
+- Duc, A., Guo, J., Peyrin, T., and Wei, L. "Unaligned Rebound Attack - Application to Keccak." IACR ePrint 2011/420.
+  Gives differential distinguishers up to 8 rounds of Keccak internal permutations.
+- Aumasson, J.-P. and Meier, W. "Zero-sum distinguishers for reduced Keccak-f and for the core functions of Luffa and
+  Hamsi." 2009. https://www.aumasson.jp/data/papers/AM09.pdf. Presents zero-sum distinguishers up to 16 rounds.
 
 ## 9. Test Vectors
 
