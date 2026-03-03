@@ -433,6 +433,8 @@ IND-CCA2 formulations.
 ### 6.6 CMT-4 for TreeWrap-AEAD (fixed master key)
 
 This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap.
+It is a composition argument over published sponge/duplex and TurboSHAKE/KangarooTwelve analyses, not a new standalone
+primitive-security theorem.
 
 **Game.** Sample one secret master key $K$ once and give the adversary encryption-oracle access under $K$. The adversary
 outputs two distinct tuples
@@ -602,6 +604,10 @@ collision budget in the usual birthday way.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
+- Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., and Van Keer, R. "TurboSHAKE." IACR ePrint 2023/342.
+  Primary specification and design rationale for TurboSHAKE.
+- Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., and Van Keer, R. "KangarooTwelve: fast hashing based on
+  Keccak-p." IACR ePrint 2016/770. Security and design context for the Sakura-based tree structure.
 - Keccak Team. "Third-party cryptanalysis." https://keccak.team/third_party.html. Curated summary table of published
   cryptanalysis results and round counts across Keccak-family modes and raw permutations.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
