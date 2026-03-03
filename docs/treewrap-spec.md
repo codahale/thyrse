@@ -137,8 +137,8 @@ class LeafCipher:
 - `||`: Byte string concatenation.
 - `LEU64(i)`: The 8-byte little-endian encoding of integer `i`.
 
-The NIST SP 800-185 encodings (`left_encode`, `right_encode`, `encode_string`) are defined as Python functions in
-Appendix B.
+The encodings used here (`left_encode`, `encode_string`, `length_encode`) are defined as Python functions in Appendix B.
+`left_encode` and `encode_string` follow NIST SP 800-185; `length_encode` follows RFC 9861.
 
 ### 5.1 EncryptAndMAC / DecryptAndMAC
 
@@ -187,7 +187,7 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
     final_input = bytes([0x03, 0, 0, 0, 0, 0, 0, 0])
     for cv in cvs:
         final_input += cv
-    final_input += right_encode(n)
+    final_input += length_encode(n)
     final_input += b"\xff\xff"
     tag = turboshake128(final_input, 0x64, TAU)
     return b"".join(out_parts), tag
@@ -485,7 +485,7 @@ single global model term, and CMT-4 additionally includes the explicit context-t
 ### 6.8 Chunk Reordering, Length Changes, and Empty Input
 
 - Reordering chunks changes leaf-index binding (`key || LEU64(index)`), so recomputed tag changes.
-- Truncation/extension changes chunk count $n$, changing `right_encode(n)` in final accumulation input.
+- Truncation/extension changes chunk count $n$, changing `length_encode(n)` in final accumulation input.
 - Empty plaintext uses $n=1$: one leaf with `single_node_tag()`, no final accumulation node.
 
 ### 6.9 Side Channels
@@ -776,8 +776,9 @@ where:
 - **Leaf term.** Each leaf costs $1$ (init `pad_permute`) $+$ $\max(1, \lceil \ell_i / (R-1) \rceil)$ (ciphertext
   block permutations and the final squeeze — at least 1 even for empty chunks). For a full $B = 8192$-byte chunk:
   $1 + \lceil 8192 / 167 \rceil = 1 + 50 = 51$.
-- **Tag accumulation term.** Present only when $n > 1$. $|\mathit{final\_input}| = 8 + nC +
-  |\mathrm{right\_encode}(n)| + 2$ bytes. For $n = 2$: $|final\_input| = 8 + 64 + 2 + 2 = 76$ bytes, giving
+- **Tag accumulation term.** Present only
+  when $n > 1$. $|\mathit{final\_input}| = 8 + nC + |\mathrm{length\_encode}(n)| + 2$ bytes.
+  For $n = 2$: $|final\_input| = 8 + 64 + 2 + 2 = 76$ bytes, giving
   $\lfloor 76 / 168 \rfloor + 1 = 1$.
 
 ## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
@@ -861,15 +862,15 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
     return bytes(out)
 ```
 
-### NIST SP 800-185 Encodings
+### Integer and String Encodings
 
-`left_encode` and `encode_string` follow NIST SP 800-185. `right_encode` follows the KangarooTwelve
-convention (RFC 9861): for $x = 0$ it returns a single `0x00` byte rather than `0x00 0x01`. TreeWrap
-only calls `right_encode` with $n \geq 2$, so the difference is unreachable in practice.
+`left_encode` and `encode_string` follow NIST SP 800-185. `length_encode` follows RFC 9861: for $x = 0$ it returns a
+single `0x00` byte rather than `0x00 0x01`. TreeWrap only calls `length_encode` with $n \geq 2$, so the difference is
+unreachable in practice.
 
 ```python
-def right_encode(x: int) -> bytes:
-    """Big-endian, no leading zeros, followed by byte count (KangarooTwelve convention)."""
+def length_encode(x: int) -> bytes:
+    """RFC 9861 length_encode: big-endian, no leading zeros, followed by byte count."""
     if x == 0:
         return b"\x00"
     n = (x.bit_length() + 7) // 8
