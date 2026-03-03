@@ -432,32 +432,29 @@ formulations.
 
 ### 6.6 CMT-4 for TreeWrap-AEAD (fixed master key)
 
-This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap. It is a
-composition argument over published sponge/duplex and TurboSHAKE/KangarooTwelve analyses, not a new standalone
-primitive-security theorem (see §8: Bellare-Hoang for CMT-4 and the cited Keccak/TurboSHAKE/KangarooTwelve analyses).
+This theorem follows the standard Bellare-Hoang committing-security notion (CMT-4, see §8): a ciphertext should not
+admit two distinct valid openings under one fixed secret key. The proof is a composition argument over §6.4 plus
+fixed-key injectivity of bare TreeWrap (Lemma 3), not a new standalone primitive-security theorem.
 
-**Game.** Sample one secret master key $K$ once and give the adversary encryption-oracle access under $K$. The adversary
-outputs two distinct tuples $(N,AD,M) \neq (N',AD',M')$ such
-that $\mathrm{Encrypt}(K,N,AD,M) = \mathrm{Encrypt}(K,N',AD',M')$.
+**Game (CMT-4, nonce-respecting).** Sample one secret master key $K$ once and give the adversary encryption-oracle
+access under $K$ with nonce-respecting queries. The adversary outputs one ciphertext $C^\star$ and two distinct opening
+tuples $(N,AD,M) \neq (N',AD',M')$. It wins iff both openings verify:
 
-Split into two exhaustive cases.
+$$
+\mathrm{Dec}(K,N,AD,C^\star)=M \quad\text{and}\quad \mathrm{Dec}(K,N',AD',C^\star)=M'.
+$$
 
-#### Case A: Different AEAD contexts
+As in §6.5, move to $\mathsf{G}_1$ where context-to-key derivation is replaced by a lazy random function and pay one
+global $\varepsilon_{\mathrm{indiff}}$ term for $\mathsf{Bad}_{\mathrm{perm}}$.
 
-$(N,AD) \neq (N',AD')$.
+Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
 
-Distinct AEAD contexts under fixed $K$ imply distinct encoded context strings $X \neq X'$. In $\mathsf{G}_1$, either:
+- If $(N,AD)=(N',AD')$, both openings use the same derived key. Then two different messages opening the same $C^\star$
+  contradict Lemma 3 (fixed-key bijection), so this case is impossible.
+- If $(N,AD)\neq(N',AD')$, contexts map to distinct random keys in $\mathsf{G}_1$. A dual valid opening then requires a
+  cross-context acceptance collision, upper-bounded by the $Q$-comparison birthday term over $\tau$-byte tags.
 
-- $R(X)=R(X')$ (context-key collision event, bounded by $\varepsilon_{\mathrm{ctx-coll}}$), or
-- $R(X)\neq R(X')$, and an equal-output event is upper-bounded by the $Q$-trial birthday term over $\tau$-byte tags
-  (since $\Pr[\texttt{ct||tag collision}] \le \Pr[\texttt{tag collision}]$).
-
-#### Case B: Same AEAD context, different messages
-
-Same $(N,AD)$ implies the same derived key (for fixed master key $K$). If $M \neq M'$, then by Lemma 3 (fixed-key
-bijection), ciphertexts differ, so the full AEAD outputs `ct || tag` cannot be equal.
-
-Combining both cases:
+Therefore:
 
 $$
 \varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}} + \varepsilon_{\mathrm{ctx-coll}}.
@@ -472,12 +469,12 @@ For $\tau = C = 32$, both birthday denominators are $2^{257}$.
 `TreeWrap-AEAD` enforces nonce/key derivation and verification behavior. Bare TreeWrap exposes raw `(output, tag)` and
 therefore requires caller discipline.
 
-| Property target              | Caller obligation                                                   |
-|------------------------------|---------------------------------------------------------------------|
-| IND-CPA-like confidentiality | Ensure key uniqueness per `EncryptAndMAC` invocation.               |
-| INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.        |
-| IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification. |
-| CMT-4                        | No extra runtime check required beyond the algorithm definition.    |
+| Property target              | Caller obligation                                                                             |
+|------------------------------|-----------------------------------------------------------------------------------------------|
+| IND-CPA-like confidentiality | Ensure key uniqueness per `EncryptAndMAC` invocation.                                         |
+| INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.                                  |
+| IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
+| CMT-4                        | Use KDF security and derived-key collision resistance over injectively encoded AEAD contexts. |
 
 For wrapped deployments, use the §6.6 decomposition directly: confidentiality/authenticity and CMT-4 share the same
 single global model term, and CMT-4 additionally includes the explicit context-to-`K_tw` collision term.
