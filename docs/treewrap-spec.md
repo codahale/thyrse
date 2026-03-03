@@ -291,7 +291,7 @@ $$
 Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 
 **Lemma 1 (Leaf duplex pseudorandomness).**
-For each leaf index $i$, the leaf computation is a keyed duplex instance initialized with `K_tw || LEU64([i)`; its rate
+For each leaf index $i$, the leaf computation is a keyed duplex instance initialized with `K_tw || LEU64(i)`; its rate
 outputs (keystream bytes and terminal squeeze bytes) are pseudorandom up to $\varepsilon_{\mathrm{indiff}}$ (see §8:
 Sponge/duplex analyses and keyed-duplex bounds).
 
