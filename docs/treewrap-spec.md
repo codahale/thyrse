@@ -278,8 +278,8 @@ Let:
 
 - $\sigma$: total online Keccak-p calls performed by the construction across all oracle queries.
 - $t$: adversary offline Keccak-p calls.
-- $S$: number of decryption/verification forgery attempts.
-- $Q$: number of items in a birthday-style counting argument.
+- $S$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
+- $Q$: total number of compared outputs in a birthday-style counting argument (per security experiment / key epoch).
 
 Define the common structural term:
 
@@ -420,8 +420,8 @@ $$
 
 #### 6.5.2 INT-CTXT
 
-For $S$ decryption/verification forgery attempts on new ciphertexts under the same $(K,N,AD)$, the adversary must guess
-a $\tau$-byte tag:
+Across $S$ decryption/verification forgery attempts on new ciphertexts in one security experiment (possibly across
+multiple contexts), each attempt must guess a $\tau$-byte tag:
 
 $$
 \varepsilon_{\mathrm{int-ctxt}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
@@ -445,7 +445,8 @@ IND-CCA2 formulations.
 
 This theorem composes the same §6.4 context-to-key lift with fixed-key committing behavior from bare TreeWrap.
 
-**Game.** Sample one secret master key $K$ once. The adversary outputs two distinct tuples
+**Game.** Sample one secret master key $K$ once and give the adversary encryption-oracle access under $K$. The adversary
+outputs two distinct tuples
 $(N,AD,M) \neq (N',AD',M')$
 such that
 $\mathrm{Encrypt}(K,N,AD,M) = \mathrm{Encrypt}(K,N',AD',M')$.
@@ -459,7 +460,8 @@ $(N,AD) \neq (N',AD')$.
 Distinct AEAD contexts under fixed $K$ imply distinct encoded context strings $X \neq X'$. In $\mathsf{G}_1$, either:
 
 - $R(X)=R(X')$ (context-key collision event, bounded by $\varepsilon_{\mathrm{ctx-coll}}$), or
-- $R(X)\neq R(X')$, and an equal-output event is counted in the $Q$-trial birthday term over $\tau$-byte tags.
+- $R(X)\neq R(X')$, and an equal-output event is upper-bounded by the $Q$-trial birthday term over $\tau$-byte tags
+  (since $\Pr[\texttt{ct||tag collision}] \le \Pr[\texttt{tag collision}]$).
 
 #### Case B: Same AEAD context, different messages
 
@@ -473,7 +475,7 @@ $$
 \varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}} + \varepsilon_{\mathrm{ctx-coll}}.
 $$
 
-Here $Q$ is the number of CMT-4 collision trials / compared outputs in the game.
+Here $Q$ is the total number of compared AEAD outputs in the experiment (oracle outputs and final compared outputs).
 
 For $\tau = C = 32$, both birthday denominators are $2^{257}$.
 
@@ -532,8 +534,11 @@ To claim the 128-bit security target in this specification, deployments MUST enf
 
 - **Total Keccak workload cap.** For each key epoch, implementations MUST track
   $\sigma_{\mathrm{total}} = \sigma_{\mathrm{treewrap-aead}} + \sigma_{\mathrm{other\ keccak\ uses\ in\ scope}}$
-  and enforce $(\sigma_{\mathrm{total}} + t) \le 2^{64}$. A conservative default of
-  $(\sigma_{\mathrm{total}} + t) \le 2^{60}$ is RECOMMENDED.
+  and enforce a configured measurable cap $\sigma_{\mathrm{total}} \le \sigma_{\mathrm{cap}}$.
+  A conservative default of $\sigma_{\mathrm{cap}} \le 2^{60}$ is RECOMMENDED; higher caps (up to $2^{64}$) are an
+  expert-only profile.
+  Security interpretation remains the §6 bound family evaluated at observed $\sigma_{\mathrm{total}}$ and the chosen
+  adversary offline budget parameter $t$.
 - **Nonce discipline.** Nonces MUST be unique per key epoch. Deterministic nonces (counter/sequence) are RECOMMENDED.
 - **Random-nonce cap (if used).** If nonces are sampled uniformly at random from a $b$-bit nonce space, implementations
   MUST also cap encryptions per key epoch to satisfy
