@@ -590,21 +590,14 @@ MUST be pseudorandom (indistinguishable from uniform) and unique per invocation 
 necessarily pseudorandom. TreeWrap's tag is a full PRF: under a random key, the tag is indistinguishable from a random
 string (§6.3.1). This stronger property supports protocols that absorb the tag into ongoing state.
 
-### 7.1. Usage Limits
+### 7.1. Operational Safety Limits
 
-Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost $\approx 11$ Keccak-p
-calls/message (1 KDF + 10 leaf calls), per-key accounting (single key / key epoch), and a 128-bit TreeWrap nonce profile
-for random-nonce deployments. These figures are conditional on the §6 ideal-permutation assumption for
-Keccak-p[1600,12].
+Operational planning assumptions used in this section: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost
+$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), and per-key accounting (single key / key epoch). Figures
+are conditional on the §6 model assumptions for Keccak-p[1600,12] and the selected offline-work profile.
 
-| Scheme        | Limit type       | Approx protected volume |
-|---------------|------------------|-------------------------|
-| AES-128-GCM   | per key          | $\approx 2^{13.1}$ GiB  |
-| TreeWrap-AEAD | proof bound only | $\approx 2^{80.6}$ GiB  |
-
-The AES-128-GCM figure is from Günther, Thomson, and Wood (Table 2) converted to GiB. The TreeWrap figure is the
-corresponding conversion of the §6 bound under the assumptions above. It is not the practical limit when random nonces
-are used; practical limits follow the minimum rule below.
+Under those assumptions, the TreeWrap proof-bound-only volume is approximately $2^{80.6}$ GiB per key epoch. This is an
+analytical upper bound, not the practical deployment limit when random nonces are used.
 
 For deployment planning, use:
 
@@ -621,6 +614,20 @@ $$
 
 TreeWrap supports longer nonces (e.g., 192 or 256 bits) with the same construction; this increases the random-nonce
 collision budget in the usual birthday way.
+
+Example planning table (collision target $p = 2^{-50}$, record size = 1500 bytes):
+
+| Nonce size | Record size | Limiting factor  | Approx safe volume per key epoch |
+|------------|-------------|------------------|----------------------------------|
+| 128-bit    | 1500 B      | nonce collisions | $\approx 2^{20.1}$ GiB           |
+| 192-bit    | 1500 B      | nonce collisions | $\approx 2^{52.1}$ GiB           |
+| 256-bit    | 1500 B      | proof bound      | $\approx 2^{80.6}$ GiB           |
+
+For a different record size, scale the nonce-collision-limited rows linearly with bytes/record and then apply the same
+minimum rule against the proof-bound volume.
+
+Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (§6.10), not by the asymptotic
+proof-bound figure alone.
 
 ## 8. References
 
@@ -643,8 +650,6 @@ collision budget in the usual birthday way.
 - Ristenpart, T., Shacham, H., and Shrimpton, T. "Careful with Composition: Limitations of the Indifferentiability
   Framework." Eurocrypt 2011 (ePrint 2011/339 as "Limitations of Indifferentiability and Universal Composability").
   Highlights multi-stage composition caveats; motivates explicit game-hop arguments in composed proofs.
-- Günther, F., Thomson, M., and Wood, C. A. "Usage Limits on AEAD Algorithms." draft-irtf-cfrg-aead-limits-11. Concrete
-  usage limit tables for AES-GCM and ChaCha20-Poly1305; referenced in §7.1.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
   and Other Applications." SAC 2011. IACR ePrint 2011/499. Proves that duplex outputs are pseudorandom under the sponge
   indifferentiability assumption (Theorem 1) and gives overwrite-mode security (Section 6.2, Algorithm 5, Theorem 2:
