@@ -515,11 +515,25 @@ Required baseline profile (MUST):
 - On any cap exceedance (workload, invocation, nonce, or failed-verification policy), implementations MUST rotate to a
   fresh key epoch before any further encryption.
 
+Analysis interpretation (normative for this profile): evaluate the §6 bounds using default offline-work profile
+$t = 2^{64}$.
+
 Expert profile (non-normative): deployments with stronger review/monitoring may choose workload caps above $2^{60}$, up
 to $2^{64}$, using the same counter model.
 
 Security interpretation remains the §6 bound family evaluated at observed counters, with adversary offline budget
 parameter $t$ treated as an analysis parameter (not an operationally measurable quantity).
+
+Non-normative sensitivity profiles for reviewers:
+
+| Profile  | Offline-work parameter | Typical audience                      |
+|----------|------------------------|---------------------------------------|
+| Baseline | $t = 2^{64}$           | default deployment conformance        |
+| Audit    | $t = 2^{60}$           | conservative internal/security review |
+| Extended | $t = 2^{72}$           | research-oriented stress analysis     |
+
+Profile choice changes only analytical interpretation of bounds; it does not change algorithm behavior, implementation
+requirements, or interoperability.
 
 Appendix C remains non-normative operational guidance for instrumentation and budgeting workflows.
 
