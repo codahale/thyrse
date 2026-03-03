@@ -390,7 +390,7 @@ $$
 
 If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$.
 
-#### 6.5.3 IND-CCA2
+#### 6.5.3 IND-CCA2 (nonce-respecting)
 
 Standard EtM reduction gives:
 
@@ -398,7 +398,9 @@ $$
 \varepsilon_{\mathrm{ind-cca2}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
 $$
 
-The proof uses IND-CPA plus decryption-failure indistinguishability from random tag guessing.
+The proof uses nonce-respecting IND-CPA plus decryption-failure indistinguishability from random tag guessing.
+Nonce reuse for the same $(K,N,AD)$ is out of scope for this claim and breaks standard deterministic-encapsulation
+IND-CCA2 formulations.
 
 ### 6.6 CMT-4 for TreeWrap-AEAD
 
