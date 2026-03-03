@@ -259,9 +259,6 @@ $c = 256$ bits and $\tau = 32$ tag bytes.
 permutation at the claimed workloads. This is a modeling assumption, not a proof about reduced-round Keccak-p itself.
 
 > [!IMPORTANT]
-> This is an assumption, not a proof about reduced-round Keccak-p[1600,12] itself, as is typical for modern symmetric
-> cryptography analyses.
->
 > Public cryptanalysis on Keccak-family primitives includes reduced-round results with explicit round counts: practical
 > collision-style results are publicly known through 5 rounds in standard Keccak instances, with 6-round collision
 > solutions publicly reported for reduced-round contest instances, and structural distinguishers are known at higher
@@ -280,17 +277,12 @@ Let:
 - $t$: adversary offline Keccak-p calls.
 - $S$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
 - $Q$: total number of compared outputs in a birthday-style counting argument (per security experiment / key epoch).
+- $q_{\mathrm{ctx}}$: number of distinct context strings $X$ queried to the KDF in one security experiment.
 
 Define the common structural term:
 
 $$
 \varepsilon_{\mathrm{indiff}} \;\stackrel{\mathrm{def}}{=}\; \frac{(\sigma + t)^2}{2^{c+1}}.
-$$
-
-All theorem statements below are of the form
-
-$$
-\varepsilon \le \varepsilon_{\mathrm{indiff}} + \text{(problem-specific term)}.
 $$
 
 ### 6.2 Bare TreeWrap Core Lemmas
@@ -329,8 +321,7 @@ transcript-dependent sponge output in the same model, and no extra hybrid model 
 
 #### 6.3.2 Tag Collision Resistance
 
-For $Q$ distinct ciphertext inputs under one fixed secret key
-($Q$ = number of compared tag outputs in the collision game):
+For $Q$ distinct ciphertext inputs under one fixed secret key:
 
 $$
 \varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}}.
@@ -364,9 +355,7 @@ $$
 Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$:
 
 - $F$ behaves as a lazy-sampled random function on distinct context strings $X$.
-- For $q_{\mathrm{ctx}}$ distinct contexts
-  ($q_{\mathrm{ctx}}$ = number of distinct context strings $X$ queried to the KDF),
-  derived-key collisions follow the birthday bound:
+- For $q_{\mathrm{ctx}}$ distinct contexts, derived-key collisions follow the birthday bound:
 
 $$
 \varepsilon_{\mathrm{ctx-coll}} \le \frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}.
@@ -467,7 +456,7 @@ Distinct AEAD contexts under fixed $K$ imply distinct encoded context strings $X
 
 Same $(N,AD)$ implies the same derived key (for fixed master key $K$).
 If $M \neq M'$, then by Lemma 3 (fixed-key bijection), ciphertexts differ, so the full AEAD outputs `ct‖tag` cannot be
-equal (except via the global bad event already accounted for by $\varepsilon_{\mathrm{indiff}}$).
+equal.
 
 Combining both cases:
 
@@ -479,26 +468,7 @@ Here $Q$ is the total number of compared AEAD outputs in the experiment (oracle 
 
 For $\tau = C = 32$, both birthday denominators are $2^{257}$.
 
-### 6.7 Explicit CMT-4 Decomposition
-
-Write the bound as:
-
-$$
-\varepsilon_{\mathrm{cmt4}} \le
-\underbrace{\varepsilon_{\mathrm{indiff}}}_{\text{single global ideal-permutation bad event}} +
-\underbrace{\frac{Q^2}{2^{8\tau+1}}}_{\text{tag birthday collisions}} +
-\underbrace{\frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}}_{\text{distinct contexts mapping to same derived key}}.
-$$
-
-Interpretation:
-
-- The first term is the one model-level error budget used throughout §6.
-- The second term is bare TreeWrap's fixed-key tag-collision term.
-- The third term is AEAD-specific: collisions in the context-to-key map.
-- Therefore, CMT-4 for TreeWrap-AEAD requires both the single-model sponge/duplex bound and a collision-resistant
-  context-to-derived-key mapping.
-
-### 6.8 Caller Obligations for Bare TreeWrap
+### 6.7 Caller Obligations for Bare TreeWrap
 
 `TreeWrap-AEAD` enforces nonce/key derivation and verification behavior. Bare TreeWrap exposes raw `(output, tag)` and
 therefore requires caller discipline.
@@ -510,16 +480,16 @@ therefore requires caller discipline.
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification. |
 | CMT-4                        | No extra runtime check required beyond the algorithm definition.    |
 
-For wrapped deployments, use the §6.7 decomposition directly: confidentiality/authenticity and CMT-4 share the same
+For wrapped deployments, use the §6.6 decomposition directly: confidentiality/authenticity and CMT-4 share the same
 single global model term, and CMT-4 additionally includes the explicit context-to-`K_tw` collision term.
 
-### 6.9 Chunk Reordering, Length Changes, and Empty Input
+### 6.8 Chunk Reordering, Length Changes, and Empty Input
 
 - Reordering chunks changes leaf-index binding (`key || [index]_64LE`), so recomputed tag changes.
 - Truncation/extension changes chunk count $n$, changing `right_encode(n)` in final accumulation input.
 - Empty plaintext uses $n=1$: one leaf with `single_node_tag()`, no final accumulation node.
 
-### 6.10 Side Channels
+### 6.9 Side Channels
 
 Implementations MUST be constant-time with respect to secret-dependent control flow and memory access.
 
@@ -527,7 +497,7 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 - Tag verification MUST use constant-time equality.
 - Partial-block logic may branch on public length, not on secret data.
 
-### 6.11 Operational Usage Limits (Normative)
+### 6.10 Operational Usage Limits (Normative)
 
 To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits
 (a key epoch) and rotate to a fresh master key before exceeding them.
@@ -547,7 +517,7 @@ To claim the 128-bit security target in this specification, deployments MUST enf
 
 Appendix C remains non-normative operational guidance for instrumentation and budgeting workflows.
 
-### 6.12 Implementation Design Callouts (Non-Normative)
+### 6.11 Implementation Design Callouts (Non-Normative)
 
 The following implementation decisions are performance-critical and align with high-throughput production designs:
 
@@ -596,7 +566,7 @@ string (§6.3.1). This stronger property supports protocols that absorb the tag 
 ### 7.1. Usage Limits
 
 Direct volume comparison with assumptions: $p = 2^{-50}$, 1500-byte messages, TreeWrap-AEAD cost
-$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), planning approximation $\sigma + t \approx \sigma$,
+$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls),
 per-key accounting (single key / key epoch), and a 128-bit TreeWrap nonce profile for random-nonce deployments.
 These figures are conditional on the §6 ideal-permutation assumption for Keccak-p[1600,12].
 
