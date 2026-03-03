@@ -45,6 +45,7 @@ type Encryptor struct {
 	s        [200]byte
 	h        turboshake.Hasher
 	cvBuf    [4 * cvSize]byte
+	finalized bool
 	cvCount  int
 	idx      int
 	pos      int
@@ -174,6 +175,11 @@ func (e *Encryptor) finalizeCV() {
 // Finalize returns the authentication tag. It must be called exactly once after all data has been processed via
 // [Encryptor.XORKeyStream].
 func (e *Encryptor) Finalize() [TagSize]byte {
+	if e.finalized {
+		panic("treewrap: Encryptor.Finalize called more than once")
+	}
+	e.finalized = true
+
 	if e.chunkOff == 0 && e.idx == 0 {
 		// Empty input: process one empty chunk with singleNodeDS fast-path.
 		var s0 [200]byte
@@ -213,6 +219,7 @@ type Decryptor struct {
 	s        [200]byte
 	h        turboshake.Hasher
 	cvBuf    [4 * cvSize]byte
+	finalized bool
 	cvCount  int
 	idx      int
 	pos      int
@@ -343,6 +350,11 @@ func (d *Decryptor) finalizeCV() {
 // via [Decryptor.XORKeyStream]. The caller MUST verify the tag using constant-time comparison before using the
 // plaintext.
 func (d *Decryptor) Finalize() [TagSize]byte {
+	if d.finalized {
+		panic("treewrap: Decryptor.Finalize called more than once")
+	}
+	d.finalized = true
+
 	if d.chunkOff == 0 && d.idx == 0 {
 		// Empty input: process one empty chunk with singleNodeDS fast-path.
 		var s0 [200]byte
