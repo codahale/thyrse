@@ -591,13 +591,14 @@ $\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), planning approximat
 per-key accounting (single key / key epoch), and a 128-bit TreeWrap nonce profile for random-nonce deployments.
 These figures are conditional on the §6 ideal-permutation assumption for Keccak-p[1600,12].
 
-| Scheme        | Limit type | Approx protected volume |
-|---------------|------------|-------------------------|
-| AES-128-GCM   | per key    | $\approx 2^{13.1}$ GiB  |
-| TreeWrap-AEAD | per key    | $\approx 2^{80.6}$ GiB  |
+| Scheme        | Limit type        | Approx protected volume |
+|---------------|-------------------|-------------------------|
+| AES-128-GCM   | per key           | $\approx 2^{13.1}$ GiB  |
+| TreeWrap-AEAD | proof bound only  | $\approx 2^{80.6}$ GiB  |
 
 The AES-128-GCM figure is from Günther, Thomson, and Wood (Table 2) converted to GiB. The TreeWrap figure is the
 corresponding conversion of the §6 bound under the assumptions above.
+It is not the practical limit when random nonces are used; practical limits follow the minimum rule below.
 
 For deployment planning, use:
 
