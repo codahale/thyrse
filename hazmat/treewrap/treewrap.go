@@ -410,11 +410,8 @@ func feedCVs(h *turboshake.Hasher, cvs []byte, cvCount *int) {
 	if *cvCount == 0 {
 		_, _ = h.Write(sakuraTopology[:])
 	}
-	for len(cvs) >= cvSize {
-		_, _ = h.Write(cvs[:cvSize])
-		cvs = cvs[cvSize:]
-		*cvCount++
-	}
+	_, _ = h.Write(cvs)
+	*cvCount += len(cvs) / cvSize
 }
 
 // finalizeTag writes the Sakura terminator and squeezes the tag.
