@@ -333,7 +333,7 @@ $$
 The second term is the birthday bound on $8\tau$-bit pseudorandom outputs. By Lemma 3, this is equivalently a fixed-key
 bound over distinct plaintext inputs.
 
-### 6.4 Single-Model KDF Lift Lemma
+### 6.4 Bridge Theorem: AEAD Contexts to Random Per-Context Keys
 
 Define the AEAD context encoding:
 
@@ -347,63 +347,55 @@ $$
 F(X) = \mathrm{TurboSHAKE128}(X,\;0x65,\;C).
 $$
 
-Modeling dependence for this lift is the TurboSHAKE/Sakura tree-hash analysis line in §8 (RFC 9861, TurboSHAKE paper,
-and KangarooTwelve paper), combined with the sponge/duplex ideal-permutation framework.
+Define:
 
-We analyze KDF and TreeWrap in one ideal-permutation experiment. Let $\mathsf{Bad}_{\mathrm{perm}}$ be the global bad
-event for this experiment (the usual sponge/duplex transcript-collision event across all online/offline Keccak-p calls
-used by both KDF and TreeWrap). Then:
+- Game $\mathsf{G}_0$: real `TreeWrap-AEAD`, i.e., per-context key $F(X)$.
+- Game $\mathsf{G}_1$: replace $F$ with a lazy-sampled random function $R:\{0,1\}^* \to \{0,1\}^{8C}$ on contexts.
 
-$$
-\Pr[\mathsf{Bad}_{\mathrm{perm}}] \le \varepsilon_{\mathrm{indiff}}.
-$$
-
-Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$:
-
-- $F$ behaves as a lazy-sampled random function on distinct context strings $X$.
-- For $q_{\mathrm{ctx}}$ distinct contexts, derived-key collisions follow the birthday bound:
-
-$$
-\varepsilon_{\mathrm{ctx-coll}} \le \frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}.
-$$
-
-This gives a single-model lift from AEAD contexts to per-context TreeWrap keys, with no separate model transition.
-
-### 6.5 TreeWrap-AEAD Confidentiality and Integrity
-
-The AEAD wrapper definition is given in §5.2 (`treewrap_aead_encrypt` / `treewrap_aead_decrypt`) and is used unchanged
-here.
-
-Use one hybrid:
-
-- Game $\mathsf{G}_0$: real `TreeWrap-AEAD`.
-- Game $\mathsf{G}_1$: replace $F(X)$ with a lazy-sampled random function $R:\{0,1\}^* \rightarrow \{0,1\}^{8C}$ on
-  context strings $X$.
-
-By §6.4 (same global ideal-permutation model),
+Let $\mathsf{Bad}_{\mathrm{perm}}$ be the single global ideal-permutation bad event across all KDF and TreeWrap
+transcripts (online and offline calls). Then:
 
 $$
 \left|\Pr[\mathsf{G}_0=1]-\Pr[\mathsf{G}_1=1]\right| \le \varepsilon_{\mathrm{indiff}}.
 $$
 
-In $\mathsf{G}_1$, each distinct context gets a random per-context key; conditioned on no context-key collision event,
-queries reduce directly to bare TreeWrap under random keys.
+This is the KDF-to-random-key bridge used by all AEAD goals below. It follows the standard indifferentiability
+composition line (MRH + sponge/duplex analyses in §8), but is applied here via one explicit game hop
+($\mathsf{G}_0 \rightarrow \mathsf{G}_1$) rather than as a blanket composition step. This explicitly addresses the
+Ristenpart-Shacham-Shrimpton caveat about multi-stage composition.
 
-**Single-accounting rule used below.** For each goal $\Pi \in \{\text{IND-CPA},\text{INT-CTXT},\text{IND-CCA2}\}$, we
-upper-bound:
+Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$ in $\mathsf{G}_1$:
+
+- Contexts map as a lazy random function on distinct strings $X$.
+- For $q_{\mathrm{ctx}}$ distinct contexts, derived-key collisions satisfy:
+
+$$
+\varepsilon_{\mathrm{ctx-coll}} \le \frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}.
+$$
+
+### 6.5 Generic AEAD Transfer Lemma and Goal Corollaries
+
+The AEAD wrapper definition is given in §5.2 (`treewrap_aead_encrypt` / `treewrap_aead_decrypt`) and is used unchanged.
+For each goal $\Pi \in \{\text{IND-CPA},\text{INT-CTXT},\text{IND-CCA2}\}$, define adversarial success event
+$\mathsf{Succ}_\Pi$. Partition:
+
+$$
+\mathsf{Succ}_\Pi \subseteq \mathsf{Bad}_{\mathrm{perm}} \;\cup\; \mathsf{CtxColl} \;\cup\; \mathsf{Succ}^{\mathrm{bare}}_\Pi.
+$$
+
+Therefore, by union bound and the bridge theorem:
 
 $$
 \mathrm{Adv}_{\Pi} \le \Pr[\mathsf{Bad}_{\mathrm{perm}}] + \Pr[\mathsf{CtxColl}] + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\!\mid_{\neg \mathsf{Bad}_{\mathrm{perm}}\wedge \neg \mathsf{CtxColl}}.
 $$
 
-Under $\neg \mathsf{Bad}_{\mathrm{perm}}$, $F$ is a random function on contexts and bare-TreeWrap lemmas are interpreted
-in the same experiment. Therefore, $\Pr[\mathsf{Bad}_{\mathrm{perm}}]$ is charged once
-as $\varepsilon_{\mathrm{indiff}}$; no second independent indifferentiability term is added.
+Under $\neg \mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$, the game is exactly bare TreeWrap under distinct
+random per-context keys; this is why $\varepsilon_{\mathrm{indiff}}$ is charged once, globally.
 
 #### 6.5.1 IND-CPA (nonce-respecting)
 
-Under fresh nonces per encryption query, confidentiality follows from bare TreeWrap pseudorandom keystream behavior
-(Lemmas 1–3), plus the context-key collision term from §6.4:
+By the generic transfer lemma, under fresh nonces per encryption query and bare TreeWrap pseudorandom keystream behavior
+(Lemmas 1–3):
 
 $$
 \varepsilon_{\mathrm{ind-cpa}} \le \varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx-coll}}.
@@ -412,7 +404,7 @@ $$
 #### 6.5.2 INT-CTXT
 
 Across $S$ decryption/verification forgery attempts on new ciphertexts in one security experiment (possibly across
-multiple contexts), each attempt must guess a $\tau$-byte tag:
+multiple contexts), each attempt must guess a $\tau$-byte tag. By the generic transfer lemma:
 
 $$
 \varepsilon_{\mathrm{int-ctxt}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
@@ -422,7 +414,7 @@ If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$.
 
 #### 6.5.3 IND-CCA2 (nonce-respecting)
 
-Standard EtM reduction gives:
+Standard EtM reduction plus the generic transfer lemma gives:
 
 $$
 \varepsilon_{\mathrm{ind-cca2}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx-coll}}.
@@ -621,8 +613,14 @@ collision budget in the usual birthday way.
   Keccak-p." IACR ePrint 2016/770. Security and design context for the Sakura-based tree structure.
 - Keccak Team. "Third-party cryptanalysis." https://keccak.team/third_party.html. Curated summary table of published
   cryptanalysis results and round counts across Keccak-family modes and raw permutations.
+- Maurer, U., Renner, R., and Holenstein, C. "Indifferentiability, Impossibility Results on Reductions, and
+  Applications to the Random Oracle Methodology." TCC 2004. Introduces indifferentiability and the core composition
+  theorem framework used for random-oracle replacement arguments.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
+- Ristenpart, T., Shacham, H., and Shrimpton, T. "Careful with Composition: Limitations of the Indifferentiability
+  Framework." Eurocrypt 2011 (ePrint 2011/339 as "Limitations of Indifferentiability and Universal Composability").
+  Highlights multi-stage composition caveats; motivates explicit game-hop arguments in composed proofs.
 - Günther, F., Thomson, M., and Wood, C. A. "Usage Limits on AEAD Algorithms." draft-irtf-cfrg-aead-limits-11. Concrete
   usage limit tables for AES-GCM and ChaCha20-Poly1305; referenced in §7.1.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
