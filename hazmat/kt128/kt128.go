@@ -6,19 +6,22 @@
 package kt128
 
 import (
+	"encoding/binary"
 	"slices"
+	"unsafe"
 
-	"github.com/codahale/thyrse/hazmat/legacykeccak"
 	"github.com/codahale/thyrse/hazmat/turboshake"
-	"github.com/codahale/thyrse/internal/mem"
+	"github.com/codahale/thyrse/internal/keccak"
 )
 
 const (
 	// BlockSize is the KT128 chunk size in bytes.
 	BlockSize = 8192
 
-	cvSize = 32 // Chain value size.
-	leafDS = 0x0B
+	cvSize        = 32 // Chain value size.
+	leafDS        = 0x0B
+	leafRateWords = turboshake.Rate / 8
+	cvWords       = cvSize / 8
 )
 
 // Hasher is an incremental KT128 instance that implements hash.Hash and io.Reader.
@@ -72,7 +75,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		h.treeMode = true
 	}
 
-	lanes := legacykeccak.Lanes
+	lanes := keccak.AvailableLanes
 
 	// Large-write fast path: process chunks directly from p to avoid copying.
 	if len(p) > lanes*BlockSize {
@@ -124,10 +127,17 @@ func (h *Hasher) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// processLeafBatch computes leaf CVs for nLeaves complete chunks using X4→X2→X1 cascade.
+// processLeafBatch computes leaf CVs for nLeaves complete chunks using X8→X4→X2→X1 cascade.
 func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
-	var cvBuf [4 * cvSize]byte
+	var cvBuf [8 * cvSize]byte
 	idx := 0
+
+	for idx+8 <= nLeaves {
+		off := idx * BlockSize
+		leafCVsX8(data[off:off+8*BlockSize], cvBuf[:])
+		_, _ = h.ts.Write(cvBuf[:8*cvSize])
+		idx += 8
+	}
 
 	for idx+4 <= nLeaves {
 		off := idx * BlockSize
@@ -233,33 +243,19 @@ func (h *Hasher) finalize() {
 	// Process all remaining leaves. The last chunk may be partial.
 	nLeaves := (len(h.buf) + BlockSize - 1) / BlockSize
 	if nLeaves > 0 {
-		var cvBuf [4 * cvSize]byte
-		idx := 0
 		fullLeaves := len(h.buf) / BlockSize
 
-		for idx+4 <= fullLeaves {
-			off := idx * BlockSize
-			leafCVsX4(h.buf[off:off+4*BlockSize], cvBuf[:])
-			_, _ = h.ts.Write(cvBuf[:4*cvSize])
-			idx += 4
+		if fullLeaves > 0 {
+			h.processLeafBatch(h.buf[:fullLeaves*BlockSize], fullLeaves)
 		}
 
-		for idx+2 <= fullLeaves {
-			off := idx * BlockSize
-			leafCVsX2(h.buf[off:off+2*BlockSize], cvBuf[:])
-			_, _ = h.ts.Write(cvBuf[:2*cvSize])
-			idx += 2
+		if nLeaves > fullLeaves {
+			var cvBuf [cvSize]byte
+			off := fullLeaves * BlockSize
+			leafCVX1(h.buf[off:], cvBuf[:])
+			_, _ = h.ts.Write(cvBuf[:])
+			h.leafCount++
 		}
-
-		for idx < nLeaves {
-			off := idx * BlockSize
-			end := min(off+BlockSize, len(h.buf))
-			leafCVX1(h.buf[off:end], cvBuf[:cvSize])
-			_, _ = h.ts.Write(cvBuf[:cvSize])
-			idx++
-		}
-
-		h.leafCount += nLeaves
 	}
 
 	// Terminator: lengthEncode(leafCount) || 0xFF || 0xFF.
@@ -294,80 +290,251 @@ func lengthEncode(x uint64) []byte {
 
 // leafCVX1 computes a single leaf CV using TurboSHAKE128(data, 0x0B, 32).
 func leafCVX1(data []byte, cv []byte) {
-	var s [200]byte
-	chunkLen := len(data)
-	pos := 0
+	const rate = turboshake.Rate
+
+	var s keccak.State1
 	off := 0
-	for off < chunkLen {
-		n := min(turboshake.Rate-pos, chunkLen-off)
-		mem.XORInPlace(s[pos:pos+n], data[off:off+n])
-		pos += n
-		off += n
-		if pos == turboshake.Rate {
-			legacykeccak.P1600(&s)
-			pos = 0
-		}
+	for off+rate <= len(data) {
+		absorbRate168State1(&s, data[off:off+rate])
+		s.Permute12()
+		off += rate
 	}
-	s[pos] ^= leafDS
-	s[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600(&s)
-	copy(cv, s[:cvSize])
+
+	var final [rate]byte
+	copy(final[:], data[off:])
+	final[len(data)-off] ^= leafDS
+	final[rate-1] ^= 0x80
+	absorbRate168State1(&s, final[:])
+	s.Permute12()
+
+	extractCVState1(&s, cv)
 }
 
-// leafCVsX2 computes 2 leaf CVs in parallel using P1600x2.
+// leafCVsX2 computes 2 leaf CVs in parallel.
 func leafCVsX2(data []byte, cv []byte) {
-	var s0, s1 [200]byte
-	pos := 0
+	const rate = turboshake.Rate
+
+	var s keccak.State2
+
 	off := 0
-	for off < BlockSize {
-		n := min(turboshake.Rate-pos, BlockSize-off)
-		mem.XORInPlace(s0[pos:pos+n], data[off:off+n])
-		mem.XORInPlace(s1[pos:pos+n], data[BlockSize+off:BlockSize+off+n])
-		pos += n
-		off += n
-		if pos == turboshake.Rate {
-			legacykeccak.P1600x2(&s0, &s1)
-			pos = 0
-		}
+	for off+rate <= BlockSize {
+		absorbRate168State2(
+			&s,
+			data[off:off+rate],
+			data[BlockSize+off:BlockSize+off+rate],
+		)
+		s.Permute12()
+		off += rate
 	}
-	s0[pos] ^= leafDS
-	s0[turboshake.Rate-1] ^= 0x80
-	s1[pos] ^= leafDS
-	s1[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x2(&s0, &s1)
-	copy(cv[:cvSize], s0[:cvSize])
-	copy(cv[cvSize:], s1[:cvSize])
+
+	var final [2 * rate]byte
+	rem := BlockSize - off
+	copy(final[:rem], data[off:off+rem])
+	copy(final[rate:rate+rem], data[BlockSize+off:BlockSize+off+rem])
+	final[rem] ^= leafDS
+	final[rate+rem] ^= leafDS
+	final[rate-1] ^= 0x80
+	final[2*rate-1] ^= 0x80
+	absorbRate168State2(&s, final[:rate], final[rate:])
+	s.Permute12()
+
+	extractCVState2(&s, cv)
 }
 
-// leafCVsX4 computes 4 leaf CVs in parallel using P1600x4.
+// leafCVsX4 computes 4 leaf CVs in parallel.
 func leafCVsX4(data []byte, cv []byte) {
-	var s0, s1, s2, s3 [200]byte
-	pos := 0
+	const rate = turboshake.Rate
+
+	var s keccak.State4
+
 	off := 0
-	for off < BlockSize {
-		n := min(turboshake.Rate-pos, BlockSize-off)
-		mem.XORInPlace(s0[pos:pos+n], data[off:off+n])
-		mem.XORInPlace(s1[pos:pos+n], data[BlockSize+off:BlockSize+off+n])
-		mem.XORInPlace(s2[pos:pos+n], data[2*BlockSize+off:2*BlockSize+off+n])
-		mem.XORInPlace(s3[pos:pos+n], data[3*BlockSize+off:3*BlockSize+off+n])
-		pos += n
-		off += n
-		if pos == turboshake.Rate {
-			legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
-			pos = 0
+	for off+rate <= BlockSize {
+		absorbRate168State4(
+			&s,
+			data[off:off+rate],
+			data[BlockSize+off:BlockSize+off+rate],
+			data[2*BlockSize+off:2*BlockSize+off+rate],
+			data[3*BlockSize+off:3*BlockSize+off+rate],
+		)
+		s.Permute12()
+		off += rate
+	}
+
+	var final [4 * rate]byte
+	rem := BlockSize - off
+	copy(final[:rem], data[off:off+rem])
+	copy(final[rate:rate+rem], data[BlockSize+off:BlockSize+off+rem])
+	copy(final[2*rate:2*rate+rem], data[2*BlockSize+off:2*BlockSize+off+rem])
+	copy(final[3*rate:3*rate+rem], data[3*BlockSize+off:3*BlockSize+off+rem])
+	for inst := range 4 {
+		final[inst*rate+rem] ^= leafDS
+		final[(inst+1)*rate-1] ^= 0x80
+	}
+	absorbRate168State4(
+		&s,
+		final[:rate],
+		final[rate:2*rate],
+		final[2*rate:3*rate],
+		final[3*rate:],
+	)
+	s.Permute12()
+
+	extractCVState4(&s, cv)
+}
+
+// These helpers reinterpret StateN lane-major storage as a flat []uint64.
+// This relies on internal/keccak layout stability for Phase 2 hot paths.
+func stateWords1(s *keccak.State1) []uint64 {
+	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes)
+}
+
+func stateWords2(s *keccak.State2) []uint64 {
+	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes*2)
+}
+
+func stateWords4(s *keccak.State4) []uint64 {
+	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes*4)
+}
+
+func stateWords8(s *keccak.State8) []uint64 {
+	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes*8)
+}
+
+func absorbRate168State1(s *keccak.State1, in []byte) {
+	w := stateWords1(s)
+	for lane := range leafRateWords {
+		base := lane * 8
+		w[lane] ^= binary.LittleEndian.Uint64(in[base : base+8])
+	}
+}
+
+func absorbRate168State2(s *keccak.State2, in0, in1 []byte) {
+	w := stateWords2(s)
+	for lane := range leafRateWords {
+		base := lane * 8
+		slot := lane * 2
+		w[slot] ^= binary.LittleEndian.Uint64(in0[base : base+8])
+		w[slot+1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
+	}
+}
+
+func absorbRate168State4(s *keccak.State4, in0, in1, in2, in3 []byte) {
+	w := stateWords4(s)
+	for lane := range leafRateWords {
+		base := lane * 8
+		slot := lane * 4
+		w[slot] ^= binary.LittleEndian.Uint64(in0[base : base+8])
+		w[slot+1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
+		w[slot+2] ^= binary.LittleEndian.Uint64(in2[base : base+8])
+		w[slot+3] ^= binary.LittleEndian.Uint64(in3[base : base+8])
+	}
+}
+
+func absorbRate168State8(
+	s *keccak.State8,
+	in0, in1, in2, in3, in4, in5, in6, in7 []byte,
+) {
+	w := stateWords8(s)
+	for lane := range leafRateWords {
+		base := lane * 8
+		slot := lane * 8
+		w[slot] ^= binary.LittleEndian.Uint64(in0[base : base+8])
+		w[slot+1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
+		w[slot+2] ^= binary.LittleEndian.Uint64(in2[base : base+8])
+		w[slot+3] ^= binary.LittleEndian.Uint64(in3[base : base+8])
+		w[slot+4] ^= binary.LittleEndian.Uint64(in4[base : base+8])
+		w[slot+5] ^= binary.LittleEndian.Uint64(in5[base : base+8])
+		w[slot+6] ^= binary.LittleEndian.Uint64(in6[base : base+8])
+		w[slot+7] ^= binary.LittleEndian.Uint64(in7[base : base+8])
+	}
+}
+
+func extractCVState1(s *keccak.State1, cv []byte) {
+	w := stateWords1(s)
+	for lane := range cvWords {
+		binary.LittleEndian.PutUint64(cv[lane*8:(lane+1)*8], w[lane])
+	}
+}
+
+func extractCVState2(s *keccak.State2, cv []byte) {
+	w := stateWords2(s)
+	for inst := range 2 {
+		base := inst * cvSize
+		for lane := range cvWords {
+			binary.LittleEndian.PutUint64(cv[base+lane*8:base+(lane+1)*8], w[lane*2+inst])
 		}
 	}
-	s0[pos] ^= leafDS
-	s0[turboshake.Rate-1] ^= 0x80
-	s1[pos] ^= leafDS
-	s1[turboshake.Rate-1] ^= 0x80
-	s2[pos] ^= leafDS
-	s2[turboshake.Rate-1] ^= 0x80
-	s3[pos] ^= leafDS
-	s3[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
-	copy(cv[:cvSize], s0[:cvSize])
-	copy(cv[cvSize:2*cvSize], s1[:cvSize])
-	copy(cv[2*cvSize:3*cvSize], s2[:cvSize])
-	copy(cv[3*cvSize:], s3[:cvSize])
+}
+
+func extractCVState4(s *keccak.State4, cv []byte) {
+	w := stateWords4(s)
+	for inst := range 4 {
+		base := inst * cvSize
+		for lane := range cvWords {
+			binary.LittleEndian.PutUint64(cv[base+lane*8:base+(lane+1)*8], w[lane*4+inst])
+		}
+	}
+}
+
+func extractCVState8(s *keccak.State8, cv []byte) {
+	w := stateWords8(s)
+	for inst := range 8 {
+		base := inst * cvSize
+		for lane := range cvWords {
+			binary.LittleEndian.PutUint64(cv[base+lane*8:base+(lane+1)*8], w[lane*8+inst])
+		}
+	}
+}
+
+// leafCVsX8 computes 8 leaf CVs in parallel.
+func leafCVsX8(data []byte, cv []byte) {
+	const rate = turboshake.Rate
+
+	var s keccak.State8
+
+	off := 0
+	for off+rate <= BlockSize {
+		absorbRate168State8(
+			&s,
+			data[off:off+rate],
+			data[BlockSize+off:BlockSize+off+rate],
+			data[2*BlockSize+off:2*BlockSize+off+rate],
+			data[3*BlockSize+off:3*BlockSize+off+rate],
+			data[4*BlockSize+off:4*BlockSize+off+rate],
+			data[5*BlockSize+off:5*BlockSize+off+rate],
+			data[6*BlockSize+off:6*BlockSize+off+rate],
+			data[7*BlockSize+off:7*BlockSize+off+rate],
+		)
+		s.Permute12()
+		off += rate
+	}
+
+	var final [8 * rate]byte
+	rem := BlockSize - off
+	copy(final[:rem], data[off:off+rem])
+	copy(final[rate:rate+rem], data[BlockSize+off:BlockSize+off+rem])
+	copy(final[2*rate:2*rate+rem], data[2*BlockSize+off:2*BlockSize+off+rem])
+	copy(final[3*rate:3*rate+rem], data[3*BlockSize+off:3*BlockSize+off+rem])
+	copy(final[4*rate:4*rate+rem], data[4*BlockSize+off:4*BlockSize+off+rem])
+	copy(final[5*rate:5*rate+rem], data[5*BlockSize+off:5*BlockSize+off+rem])
+	copy(final[6*rate:6*rate+rem], data[6*BlockSize+off:6*BlockSize+off+rem])
+	copy(final[7*rate:7*rate+rem], data[7*BlockSize+off:7*BlockSize+off+rem])
+	for inst := range 8 {
+		final[inst*rate+rem] ^= leafDS
+		final[(inst+1)*rate-1] ^= 0x80
+	}
+	absorbRate168State8(
+		&s,
+		final[:rate],
+		final[rate:2*rate],
+		final[2*rate:3*rate],
+		final[3*rate:4*rate],
+		final[4*rate:5*rate],
+		final[5*rate:6*rate],
+		final[6*rate:7*rate],
+		final[7*rate:],
+	)
+	s.Permute12()
+
+	extractCVState8(&s, cv)
 }
