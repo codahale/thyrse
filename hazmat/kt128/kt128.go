@@ -296,37 +296,39 @@ func leafStateX1(data []byte, s *keccak.State1) {
 // leafStateX2 computes 2 leaf states in parallel.
 func leafStateX2(data []byte, s *keccak.State2) {
 	s.Reset()
-	data0 := data[:BlockSize]
-	data1 := data[BlockSize : 2*BlockSize]
-	off := s.FastLoopAbsorb168(data0, data1)
-	s.AbsorbFinal(data0[off:], data1[off:], leafDS)
+	off := s.FastLoopAbsorb168(data, BlockSize)
+	s.AbsorbFinal(data[off:BlockSize], data[BlockSize+off:2*BlockSize], leafDS)
 	s.Permute12()
 }
 
 // leafStateX4 computes 4 leaf states in parallel.
 func leafStateX4(data []byte, s *keccak.State4) {
 	s.Reset()
-	data0 := data[:BlockSize]
-	data1 := data[BlockSize : 2*BlockSize]
-	data2 := data[2*BlockSize : 3*BlockSize]
-	data3 := data[3*BlockSize : 4*BlockSize]
-	off := s.FastLoopAbsorb168(data0, data1, data2, data3)
-	s.AbsorbFinal(data0[off:], data1[off:], data2[off:], data3[off:], leafDS)
+	off := s.FastLoopAbsorb168(data, BlockSize)
+	s.AbsorbFinal(
+		data[off:BlockSize],
+		data[BlockSize+off:2*BlockSize],
+		data[2*BlockSize+off:3*BlockSize],
+		data[3*BlockSize+off:4*BlockSize],
+		leafDS,
+	)
 	s.Permute12()
 }
 
 // leafStateX8 computes 8 leaf states in parallel.
 func leafStateX8(data []byte, s *keccak.State8) {
 	s.Reset()
-	data0 := data[:BlockSize]
-	data1 := data[BlockSize : 2*BlockSize]
-	data2 := data[2*BlockSize : 3*BlockSize]
-	data3 := data[3*BlockSize : 4*BlockSize]
-	data4 := data[4*BlockSize : 5*BlockSize]
-	data5 := data[5*BlockSize : 6*BlockSize]
-	data6 := data[6*BlockSize : 7*BlockSize]
-	data7 := data[7*BlockSize : 8*BlockSize]
-	off := s.FastLoopAbsorb168(data0, data1, data2, data3, data4, data5, data6, data7)
-	s.AbsorbFinal(data0[off:], data1[off:], data2[off:], data3[off:], data4[off:], data5[off:], data6[off:], data7[off:], leafDS)
+	off := s.FastLoopAbsorb168(data, BlockSize)
+	s.AbsorbFinal(
+		data[off:BlockSize],
+		data[BlockSize+off:2*BlockSize],
+		data[2*BlockSize+off:3*BlockSize],
+		data[3*BlockSize+off:4*BlockSize],
+		data[4*BlockSize+off:5*BlockSize],
+		data[5*BlockSize+off:6*BlockSize],
+		data[6*BlockSize+off:7*BlockSize],
+		data[7*BlockSize+off:8*BlockSize],
+		leafDS,
+	)
 	s.Permute12()
 }

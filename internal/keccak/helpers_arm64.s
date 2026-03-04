@@ -141,12 +141,13 @@
 	VLD1	(IN), [V25.D1]; ADD $8, IN; VEOR V25.B8, V19.B8, V19.B8; \
 	VLD1	(IN), [V25.D1]; ADD $8, IN; VEOR V25.B8, V20.B8, V20.B8
 
-// func fastLoopAbsorb168x2(s *State2, in0, in1 *byte, n int)
+// func fastLoopAbsorb168x2(s *State2, in *byte, stride, n int)
 TEXT ·fastLoopAbsorb168x2(SB), NOSPLIT, $0-32
 	MOVD	s+0(FP), R0
-	MOVD	in0+8(FP), R2
-	MOVD	in1+16(FP), R3
+	MOVD	in+8(FP), R2
+	MOVD	stride+16(FP), R5
 	MOVD	n+24(FP), R4
+	ADD	R2, R5, R3   // R3 = in + stride
 
 	// Load lane-major state (25 lanes × 16 bytes = 400 bytes).
 	VLD1.P	32(R0), [V0.D2, V1.D2]
@@ -192,14 +193,17 @@ loop_x2:
 
 	RET
 
-// func fastLoopAbsorb168x4(s *State4, in0, in1, in2, in3 *byte, n int)
-TEXT ·fastLoopAbsorb168x4(SB), NOSPLIT, $32-48
+// func fastLoopAbsorb168x4(s *State4, in *byte, stride, n int)
+TEXT ·fastLoopAbsorb168x4(SB), NOSPLIT, $32-32
 	MOVD	s+0(FP), R0
-	MOVD	in0+8(FP), R2
-	MOVD	in1+16(FP), R3
-	MOVD	in2+24(FP), R5
-	MOVD	in3+32(FP), R6
-	MOVD	n+40(FP), R4
+	MOVD	in+8(FP), R2
+	MOVD	stride+16(FP), R7
+	MOVD	n+24(FP), R4
+
+	// Compute 4 pointers: R2=in, R3=in+stride, R5=in+2*stride, R6=in+3*stride.
+	ADD	R2, R7, R3
+	ADD	R7, R3, R5
+	ADD	R7, R5, R6
 
 	// Save in2/in3 and n to stack frame for use between pairs.
 	MOVD	R5, 0(RSP)
@@ -246,26 +250,27 @@ loop_x4_23:
 
 	RET
 
-// func fastLoopAbsorb168x8(s *State8, in0, in1, in2, in3, in4, in5, in6, in7 *byte, n int)
-TEXT ·fastLoopAbsorb168x8(SB), NOSPLIT, $64-80
+// func fastLoopAbsorb168x8(s *State8, in *byte, stride, n int)
+TEXT ·fastLoopAbsorb168x8(SB), NOSPLIT, $64-32
 	MOVD	s+0(FP), R0
+	MOVD	in+8(FP), R2
+	MOVD	stride+16(FP), R7
+	MOVD	n+24(FP), R4
 
-	// Save all input pointers and n to stack.
-	MOVD	in0+8(FP), R2
-	MOVD	in1+16(FP), R3
-	MOVD	in2+24(FP), R5
-	MOVD	in3+32(FP), R6
-	MOVD	in4+40(FP), R7
+	// Compute 8 pointers from base + i*stride.
+	ADD	R2, R7, R3   // in + stride
+	ADD	R7, R3, R5   // in + 2*stride
+	ADD	R7, R5, R6   // in + 3*stride
 	MOVD	R5, 0(RSP)
 	MOVD	R6, 8(RSP)
-	MOVD	R7, 16(RSP)
-	MOVD	in5+48(FP), R5
-	MOVD	in6+56(FP), R6
-	MOVD	in7+64(FP), R7
+	ADD	R7, R6, R5   // in + 4*stride
+	MOVD	R5, 16(RSP)
+	ADD	R7, R5, R5   // in + 5*stride
 	MOVD	R5, 24(RSP)
-	MOVD	R6, 32(RSP)
-	MOVD	R7, 40(RSP)
-	MOVD	n+72(FP), R4
+	ADD	R7, R5, R5   // in + 6*stride
+	MOVD	R5, 32(RSP)
+	ADD	R7, R5, R5   // in + 7*stride
+	MOVD	R5, 40(RSP)
 	MOVD	R4, 48(RSP)
 
 	// Pair (0,1): offset 0, stride 64.

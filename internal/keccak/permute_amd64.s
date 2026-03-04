@@ -6,6 +6,7 @@
 
 
 #include "textflag.h"
+#include "keccak_amd64_avx512.h"
 
 #define KECCAK_ROUND(S, D, RC) \
 	/* Prepare round */ \
@@ -506,7 +507,7 @@ TEXT ·p1600x2SSE2(SB), $800-16
 	// Set up loop
 	LEAQ	0(SP), R8                          // source = buf A
 	LEAQ	400(SP), R9                        // dest = buf B
-	LEAQ	round_consts_2x<>+192(SB), R11     // RC start (round 12)
+	LEAQ	round_consts_2x+192(SB), R11     // RC start (round 12)
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -879,192 +880,63 @@ round_loop_lane2:
 
 	RET
 
-DATA	round_consts_2x<>+0x000(SB)/8, $0x0000000000000001
-DATA	round_consts_2x<>+0x008(SB)/8, $0x0000000000000001
-DATA	round_consts_2x<>+0x010(SB)/8, $0x0000000000008082
-DATA	round_consts_2x<>+0x018(SB)/8, $0x0000000000008082
-DATA	round_consts_2x<>+0x020(SB)/8, $0x800000000000808a
-DATA	round_consts_2x<>+0x028(SB)/8, $0x800000000000808a
-DATA	round_consts_2x<>+0x030(SB)/8, $0x8000000080008000
-DATA	round_consts_2x<>+0x038(SB)/8, $0x8000000080008000
-DATA	round_consts_2x<>+0x040(SB)/8, $0x000000000000808b
-DATA	round_consts_2x<>+0x048(SB)/8, $0x000000000000808b
-DATA	round_consts_2x<>+0x050(SB)/8, $0x0000000080000001
-DATA	round_consts_2x<>+0x058(SB)/8, $0x0000000080000001
-DATA	round_consts_2x<>+0x060(SB)/8, $0x8000000080008081
-DATA	round_consts_2x<>+0x068(SB)/8, $0x8000000080008081
-DATA	round_consts_2x<>+0x070(SB)/8, $0x8000000000008009
-DATA	round_consts_2x<>+0x078(SB)/8, $0x8000000000008009
-DATA	round_consts_2x<>+0x080(SB)/8, $0x000000000000008a
-DATA	round_consts_2x<>+0x088(SB)/8, $0x000000000000008a
-DATA	round_consts_2x<>+0x090(SB)/8, $0x0000000000000088
-DATA	round_consts_2x<>+0x098(SB)/8, $0x0000000000000088
-DATA	round_consts_2x<>+0x0A0(SB)/8, $0x0000000080008009
-DATA	round_consts_2x<>+0x0A8(SB)/8, $0x0000000080008009
-DATA	round_consts_2x<>+0x0B0(SB)/8, $0x000000008000000a
-DATA	round_consts_2x<>+0x0B8(SB)/8, $0x000000008000000a
-DATA	round_consts_2x<>+0x0C0(SB)/8, $0x000000008000808b
-DATA	round_consts_2x<>+0x0C8(SB)/8, $0x000000008000808b
-DATA	round_consts_2x<>+0x0D0(SB)/8, $0x800000000000008b
-DATA	round_consts_2x<>+0x0D8(SB)/8, $0x800000000000008b
-DATA	round_consts_2x<>+0x0E0(SB)/8, $0x8000000000008089
-DATA	round_consts_2x<>+0x0E8(SB)/8, $0x8000000000008089
-DATA	round_consts_2x<>+0x0F0(SB)/8, $0x8000000000008003
-DATA	round_consts_2x<>+0x0F8(SB)/8, $0x8000000000008003
-DATA	round_consts_2x<>+0x100(SB)/8, $0x8000000000008002
-DATA	round_consts_2x<>+0x108(SB)/8, $0x8000000000008002
-DATA	round_consts_2x<>+0x110(SB)/8, $0x8000000000000080
-DATA	round_consts_2x<>+0x118(SB)/8, $0x8000000000000080
-DATA	round_consts_2x<>+0x120(SB)/8, $0x000000000000800a
-DATA	round_consts_2x<>+0x128(SB)/8, $0x000000000000800a
-DATA	round_consts_2x<>+0x130(SB)/8, $0x800000008000000a
-DATA	round_consts_2x<>+0x138(SB)/8, $0x800000008000000a
-DATA	round_consts_2x<>+0x140(SB)/8, $0x8000000080008081
-DATA	round_consts_2x<>+0x148(SB)/8, $0x8000000080008081
-DATA	round_consts_2x<>+0x150(SB)/8, $0x8000000000008080
-DATA	round_consts_2x<>+0x158(SB)/8, $0x8000000000008080
-DATA	round_consts_2x<>+0x160(SB)/8, $0x0000000080000001
-DATA	round_consts_2x<>+0x168(SB)/8, $0x0000000080000001
-DATA	round_consts_2x<>+0x170(SB)/8, $0x8000000080008008
-DATA	round_consts_2x<>+0x178(SB)/8, $0x8000000080008008
-GLOBL	round_consts_2x<>(SB), NOPTR|RODATA, $384
+DATA	round_consts_2x+0x000(SB)/8, $0x0000000000000001
+DATA	round_consts_2x+0x008(SB)/8, $0x0000000000000001
+DATA	round_consts_2x+0x010(SB)/8, $0x0000000000008082
+DATA	round_consts_2x+0x018(SB)/8, $0x0000000000008082
+DATA	round_consts_2x+0x020(SB)/8, $0x800000000000808a
+DATA	round_consts_2x+0x028(SB)/8, $0x800000000000808a
+DATA	round_consts_2x+0x030(SB)/8, $0x8000000080008000
+DATA	round_consts_2x+0x038(SB)/8, $0x8000000080008000
+DATA	round_consts_2x+0x040(SB)/8, $0x000000000000808b
+DATA	round_consts_2x+0x048(SB)/8, $0x000000000000808b
+DATA	round_consts_2x+0x050(SB)/8, $0x0000000080000001
+DATA	round_consts_2x+0x058(SB)/8, $0x0000000080000001
+DATA	round_consts_2x+0x060(SB)/8, $0x8000000080008081
+DATA	round_consts_2x+0x068(SB)/8, $0x8000000080008081
+DATA	round_consts_2x+0x070(SB)/8, $0x8000000000008009
+DATA	round_consts_2x+0x078(SB)/8, $0x8000000000008009
+DATA	round_consts_2x+0x080(SB)/8, $0x000000000000008a
+DATA	round_consts_2x+0x088(SB)/8, $0x000000000000008a
+DATA	round_consts_2x+0x090(SB)/8, $0x0000000000000088
+DATA	round_consts_2x+0x098(SB)/8, $0x0000000000000088
+DATA	round_consts_2x+0x0A0(SB)/8, $0x0000000080008009
+DATA	round_consts_2x+0x0A8(SB)/8, $0x0000000080008009
+DATA	round_consts_2x+0x0B0(SB)/8, $0x000000008000000a
+DATA	round_consts_2x+0x0B8(SB)/8, $0x000000008000000a
+DATA	round_consts_2x+0x0C0(SB)/8, $0x000000008000808b
+DATA	round_consts_2x+0x0C8(SB)/8, $0x000000008000808b
+DATA	round_consts_2x+0x0D0(SB)/8, $0x800000000000008b
+DATA	round_consts_2x+0x0D8(SB)/8, $0x800000000000008b
+DATA	round_consts_2x+0x0E0(SB)/8, $0x8000000000008089
+DATA	round_consts_2x+0x0E8(SB)/8, $0x8000000000008089
+DATA	round_consts_2x+0x0F0(SB)/8, $0x8000000000008003
+DATA	round_consts_2x+0x0F8(SB)/8, $0x8000000000008003
+DATA	round_consts_2x+0x100(SB)/8, $0x8000000000008002
+DATA	round_consts_2x+0x108(SB)/8, $0x8000000000008002
+DATA	round_consts_2x+0x110(SB)/8, $0x8000000000000080
+DATA	round_consts_2x+0x118(SB)/8, $0x8000000000000080
+DATA	round_consts_2x+0x120(SB)/8, $0x000000000000800a
+DATA	round_consts_2x+0x128(SB)/8, $0x000000000000800a
+DATA	round_consts_2x+0x130(SB)/8, $0x800000008000000a
+DATA	round_consts_2x+0x138(SB)/8, $0x800000008000000a
+DATA	round_consts_2x+0x140(SB)/8, $0x8000000080008081
+DATA	round_consts_2x+0x148(SB)/8, $0x8000000080008081
+DATA	round_consts_2x+0x150(SB)/8, $0x8000000000008080
+DATA	round_consts_2x+0x158(SB)/8, $0x8000000000008080
+DATA	round_consts_2x+0x160(SB)/8, $0x0000000080000001
+DATA	round_consts_2x+0x168(SB)/8, $0x0000000080000001
+DATA	round_consts_2x+0x170(SB)/8, $0x8000000080008008
+DATA	round_consts_2x+0x178(SB)/8, $0x8000000080008008
+GLOBL	round_consts_2x(SB), NOPTR|RODATA, $384
 
 // 4-lane parallel implementations (AVX-512 and AVX2)
-
-#define ROT64_AVX512_8X(reg, amount) \
-	VPROLQ	$amount, reg, reg
-
-// XOR five lanes into dst: dst = a ^ b ^ c ^ d ^ e.
-#define XOR5_AVX512_8X(dst, a, b, c, d, e) \
-	VMOVDQU64	a, dst; \
-	VPTERNLOGQ	$0x96, c, b, dst; \
-	VPTERNLOGQ	$0x96, e, d, dst
-
-// Theta: compute D[x] terms and spill to stack scratch for subsequent row transforms.
-#define X8_THETA_AVX512() \
-	XOR5_AVX512_8X(Z25, Z0, Z5, Z10, Z15, Z20); \
-	XOR5_AVX512_8X(Z26, Z1, Z6, Z11, Z16, Z21); \
-	XOR5_AVX512_8X(Z27, Z2, Z7, Z12, Z17, Z22); \
-	XOR5_AVX512_8X(Z28, Z3, Z8, Z13, Z18, Z23); \
-	XOR5_AVX512_8X(Z29, Z4, Z9, Z14, Z19, Z24); \
-	VMOVDQU64	Z26, Z30; \
-	ROT64_AVX512_8X(Z30, 1); \
-	VPXORQ	Z29, Z30, Z30; \
-	VMOVDQU64	Z30, 0(SP); \
-	VMOVDQU64	Z27, Z30; \
-	ROT64_AVX512_8X(Z30, 1); \
-	VPXORQ	Z25, Z30, Z30; \
-	VMOVDQU64	Z30, 64(SP); \
-	VMOVDQU64	Z28, Z30; \
-	ROT64_AVX512_8X(Z30, 1); \
-	VPXORQ	Z26, Z30, Z30; \
-	VMOVDQU64	Z30, 128(SP); \
-	VMOVDQU64	Z29, Z30; \
-	ROT64_AVX512_8X(Z30, 1); \
-	VPXORQ	Z27, Z30, Z30; \
-	VMOVDQU64	Z30, 192(SP); \
-	VMOVDQU64	Z25, Z30; \
-	ROT64_AVX512_8X(Z30, 1); \
-	VPXORQ	Z28, Z30, Z30; \
-	VMOVDQU64	Z30, 256(SP)
-
-// Theta/Rho/Pi/Chi row transform with caller-provided Chi input mapping (A..E).
-#define X8_TRPC_MAP_AVX512(L1, L2, L3, L4, L5, R1, R2, R3, R4, R5, A, B, C, D, E) \
-	VMOVDQU64	L1, Z25; \
-	VPXORQ	0(SP), Z25, Z25; \
-	VMOVDQU64	L2, Z26; \
-	VPXORQ	64(SP), Z26, Z26; \
-	VMOVDQU64	L3, Z27; \
-	VPXORQ	128(SP), Z27, Z27; \
-	VMOVDQU64	L4, Z28; \
-	VPXORQ	192(SP), Z28, Z28; \
-	VMOVDQU64	L5, Z29; \
-	VPXORQ	256(SP), Z29, Z29; \
-	ROT64_AVX512_8X(Z25, R1); \
-	ROT64_AVX512_8X(Z26, R2); \
-	ROT64_AVX512_8X(Z27, R3); \
-	ROT64_AVX512_8X(Z28, R4); \
-	ROT64_AVX512_8X(Z29, R5); \
-	VMOVDQU64	A, Z30; \
-	VMOVDQU64	B, Z31; \
-	VPTERNLOGQ	$0xD2, C, B, A; \
-	VPTERNLOGQ	$0xD2, D, C, B; \
-	VPTERNLOGQ	$0xD2, E, D, C; \
-	VPTERNLOGQ	$0xD2, Z30, E, D; \
-	VPTERNLOGQ	$0xD2, Z31, Z30, E; \
-	VMOVDQU64	A, L1; \
-	VMOVDQU64	B, L2; \
-	VMOVDQU64	C, L3; \
-	VMOVDQU64	D, L4; \
-	VMOVDQU64	E, L5
-
-// Same as X8_TRPC_MAP_AVX512, but xor round constant into lane A after Chi (Iota).
-#define X8_TRPC_IOTA_MAP_AVX512(L1, L2, L3, L4, L5, R1, R2, R3, R4, R5, A, B, C, D, E, RC_OFF) \
-	VMOVDQU64	L1, Z25; \
-	VPXORQ	0(SP), Z25, Z25; \
-	VMOVDQU64	L2, Z26; \
-	VPXORQ	64(SP), Z26, Z26; \
-	VMOVDQU64	L3, Z27; \
-	VPXORQ	128(SP), Z27, Z27; \
-	VMOVDQU64	L4, Z28; \
-	VPXORQ	192(SP), Z28, Z28; \
-	VMOVDQU64	L5, Z29; \
-	VPXORQ	256(SP), Z29, Z29; \
-	ROT64_AVX512_8X(Z25, R1); \
-	ROT64_AVX512_8X(Z26, R2); \
-	ROT64_AVX512_8X(Z27, R3); \
-	ROT64_AVX512_8X(Z28, R4); \
-	ROT64_AVX512_8X(Z29, R5); \
-	VMOVDQU64	A, Z30; \
-	VMOVDQU64	B, Z31; \
-	VPTERNLOGQ	$0xD2, C, B, A; \
-	VPTERNLOGQ	$0xD2, D, C, B; \
-	VPTERNLOGQ	$0xD2, E, D, C; \
-	VPTERNLOGQ	$0xD2, Z30, E, D; \
-	VPTERNLOGQ	$0xD2, Z31, Z30, E; \
-	VPBROADCASTQ	RC_OFF(R11), Z30; \
-	VPXORQ	Z30, A, A; \
-	VMOVDQU64	A, L1; \
-	VMOVDQU64	B, L2; \
-	VMOVDQU64	C, L3; \
-	VMOVDQU64	D, L4; \
-	VMOVDQU64	E, L5
-
-// Four unrolled rounds in the exact XKCP lane schedule.
-#define X8_4ROUNDS_AVX512(off0, off1, off2, off3) \
-	X8_THETA_AVX512(); \
-	X8_TRPC_IOTA_MAP_AVX512(Z0, Z6, Z12, Z18, Z24, 0, 44, 43, 21, 14, Z25, Z26, Z27, Z28, Z29, off0); \
-	X8_TRPC_MAP_AVX512(Z10, Z16, Z22, Z3, Z9, 3, 45, 61, 28, 20, Z28, Z29, Z25, Z26, Z27); \
-	X8_TRPC_MAP_AVX512(Z20, Z1, Z7, Z13, Z19, 18, 1, 6, 25, 8, Z26, Z27, Z28, Z29, Z25); \
-	X8_TRPC_MAP_AVX512(Z5, Z11, Z17, Z23, Z4, 36, 10, 15, 56, 27, Z29, Z25, Z26, Z27, Z28); \
-	X8_TRPC_MAP_AVX512(Z15, Z21, Z2, Z8, Z14, 41, 2, 62, 55, 39, Z27, Z28, Z29, Z25, Z26); \
-	\
-	X8_THETA_AVX512(); \
-	X8_TRPC_IOTA_MAP_AVX512(Z0, Z16, Z7, Z23, Z14, 0, 44, 43, 21, 14, Z25, Z26, Z27, Z28, Z29, off1); \
-	X8_TRPC_MAP_AVX512(Z20, Z11, Z2, Z18, Z9, 3, 45, 61, 28, 20, Z28, Z29, Z25, Z26, Z27); \
-	X8_TRPC_MAP_AVX512(Z15, Z6, Z22, Z13, Z4, 18, 1, 6, 25, 8, Z26, Z27, Z28, Z29, Z25); \
-	X8_TRPC_MAP_AVX512(Z10, Z1, Z17, Z8, Z24, 36, 10, 15, 56, 27, Z29, Z25, Z26, Z27, Z28); \
-	X8_TRPC_MAP_AVX512(Z5, Z21, Z12, Z3, Z19, 41, 2, 62, 55, 39, Z27, Z28, Z29, Z25, Z26); \
-	\
-	X8_THETA_AVX512(); \
-	X8_TRPC_IOTA_MAP_AVX512(Z0, Z11, Z22, Z8, Z19, 0, 44, 43, 21, 14, Z25, Z26, Z27, Z28, Z29, off2); \
-	X8_TRPC_MAP_AVX512(Z15, Z1, Z12, Z23, Z9, 3, 45, 61, 28, 20, Z28, Z29, Z25, Z26, Z27); \
-	X8_TRPC_MAP_AVX512(Z5, Z16, Z2, Z13, Z24, 18, 1, 6, 25, 8, Z26, Z27, Z28, Z29, Z25); \
-	X8_TRPC_MAP_AVX512(Z20, Z6, Z17, Z3, Z14, 36, 10, 15, 56, 27, Z29, Z25, Z26, Z27, Z28); \
-	X8_TRPC_MAP_AVX512(Z10, Z21, Z7, Z18, Z4, 41, 2, 62, 55, 39, Z27, Z28, Z29, Z25, Z26); \
-	\
-	X8_THETA_AVX512(); \
-	X8_TRPC_IOTA_MAP_AVX512(Z0, Z1, Z2, Z3, Z4, 0, 44, 43, 21, 14, Z25, Z26, Z27, Z28, Z29, off3); \
-	X8_TRPC_MAP_AVX512(Z5, Z6, Z7, Z8, Z9, 3, 45, 61, 28, 20, Z28, Z29, Z25, Z26, Z27); \
-	X8_TRPC_MAP_AVX512(Z10, Z11, Z12, Z13, Z14, 18, 1, 6, 25, 8, Z26, Z27, Z28, Z29, Z25); \
-	X8_TRPC_MAP_AVX512(Z15, Z16, Z17, Z18, Z19, 36, 10, 15, 56, 27, Z29, Z25, Z26, Z27, Z28); \
-	X8_TRPC_MAP_AVX512(Z20, Z21, Z22, Z23, Z24, 41, 2, 62, 55, 39, Z27, Z28, Z29, Z25, Z26)
 
 // func p1600x8AVX512State(state *[1600]byte)
 // state is interleaved as 25 zmm lanes, each containing 8 uint64 words.
 TEXT ·p1600x8AVX512State(SB), $320-8
 	MOVQ	state+0(FP), AX
-	LEAQ	round_consts_2x<>+192(SB), R11
+	LEAQ	round_consts_2x+192(SB), R11
 	VMOVDQU64	0*64(AX), Z0
 	VMOVDQU64	1*64(AX), Z1
 	VMOVDQU64	2*64(AX), Z2
@@ -2269,7 +2141,7 @@ TEXT ·p1600x2Lane(SB), $800-8
 	// Set up loop
 	LEAQ	0(SP), R8                          // source = buf A
 	LEAQ	400(SP), R9                        // dest = buf B
-	LEAQ	round_consts_2x<>+192(SB), R11     // RC start (round 12)
+	LEAQ	round_consts_2x+192(SB), R11     // RC start (round 12)
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -2622,7 +2494,7 @@ TEXT ·p1600x2LaneAVX512(SB), $800-8
 	VMOVDQU	X0, 24*16(SP)
 	LEAQ	0(SP), R8
 	LEAQ	400(SP), R9
-	LEAQ	round_consts_2x<>+192(SB), R11
+	LEAQ	round_consts_2x+192(SB), R11
 	MOVQ	$12, R10
 round_loop_lane2avx512:
 	VMOVDQU	0*16(R8), X0

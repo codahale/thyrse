@@ -58,15 +58,16 @@ func (s *State1) AbsorbFinal(tail []byte, ds byte) {
 func (s *State2) Reset() { clear(s.a[:]) }
 
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
-func (s *State2) FastLoopAbsorb168(in0, in1 []byte) int {
-	n := min(len(in0), len(in1))
+// Instance i reads from in[i*stride:]. Returns bytes absorbed per instance.
+func (s *State2) FastLoopAbsorb168(in []byte, stride int) int {
+	n := max(len(in)-stride, 0) // last instance starts at in[stride:]
 	n = (n / rate) * rate
-	if n > 0 && fastLoopAbsorb168x2Arch(s, in0[:n], in1[:n]) {
+	if n > 0 && fastLoopAbsorb168x2Arch(s, in, stride, n) {
 		return n
 	}
 	for off := 0; off < n; off += rate {
-		p0 := (*[rate]byte)(in0[off : off+rate])
-		p1 := (*[rate]byte)(in1[off : off+rate])
+		p0 := (*[rate]byte)(in[off : off+rate])
+		p1 := (*[rate]byte)(in[stride+off : stride+off+rate])
 		for lane := range rate >> 3 {
 			base := lane << 3
 			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
@@ -107,17 +108,18 @@ func (s *State2) AbsorbFinal(tail0, tail1 []byte, ds byte) {
 func (s *State4) Reset() { clear(s.a[:]) }
 
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
-func (s *State4) FastLoopAbsorb168(in0, in1, in2, in3 []byte) int {
-	n := min(min(len(in0), len(in1)), min(len(in2), len(in3)))
+// Instance i reads from in[i*stride:]. Returns bytes absorbed per instance.
+func (s *State4) FastLoopAbsorb168(in []byte, stride int) int {
+	n := max(len(in)-3*stride, 0) // last instance starts at in[3*stride:]
 	n = (n / rate) * rate
-	if n > 0 && fastLoopAbsorb168x4Arch(s, in0[:n], in1[:n], in2[:n], in3[:n]) {
+	if n > 0 && fastLoopAbsorb168x4Arch(s, in, stride, n) {
 		return n
 	}
 	for off := 0; off < n; off += rate {
-		p0 := (*[rate]byte)(in0[off : off+rate])
-		p1 := (*[rate]byte)(in1[off : off+rate])
-		p2 := (*[rate]byte)(in2[off : off+rate])
-		p3 := (*[rate]byte)(in3[off : off+rate])
+		p0 := (*[rate]byte)(in[off : off+rate])
+		p1 := (*[rate]byte)(in[stride+off : stride+off+rate])
+		p2 := (*[rate]byte)(in[2*stride+off : 2*stride+off+rate])
+		p3 := (*[rate]byte)(in[3*stride+off : 3*stride+off+rate])
 		for lane := range rate >> 3 {
 			base := lane << 3
 			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
@@ -168,24 +170,22 @@ func (s *State4) AbsorbFinal(tail0, tail1, tail2, tail3 []byte, ds byte) {
 func (s *State8) Reset() { clear(s.a[:]) }
 
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
-func (s *State8) FastLoopAbsorb168(in0, in1, in2, in3, in4, in5, in6, in7 []byte) int {
-	n := min(
-		min(min(len(in0), len(in1)), min(len(in2), len(in3))),
-		min(min(len(in4), len(in5)), min(len(in6), len(in7))),
-	)
+// Instance i reads from in[i*stride:]. Returns bytes absorbed per instance.
+func (s *State8) FastLoopAbsorb168(in []byte, stride int) int {
+	n := max(len(in)-7*stride, 0) // last instance starts at in[7*stride:]
 	n = (n / rate) * rate
-	if n > 0 && fastLoopAbsorb168x8Arch(s, in0[:n], in1[:n], in2[:n], in3[:n], in4[:n], in5[:n], in6[:n], in7[:n]) {
+	if n > 0 && fastLoopAbsorb168x8Arch(s, in, stride, n) {
 		return n
 	}
 	for off := 0; off < n; off += rate {
-		p0 := (*[rate]byte)(in0[off : off+rate])
-		p1 := (*[rate]byte)(in1[off : off+rate])
-		p2 := (*[rate]byte)(in2[off : off+rate])
-		p3 := (*[rate]byte)(in3[off : off+rate])
-		p4 := (*[rate]byte)(in4[off : off+rate])
-		p5 := (*[rate]byte)(in5[off : off+rate])
-		p6 := (*[rate]byte)(in6[off : off+rate])
-		p7 := (*[rate]byte)(in7[off : off+rate])
+		p0 := (*[rate]byte)(in[off : off+rate])
+		p1 := (*[rate]byte)(in[stride+off : stride+off+rate])
+		p2 := (*[rate]byte)(in[2*stride+off : 2*stride+off+rate])
+		p3 := (*[rate]byte)(in[3*stride+off : 3*stride+off+rate])
+		p4 := (*[rate]byte)(in[4*stride+off : 4*stride+off+rate])
+		p5 := (*[rate]byte)(in[5*stride+off : 5*stride+off+rate])
+		p6 := (*[rate]byte)(in[6*stride+off : 6*stride+off+rate])
+		p7 := (*[rate]byte)(in[7*stride+off : 7*stride+off+rate])
 		for lane := range rate >> 3 {
 			base := lane << 3
 			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])

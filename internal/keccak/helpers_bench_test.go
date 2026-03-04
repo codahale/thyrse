@@ -34,30 +34,33 @@ func BenchmarkFastLoopAbsorb168(b *testing.B) {
 			}
 		})
 
+		in2 := makeInput(2 * size.n)
 		b.Run("x2/"+size.name, func(b *testing.B) {
 			var s State2
 			b.SetBytes(int64(2 * size.n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopAbsorb168(in, in)
+				s.FastLoopAbsorb168(in2, size.n)
 			}
 		})
 
+		in4 := makeInput(4 * size.n)
 		b.Run("x4/"+size.name, func(b *testing.B) {
 			var s State4
 			b.SetBytes(int64(4 * size.n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopAbsorb168(in, in, in, in)
+				s.FastLoopAbsorb168(in4, size.n)
 			}
 		})
 
+		in8 := makeInput(8 * size.n)
 		b.Run("x8/"+size.name, func(b *testing.B) {
 			var s State8
 			b.SetBytes(int64(8 * size.n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopAbsorb168(in, in, in, in, in, in, in, in)
+				s.FastLoopAbsorb168(in8, size.n)
 			}
 		})
 	}
