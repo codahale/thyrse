@@ -74,78 +74,117 @@ func permute12x8SSE2FallbackAMD64(s *State8) {
 	}
 }
 
-func permute2ImplAMD64() func(*State2) {
+func choosePermute2ImplAMD64() permute2Impl {
 	switch forcedBackend {
 	case "amd64_avx512":
-		return p1600x2LaneAVX512
+		return permute2AMD64AVX512
 	case "amd64_avx2", "amd64_sse2":
-		return p1600x2Lane
+		return permute2AMD64Lane
 	default:
 		if cpuid.CPU.Has(cpuid.AVX512F) && cpuid.CPU.Has(cpuid.AVX512VL) {
-			return p1600x2LaneAVX512
+			return permute2AMD64AVX512
 		}
-		return p1600x2Lane
+		return permute2AMD64Lane
 	}
 }
 
-func permute4ImplAMD64() func(*State4) {
+func choosePermute4ImplAMD64() permute4Impl {
 	switch forcedBackend {
 	case "amd64_avx512":
-		return p1600x4LaneAVX512
+		return permute4AMD64AVX512
 	case "amd64_avx2", "amd64_sse2":
-		return p1600x4Lane
+		return permute4AMD64Lane
 	default:
 		switch {
 		case cpuid.CPU.Has(cpuid.AVX512F) && cpuid.CPU.Has(cpuid.AVX512VL):
-			return p1600x4LaneAVX512
+			return permute4AMD64AVX512
 		case cpuid.CPU.Has(cpuid.AVX2):
-			return p1600x4Lane
+			return permute4AMD64Lane
 		default:
-			return permute12x4SSE2FallbackAMD64
+			return permute4AMD64SSE2Fallback
 		}
 	}
 }
 
-func permute8ImplAMD64() func(*State8) {
+func choosePermute8ImplAMD64() permute8Impl {
 	switch forcedBackend {
 	case "amd64_avx512":
-		return p1600x8AVX512State
+		return permute8AMD64AVX512State
 	case "amd64_avx2", "amd64_sse2":
-		return p1600x8Lane
+		return permute8AMD64Lane
 	default:
 		switch {
 		case cpuid.CPU.Has(cpuid.AVX512F) && cpuid.CPU.Has(cpuid.AVX512VL):
-			return p1600x8AVX512State
+			return permute8AMD64AVX512State
 		case cpuid.CPU.Has(cpuid.AVX2):
-			return p1600x8Lane
+			return permute8AMD64Lane
 		default:
-			return permute12x8SSE2FallbackAMD64
+			return permute8AMD64SSE2Fallback
 		}
 	}
 }
 
-func permute12x2AMD64(s *State2) {
-	permute2ImplAMD64()(s)
+func permute12x1Arch(s *State1) bool {
+	if !useArchPermute1 {
+		return false
+	}
+	p1600(s)
+	return true
 }
 
-func permute12x4AMD64(s *State4) {
-	permute4ImplAMD64()(s)
+func permute12x2Arch(s *State2) bool {
+	switch selectedP2 {
+	case permute2AMD64Lane:
+		p1600x2Lane(s)
+		return true
+	case permute2AMD64AVX512:
+		p1600x2LaneAVX512(s)
+		return true
+	default:
+		return false
+	}
 }
 
-func permute12x8AMD64(s *State8) {
-	permute8ImplAMD64()(s)
+func permute12x4Arch(s *State4) bool {
+	switch selectedP4 {
+	case permute4AMD64Lane:
+		p1600x4Lane(s)
+		return true
+	case permute4AMD64AVX512:
+		p1600x4LaneAVX512(s)
+		return true
+	case permute4AMD64SSE2Fallback:
+		permute12x4SSE2FallbackAMD64(s)
+		return true
+	default:
+		return false
+	}
+}
+
+func permute12x8Arch(s *State8) bool {
+	switch selectedP8 {
+	case permute8AMD64Lane:
+		p1600x8Lane(s)
+		return true
+	case permute8AMD64AVX512State:
+		p1600x8AVX512State(s)
+		return true
+	case permute8AMD64SSE2Fallback:
+		permute12x8SSE2FallbackAMD64(s)
+		return true
+	default:
+		return false
+	}
 }
 
 func init() {
 	if forcedBackend == "generic" {
 		return
 	}
-	if !cpuid.CPU.Has(cpuid.BMI1) || !cpuid.CPU.Has(cpuid.BMI2) {
-		// Keep scalar fallback for x1 on older CPUs.
-	} else {
-		selected.permute1 = p1600
+	if cpuid.CPU.Has(cpuid.BMI1) && cpuid.CPU.Has(cpuid.BMI2) {
+		useArchPermute1 = true
 	}
-	selected.permute2 = permute2ImplAMD64()
-	selected.permute4 = permute4ImplAMD64()
-	selected.permute8 = permute8ImplAMD64()
+	selectedP2 = choosePermute2ImplAMD64()
+	selectedP4 = choosePermute4ImplAMD64()
+	selectedP8 = choosePermute8ImplAMD64()
 }

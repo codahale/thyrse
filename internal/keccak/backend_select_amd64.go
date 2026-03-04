@@ -7,12 +7,12 @@ import "github.com/klauspost/cpuid/v2"
 func archBackend() (backend, bool) {
 	switch {
 	case cpuid.CPU.Has(cpuid.AVX512F) && cpuid.CPU.Has(cpuid.AVX512VL):
-		return backendByName("amd64_avx512"), true
+		return backendAMD64AVX512, true
 	case cpuid.CPU.Has(cpuid.AVX2):
-		return backendByName("amd64_avx2"), true
+		return backendAMD64AVX2, true
 	case cpuid.CPU.Has(cpuid.SSE2):
-		return backendByName("amd64_sse2"), true
+		return backendAMD64SSE2, true
 	default:
-		return newGenericBackend(), true
+		return backendGeneric, true
 	}
 }

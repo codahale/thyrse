@@ -28,11 +28,13 @@ func BenchmarkPermute12LowLevelAMD64(b *testing.B) {
 				}
 			}
 		})
-		b.Run("selected_fn", func(b *testing.B) {
+		b.Run("arch_dispatch", func(b *testing.B) {
 			var s State1
 			b.SetBytes(StateBytes)
 			for b.Loop() {
-				selected.permute1(&s)
+				if !permute12x1Arch(&s) {
+					permute12x1Generic(&s)
+				}
 			}
 		})
 		b.Run("method", func(b *testing.B) {
@@ -75,14 +77,9 @@ func BenchmarkPermute12LowLevelAMD64(b *testing.B) {
 			var s State2
 			b.SetBytes(2 * StateBytes)
 			for b.Loop() {
-				permute12x2AMD64(&s)
-			}
-		})
-		b.Run("selected_fn", func(b *testing.B) {
-			var s State2
-			b.SetBytes(2 * StateBytes)
-			for b.Loop() {
-				selected.permute2(&s)
+				if !permute12x2Arch(&s) {
+					permute12x2Generic(&s)
+				}
 			}
 		})
 		b.Run("method", func(b *testing.B) {
@@ -129,14 +126,9 @@ func BenchmarkPermute12LowLevelAMD64(b *testing.B) {
 			var s State4
 			b.SetBytes(4 * StateBytes)
 			for b.Loop() {
-				permute12x4AMD64(&s)
-			}
-		})
-		b.Run("selected_fn", func(b *testing.B) {
-			var s State4
-			b.SetBytes(4 * StateBytes)
-			for b.Loop() {
-				selected.permute4(&s)
+				if !permute12x4Arch(&s) {
+					permute12x4Generic(&s)
+				}
 			}
 		})
 		b.Run("method", func(b *testing.B) {
@@ -183,14 +175,9 @@ func BenchmarkPermute12LowLevelAMD64(b *testing.B) {
 			var s State8
 			b.SetBytes(8 * StateBytes)
 			for b.Loop() {
-				permute12x8AMD64(&s)
-			}
-		})
-		b.Run("selected_fn", func(b *testing.B) {
-			var s State8
-			b.SetBytes(8 * StateBytes)
-			for b.Loop() {
-				selected.permute8(&s)
+				if !permute12x8Arch(&s) {
+					permute12x8Generic(&s)
+				}
 			}
 		})
 		b.Run("method", func(b *testing.B) {

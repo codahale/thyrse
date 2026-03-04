@@ -1,27 +1,68 @@
 package keccak
 
-type backend struct {
-	name     string
-	lanes    int
-	permute1 func(*State1)
-	permute2 func(*State2)
-	permute4 func(*State4)
-	permute8 func(*State8)
-}
+type backend uint8
 
-var selected = selectBackend() //nolint:gochecknoglobals
+const (
+	backendGeneric backend = iota
+	backendAMD64SSE2
+	backendAMD64AVX2
+	backendAMD64AVX512
+	backendARM64SHA3
+)
+
+type permute2Impl uint8
+
+const (
+	permute2Generic permute2Impl = iota
+	permute2AMD64Lane
+	permute2AMD64AVX512
+	permute2ARM64Lane
+)
+
+type permute4Impl uint8
+
+const (
+	permute4Generic permute4Impl = iota
+	permute4AMD64Lane
+	permute4AMD64AVX512
+	permute4AMD64SSE2Fallback
+	permute4ARM64Lane
+)
+
+type permute8Impl uint8
+
+const (
+	permute8Generic permute8Impl = iota
+	permute8AMD64Lane
+	permute8AMD64AVX512State
+	permute8AMD64SSE2Fallback
+	permute8ARM64Lane
+)
+
+var selectedBackend = selectBackend() //nolint:gochecknoglobals
 
 // AvailableLanes is the preferred lane width for this CPU/backend selection.
-var AvailableLanes = selected.lanes //nolint:gochecknoglobals
+var AvailableLanes = lanesForBackend(selectedBackend) //nolint:gochecknoglobals
 
-func newGenericBackend() backend {
-	return backend{
-		name:     "generic",
-		lanes:    1,
-		permute1: permute12x1Generic,
-		permute2: permute12x2Generic,
-		permute4: permute12x4Generic,
-		permute8: permute12x8Generic,
+var (
+	useArchPermute1 = false           //nolint:gochecknoglobals
+	selectedP2      = permute2Generic //nolint:gochecknoglobals
+	selectedP4      = permute4Generic //nolint:gochecknoglobals
+	selectedP8      = permute8Generic //nolint:gochecknoglobals
+)
+
+func lanesForBackend(b backend) int {
+	switch b {
+	case backendAMD64AVX512:
+		return 8
+	case backendAMD64AVX2:
+		return 4
+	case backendAMD64SSE2, backendARM64SHA3:
+		return 2
+	case backendGeneric:
+		return 1
+	default:
+		panic("keccak: unknown backend")
 	}
 }
 
@@ -32,39 +73,67 @@ func selectBackend() backend {
 	if b, ok := archBackend(); ok {
 		return b
 	}
-	return newGenericBackend()
+	return backendGeneric
 }
 
 func backendByName(name string) backend {
-	b := newGenericBackend()
-	b.name = name
-
 	switch name {
 	case "amd64_avx512":
-		b.lanes = 8
+		return backendAMD64AVX512
 	case "amd64_avx2":
-		b.lanes = 4
+		return backendAMD64AVX2
 	case "amd64_sse2":
-		b.lanes = 2
+		return backendAMD64SSE2
 	case "arm64_sha3":
-		b.lanes = 2
+		return backendARM64SHA3
 	case "generic":
-		b.lanes = 1
+		return backendGeneric
 	default:
 		panic("keccak: unknown backend override")
 	}
-
-	return b
 }
 
 func backendName() string {
-	return selected.name
+	switch selectedBackend {
+	case backendAMD64AVX512:
+		return "amd64_avx512"
+	case backendAMD64AVX2:
+		return "amd64_avx2"
+	case backendAMD64SSE2:
+		return "amd64_sse2"
+	case backendARM64SHA3:
+		return "arm64_sha3"
+	case backendGeneric:
+		return "generic"
+	default:
+		panic("keccak: unknown backend")
+	}
 }
 
-func (s *State1) Permute12() { selected.permute1(s) }
+func (s *State1) Permute12() {
+	if permute12x1Arch(s) {
+		return
+	}
+	permute12x1Generic(s)
+}
 
-func (s *State2) Permute12() { selected.permute2(s) }
+func (s *State2) Permute12() {
+	if permute12x2Arch(s) {
+		return
+	}
+	permute12x2Generic(s)
+}
 
-func (s *State4) Permute12() { selected.permute4(s) }
+func (s *State4) Permute12() {
+	if permute12x4Arch(s) {
+		return
+	}
+	permute12x4Generic(s)
+}
 
-func (s *State8) Permute12() { selected.permute8(s) }
+func (s *State8) Permute12() {
+	if permute12x8Arch(s) {
+		return
+	}
+	permute12x8Generic(s)
+}

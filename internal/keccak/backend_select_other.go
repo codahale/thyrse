@@ -3,5 +3,5 @@
 package keccak
 
 func archBackend() (backend, bool) {
-	return backend{}, false
+	return backendGeneric, false
 }

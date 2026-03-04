@@ -6,7 +6,7 @@ import "github.com/klauspost/cpuid/v2"
 
 func archBackend() (backend, bool) {
 	if cpuid.CPU.Has(cpuid.SHA3) {
-		return backendByName("arm64_sha3"), true
+		return backendARM64SHA3, true
 	}
-	return newGenericBackend(), true
+	return backendGeneric, true
 }
