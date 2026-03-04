@@ -22,6 +22,9 @@ func (s *State1) Reset() { clear(s.a[:]) }
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State1) FastLoopAbsorb168(in []byte) int {
 	n := (len(in) / rate) * rate
+	if n > 0 && fastLoopAbsorb168x1Arch(s, in[:n]) {
+		return n
+	}
 	for off := 0; off < n; off += rate {
 		p := (*[rate]byte)(in[off : off+rate])
 		for lane := range rate >> 3 {
@@ -58,6 +61,9 @@ func (s *State2) Reset() { clear(s.a[:]) }
 func (s *State2) FastLoopAbsorb168(in0, in1 []byte) int {
 	n := min(len(in0), len(in1))
 	n = (n / rate) * rate
+	if n > 0 && fastLoopAbsorb168x2Arch(s, in0[:n], in1[:n]) {
+		return n
+	}
 	for off := 0; off < n; off += rate {
 		p0 := (*[rate]byte)(in0[off : off+rate])
 		p1 := (*[rate]byte)(in1[off : off+rate])
@@ -104,6 +110,9 @@ func (s *State4) Reset() { clear(s.a[:]) }
 func (s *State4) FastLoopAbsorb168(in0, in1, in2, in3 []byte) int {
 	n := min(min(len(in0), len(in1)), min(len(in2), len(in3)))
 	n = (n / rate) * rate
+	if n > 0 && fastLoopAbsorb168x4Arch(s, in0[:n], in1[:n], in2[:n], in3[:n]) {
+		return n
+	}
 	for off := 0; off < n; off += rate {
 		p0 := (*[rate]byte)(in0[off : off+rate])
 		p1 := (*[rate]byte)(in1[off : off+rate])
@@ -165,6 +174,9 @@ func (s *State8) FastLoopAbsorb168(in0, in1, in2, in3, in4, in5, in6, in7 []byte
 		min(min(len(in4), len(in5)), min(len(in6), len(in7))),
 	)
 	n = (n / rate) * rate
+	if n > 0 && fastLoopAbsorb168x8Arch(s, in0[:n], in1[:n], in2[:n], in3[:n], in4[:n], in5[:n], in6[:n], in7[:n]) {
+		return n
+	}
 	for off := 0; off < n; off += rate {
 		p0 := (*[rate]byte)(in0[off : off+rate])
 		p1 := (*[rate]byte)(in1[off : off+rate])
