@@ -25,14 +25,6 @@ func xorByteInWord(w *uint64, pos int, b byte) {
 
 func (s *State1) Reset() { clear(s.a[:]) }
 
-// ExtractCVWords4 extracts the first 4 lanes for CV-sized outputs.
-func (s *State1) ExtractCVWords4(dst *[4]uint64) {
-	dst[0] = s.a[0]
-	dst[1] = s.a[1]
-	dst[2] = s.a[2]
-	dst[3] = s.a[3]
-}
-
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State1) FastLoopAbsorb168(in []byte) int {
 	n := (len(in) / rate168) * rate168
@@ -72,18 +64,6 @@ func (s *State1) AbsorbFinal(tail []byte, ds byte) {
 }
 
 func (s *State2) Reset() { clear(s.a[:]) }
-
-// ExtractCVWords4 extracts the first 4 lanes per instance in instance-major order.
-func (s *State2) ExtractCVWords4(dst *[8]uint64) {
-	dst[0] = s.a[0][0]
-	dst[1] = s.a[1][0]
-	dst[2] = s.a[2][0]
-	dst[3] = s.a[3][0]
-	dst[4] = s.a[0][1]
-	dst[5] = s.a[1][1]
-	dst[6] = s.a[2][1]
-	dst[7] = s.a[3][1]
-}
 
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State2) FastLoopAbsorb168(in0, in1 []byte) int {
@@ -133,17 +113,6 @@ func (s *State2) AbsorbFinal(tail0, tail1 []byte, ds byte) {
 }
 
 func (s *State4) Reset() { clear(s.a[:]) }
-
-// ExtractCVWords4 extracts the first 4 lanes per instance in instance-major order.
-func (s *State4) ExtractCVWords4(dst *[16]uint64) {
-	for inst := range 4 {
-		base := inst * 4
-		dst[base] = s.a[0][inst]
-		dst[base+1] = s.a[1][inst]
-		dst[base+2] = s.a[2][inst]
-		dst[base+3] = s.a[3][inst]
-	}
-}
 
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State4) FastLoopAbsorb168(in0, in1, in2, in3 []byte) int {
@@ -207,17 +176,6 @@ func (s *State4) AbsorbFinal(tail0, tail1, tail2, tail3 []byte, ds byte) {
 }
 
 func (s *State8) Reset() { clear(s.a[:]) }
-
-// ExtractCVWords4 extracts the first 4 lanes per instance in instance-major order.
-func (s *State8) ExtractCVWords4(dst *[32]uint64) {
-	for inst := range 8 {
-		base := inst * 4
-		dst[base] = s.a[0][inst]
-		dst[base+1] = s.a[1][inst]
-		dst[base+2] = s.a[2][inst]
-		dst[base+3] = s.a[3][inst]
-	}
-}
 
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State8) FastLoopAbsorb168(in0, in1, in2, in3, in4, in5, in6, in7 []byte) int {

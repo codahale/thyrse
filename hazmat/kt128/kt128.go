@@ -6,7 +6,6 @@
 package kt128
 
 import (
-	"encoding/binary"
 	"slices"
 
 	"github.com/codahale/thyrse/internal/keccak"
@@ -15,25 +14,18 @@ import (
 const (
 	// BlockSize is the KT128 chunk size in bytes.
 	BlockSize = 8192
-	// rate128 is the TurboSHAKE128 rate in bytes.
-	rate128 = 168
 
-	cvSize = 32 // Chain value size.
 	leafDS = 0x0B
 )
 
 // Hasher is an incremental KT128 instance that implements hash.Hash and io.Reader.
 type Hasher struct {
-	suffix      []byte        // C || lengthEncode(|C|), precomputed at construction, immutable
-	buf         []byte        // buffered message/leaf data
-	tsState     keccak.State1 // final-node sponge state
-	tsBuf       [rate128]byte
-	tsPos       int
-	tsDS        byte
-	tsSqueezing bool
-	leafCount   int  // total leaf CVs written to ts so far
-	treeMode    bool // true once S_0 has been flushed to ts
-	finalized   bool // true once finalize has completed
+	suffix    []byte              // C || lengthEncode(|C|), precomputed at construction, immutable
+	buf       []byte              // buffered message/leaf data
+	ts        keccak.TurboSHAKE128 // final-node TurboSHAKE128 state
+	leafCount int                 // total leaf CVs written to ts so far
+	treeMode  bool                // true once S_0 has been flushed to ts
+	finalized bool                // true once finalize has completed
 }
 
 // emptySuffix is the suffix for empty customization: lengthEncode(0) = [0x00].
@@ -68,9 +60,9 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		// Enter tree mode: flush S_0 from buf + start of p.
 		h.buf = append(h.buf, p[:need]...)
 		p = p[need:]
-		h.tsReset(0x06)
-		h.tsWrite(h.buf[:BlockSize])
-		h.tsWrite(kt12Marker[:])
+		h.ts.Reset(0x06)
+		_, _ = h.ts.Write(h.buf[:BlockSize])
+		_, _ = h.ts.Write(kt12Marker[:])
 		// Keep the one overflow byte.
 		h.buf[0] = h.buf[BlockSize]
 		h.buf = h.buf[:1]
@@ -140,28 +132,28 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 	for idx+8 <= nLeaves {
 		off := idx * BlockSize
 		leafStateX8(data[off:off+8*BlockSize], &s8)
-		h.tsWriteCVState8(&s8)
+		h.ts.WriteCVx8(&s8)
 		idx += 8
 	}
 
 	for idx+4 <= nLeaves {
 		off := idx * BlockSize
 		leafStateX4(data[off:off+4*BlockSize], &s4)
-		h.tsWriteCVState4(&s4)
+		h.ts.WriteCVx4(&s4)
 		idx += 4
 	}
 
 	for idx+2 <= nLeaves {
 		off := idx * BlockSize
 		leafStateX2(data[off:off+2*BlockSize], &s2)
-		h.tsWriteCVState2(&s2)
+		h.ts.WriteCVx2(&s2)
 		idx += 2
 	}
 
 	for idx < nLeaves {
 		off := idx * BlockSize
 		leafStateX1(data[off:off+BlockSize], &s1)
-		h.tsWriteCVState1(&s1)
+		h.ts.WriteCV(&s1)
 		idx++
 	}
 
@@ -171,50 +163,42 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 // Read squeezes output from the XOF. On the first call, it finalizes absorption.
 func (h *Hasher) Read(p []byte) (int, error) {
 	h.finalize()
-	return h.tsRead(p)
+	return h.ts.Read(p)
 }
 
 // Sum appends the current 32-byte hash to b without changing the underlying state.
 func (h *Hasher) Sum(b []byte) []byte {
 	clone := &Hasher{
-		suffix:      h.suffix,
-		buf:         slices.Clone(h.buf),
-		tsState:     h.tsState,
-		tsBuf:       h.tsBuf,
-		tsPos:       h.tsPos,
-		tsDS:        h.tsDS,
-		tsSqueezing: h.tsSqueezing,
-		leafCount:   h.leafCount,
-		treeMode:    h.treeMode,
-		finalized:   h.finalized,
+		suffix:    h.suffix,
+		buf:       slices.Clone(h.buf),
+		ts:        h.ts,
+		leafCount: h.leafCount,
+		treeMode:  h.treeMode,
+		finalized: h.finalized,
 	}
 	clone.finalize()
 
 	out := make([]byte, 32)
-	_, _ = clone.tsRead(out)
+	_, _ = clone.ts.Read(out)
 	return append(b, out...)
 }
 
 // Clone returns an independent copy of the Hasher. The original and clone evolve independently.
 func (h *Hasher) Clone() *Hasher {
 	return &Hasher{
-		suffix:      h.suffix, // immutable, safe to share
-		buf:         slices.Clone(h.buf),
-		tsState:     h.tsState,
-		tsBuf:       h.tsBuf,
-		tsPos:       h.tsPos,
-		tsDS:        h.tsDS,
-		tsSqueezing: h.tsSqueezing,
-		leafCount:   h.leafCount,
-		treeMode:    h.treeMode,
-		finalized:   h.finalized,
+		suffix:    h.suffix, // immutable, safe to share
+		buf:       slices.Clone(h.buf),
+		ts:        h.ts,
+		leafCount: h.leafCount,
+		treeMode:  h.treeMode,
+		finalized: h.finalized,
 	}
 }
 
 // Reset resets the Hasher to its initial state, retaining the customization string.
 func (h *Hasher) Reset() {
 	h.buf = h.buf[:0]
-	h.tsReset(0)
+	h.ts.Reset(0)
 	h.leafCount = 0
 	h.treeMode = false
 	h.finalized = false
@@ -239,15 +223,15 @@ func (h *Hasher) finalize() {
 	if !h.treeMode {
 		if len(h.buf) <= BlockSize {
 			// Single-node: TurboSHAKE128(S, 0x07, L).
-			h.tsReset(0x07)
-			h.tsWrite(h.buf)
+			h.ts.Reset(0x07)
+			_, _ = h.ts.Write(h.buf)
 			return
 		}
 
 		// Enter tree mode: flush S_0.
-		h.tsReset(0x06)
-		h.tsWrite(h.buf[:BlockSize])
-		h.tsWrite(kt12Marker[:])
+		h.ts.Reset(0x06)
+		_, _ = h.ts.Write(h.buf[:BlockSize])
+		_, _ = h.ts.Write(kt12Marker[:])
 		remaining := copy(h.buf, h.buf[BlockSize:])
 		h.buf = h.buf[:remaining]
 		h.treeMode = true
@@ -266,14 +250,14 @@ func (h *Hasher) finalize() {
 			var s1 keccak.State1
 			off := fullLeaves * BlockSize
 			leafStateX1(h.buf[off:], &s1)
-			h.tsWriteCVState1(&s1)
+			h.ts.WriteCV(&s1)
 			h.leafCount++
 		}
 	}
 
 	// Terminator: lengthEncode(leafCount) || 0xFF || 0xFF.
-	h.tsWrite(lengthEncode(uint64(h.leafCount)))
-	h.tsWrite([]byte{0xFF, 0xFF})
+	_, _ = h.ts.Write(lengthEncode(uint64(h.leafCount)))
+	_, _ = h.ts.Write([]byte{0xFF, 0xFF})
 }
 
 // kt12Marker is the 8-byte KangarooTwelve marker written after S_0.
@@ -299,139 +283,6 @@ func lengthEncode(x uint64) []byte {
 	buf[n] = byte(n)
 
 	return buf
-}
-
-func (h *Hasher) tsReset(ds byte) {
-	h.tsState.Reset()
-	clear(h.tsBuf[:])
-	h.tsPos = 0
-	h.tsDS = ds
-	h.tsSqueezing = false
-}
-
-func (h *Hasher) tsWrite(p []byte) {
-	if h.tsSqueezing {
-		panic("kt128: write after read")
-	}
-
-	// Fast path: absorb full stripes directly from caller buffer when aligned.
-	if h.tsPos == 0 {
-		consumed := h.tsState.FastLoopAbsorb168(p)
-		p = p[consumed:]
-	}
-
-	for len(p) > 0 {
-		w := min(rate128-h.tsPos, len(p))
-		copy(h.tsBuf[h.tsPos:h.tsPos+w], p[:w])
-		h.tsPos += w
-		p = p[w:]
-
-		if h.tsPos == rate128 {
-			h.tsAbsorbFullBuffer()
-		}
-	}
-}
-
-func (h *Hasher) tsAbsorbFullBuffer() {
-	h.tsState.Absorb168(h.tsBuf[:])
-	h.tsState.Permute12()
-	clear(h.tsBuf[:])
-	h.tsPos = 0
-}
-
-func (h *Hasher) tsWriteCVWords4(w0, w1, w2, w3 uint64) {
-	if h.tsSqueezing {
-		panic("kt128: write after read")
-	}
-	if h.tsPos&7 != 0 {
-		var cv [cvSize]byte
-		binary.LittleEndian.PutUint64(cv[0:8], w0)
-		binary.LittleEndian.PutUint64(cv[8:16], w1)
-		binary.LittleEndian.PutUint64(cv[16:24], w2)
-		binary.LittleEndian.PutUint64(cv[24:32], w3)
-		h.tsWrite(cv[:])
-		return
-	}
-
-	// Fast path: aligned and enough room for the whole CV in tsBuf.
-	if h.tsPos+cvSize <= rate128 {
-		binary.LittleEndian.PutUint64(h.tsBuf[h.tsPos:h.tsPos+8], w0)
-		binary.LittleEndian.PutUint64(h.tsBuf[h.tsPos+8:h.tsPos+16], w1)
-		binary.LittleEndian.PutUint64(h.tsBuf[h.tsPos+16:h.tsPos+24], w2)
-		binary.LittleEndian.PutUint64(h.tsBuf[h.tsPos+24:h.tsPos+32], w3)
-		h.tsPos += cvSize
-		if h.tsPos == rate128 {
-			h.tsAbsorbFullBuffer()
-		}
-		return
-	}
-
-	for _, w := range [4]uint64{w0, w1, w2, w3} {
-		if h.tsPos == rate128 {
-			h.tsAbsorbFullBuffer()
-		}
-		binary.LittleEndian.PutUint64(h.tsBuf[h.tsPos:h.tsPos+8], w)
-		h.tsPos += 8
-		if h.tsPos == rate128 {
-			h.tsAbsorbFullBuffer()
-		}
-	}
-}
-
-func (h *Hasher) tsWriteCVState1(s *keccak.State1) {
-	var w [4]uint64
-	s.ExtractCVWords4(&w)
-	h.tsWriteCVWords4(w[0], w[1], w[2], w[3])
-}
-
-func (h *Hasher) tsWriteCVState2(s *keccak.State2) {
-	var w [8]uint64
-	s.ExtractCVWords4(&w)
-	for inst := range 2 {
-		base := inst * 4
-		h.tsWriteCVWords4(w[base], w[base+1], w[base+2], w[base+3])
-	}
-}
-
-func (h *Hasher) tsWriteCVState4(s *keccak.State4) {
-	var w [16]uint64
-	s.ExtractCVWords4(&w)
-	for inst := range 4 {
-		base := inst * 4
-		h.tsWriteCVWords4(w[base], w[base+1], w[base+2], w[base+3])
-	}
-}
-
-func (h *Hasher) tsWriteCVState8(s *keccak.State8) {
-	var w [32]uint64
-	s.ExtractCVWords4(&w)
-	for inst := range 8 {
-		base := inst * 4
-		h.tsWriteCVWords4(w[base], w[base+1], w[base+2], w[base+3])
-	}
-}
-
-func (h *Hasher) tsRead(p []byte) (int, error) {
-	if !h.tsSqueezing {
-		h.tsState.AbsorbFinal(h.tsBuf[:h.tsPos], h.tsDS)
-		h.tsState.Permute12()
-		h.tsState.SqueezeStripe(rate128, h.tsBuf[:])
-		h.tsPos = 0
-		h.tsSqueezing = true
-	}
-
-	n := len(p)
-	for len(p) > 0 {
-		if h.tsPos == rate128 {
-			h.tsState.Permute12()
-			h.tsState.SqueezeStripe(rate128, h.tsBuf[:])
-			h.tsPos = 0
-		}
-		r := copy(p, h.tsBuf[h.tsPos:])
-		h.tsPos += r
-		p = p[r:]
-	}
-	return n, nil
 }
 
 // leafStateX1 computes a single leaf state for TurboSHAKE128(data, 0x0B, 32).
