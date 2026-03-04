@@ -8,59 +8,24 @@ import "github.com/klauspost/cpuid/v2"
 func p1600(a *State1)
 
 //go:noescape
-func p1600x2(a, b *State1)
+func p1600x2Lane(a *State2)
 
 //go:noescape
-func p1600x2Lane(a *State2)
+func p1600x4Lane(a *State4)
+
+//go:noescape
+func p1600x8Lane(a *State8)
 
 func permute12x2ARM64(s *State2) {
 	p1600x2Lane(s)
 }
 
 func permute12x4ARM64(s *State4) {
-	var t [4]State1
-	for lane := range Lanes {
-		t[0].a[lane] = s.a[lane][0]
-		t[1].a[lane] = s.a[lane][1]
-		t[2].a[lane] = s.a[lane][2]
-		t[3].a[lane] = s.a[lane][3]
-	}
-	p1600x2(&t[0], &t[1])
-	p1600x2(&t[2], &t[3])
-	for lane := range Lanes {
-		s.a[lane][0] = t[0].a[lane]
-		s.a[lane][1] = t[1].a[lane]
-		s.a[lane][2] = t[2].a[lane]
-		s.a[lane][3] = t[3].a[lane]
-	}
+	p1600x4Lane(s)
 }
 
 func permute12x8ARM64(s *State8) {
-	var t [8]State1
-	for lane := range Lanes {
-		t[0].a[lane] = s.a[lane][0]
-		t[1].a[lane] = s.a[lane][1]
-		t[2].a[lane] = s.a[lane][2]
-		t[3].a[lane] = s.a[lane][3]
-		t[4].a[lane] = s.a[lane][4]
-		t[5].a[lane] = s.a[lane][5]
-		t[6].a[lane] = s.a[lane][6]
-		t[7].a[lane] = s.a[lane][7]
-	}
-	p1600x2(&t[0], &t[1])
-	p1600x2(&t[2], &t[3])
-	p1600x2(&t[4], &t[5])
-	p1600x2(&t[6], &t[7])
-	for lane := range Lanes {
-		s.a[lane][0] = t[0].a[lane]
-		s.a[lane][1] = t[1].a[lane]
-		s.a[lane][2] = t[2].a[lane]
-		s.a[lane][3] = t[3].a[lane]
-		s.a[lane][4] = t[4].a[lane]
-		s.a[lane][5] = t[5].a[lane]
-		s.a[lane][6] = t[6].a[lane]
-		s.a[lane][7] = t[7].a[lane]
-	}
+	p1600x8Lane(s)
 }
 
 func init() {
