@@ -6,6 +6,7 @@
 
 
 #include "textflag.h"
+#include "keccak_amd64_avx2.h"
 #include "keccak_amd64_avx512.h"
 
 #define KECCAK_ROUND(S, D, RC) \
@@ -1027,59 +1028,6 @@ TEXT ·p1600x8AVX512State(SB), $320-8
 	VPTERNLOGQ $0xD2, Y11, Y10, Y4; \
 	VMOVDQU	Y4, (base+4)*32(R9)
 
-#define ROT64_AVX2_4X(reg, amount) \
-	VMOVDQU	reg, Y13; \
-	VPSLLQ	$amount, reg, reg; \
-	VPSRLQ	$(64-amount), Y13, Y13; \
-	VPOR	Y13, reg, reg
-
-#define CHI_AVX2_4X(base) \
-	VMOVDQU	Y0, Y10; \
-	VMOVDQU	Y1, Y11; \
-	VMOVDQU	Y1, Y12; \
-	VPANDN	Y2, Y12, Y12; \
-	VPXOR	Y0, Y12, Y12; \
-	VMOVDQU	Y12, (base+0)*32(R9); \
-	VMOVDQU	Y2, Y12; \
-	VPANDN	Y3, Y12, Y12; \
-	VPXOR	Y1, Y12, Y12; \
-	VMOVDQU	Y12, (base+1)*32(R9); \
-	VMOVDQU	Y3, Y12; \
-	VPANDN	Y4, Y12, Y12; \
-	VPXOR	Y2, Y12, Y12; \
-	VMOVDQU	Y12, (base+2)*32(R9); \
-	VMOVDQU	Y4, Y12; \
-	VPANDN	Y10, Y12, Y12; \
-	VPXOR	Y3, Y12, Y12; \
-	VMOVDQU	Y12, (base+3)*32(R9); \
-	VPANDN	Y11, Y10, Y10; \
-	VPXOR	Y4, Y10, Y10; \
-	VMOVDQU	Y10, (base+4)*32(R9)
-
-#define CHI_IOTA_AVX2_4X(base) \
-	VMOVDQU	Y0, Y10; \
-	VMOVDQU	Y1, Y11; \
-	VMOVDQU	Y1, Y12; \
-	VPANDN	Y2, Y12, Y12; \
-	VPXOR	Y0, Y12, Y12; \
-	VPXOR	Y15, Y12, Y12; \
-	VMOVDQU	Y12, (base+0)*32(R9); \
-	VMOVDQU	Y2, Y12; \
-	VPANDN	Y3, Y12, Y12; \
-	VPXOR	Y1, Y12, Y12; \
-	VMOVDQU	Y12, (base+1)*32(R9); \
-	VMOVDQU	Y3, Y12; \
-	VPANDN	Y4, Y12, Y12; \
-	VPXOR	Y2, Y12, Y12; \
-	VMOVDQU	Y12, (base+2)*32(R9); \
-	VMOVDQU	Y4, Y12; \
-	VPANDN	Y10, Y12, Y12; \
-	VPXOR	Y3, Y12, Y12; \
-	VMOVDQU	Y12, (base+3)*32(R9); \
-	VPANDN	Y11, Y10, Y10; \
-	VPXOR	Y4, Y10, Y10; \
-	VMOVDQU	Y10, (base+4)*32(R9)
-
 // func p1600x4Lane(a *State4)
 TEXT ·p1600x4Lane(SB), $1600-8
 	MOVQ	a+0(FP), DI
@@ -1138,7 +1086,7 @@ TEXT ·p1600x4Lane(SB), $1600-8
 	// Set up loop
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x<>+384(SB), R11     // RC start (round 12)
+	LEAQ	round_consts_4x+384(SB), R11     // RC start (round 12)
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -1442,7 +1390,7 @@ TEXT ·p1600x8Lane(SB), $1600-8
 	// Set up loop
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x<>+384(SB), R11     // RC start (round 12)
+	LEAQ	round_consts_4x+384(SB), R11     // RC start (round 12)
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -1738,7 +1686,7 @@ round_loop_lane8a:
 	// Set up loop
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x<>+384(SB), R11     // RC start (round 12)
+	LEAQ	round_consts_4x+384(SB), R11     // RC start (round 12)
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -1983,103 +1931,103 @@ round_loop_lane8b:
 	VZEROUPPER
 	RET
 
-DATA	round_consts_4x<>+0x000(SB)/8, $0x1
-DATA	round_consts_4x<>+0x008(SB)/8, $0x1
-DATA	round_consts_4x<>+0x010(SB)/8, $0x1
-DATA	round_consts_4x<>+0x018(SB)/8, $0x1
-DATA	round_consts_4x<>+0x020(SB)/8, $0x8082
-DATA	round_consts_4x<>+0x028(SB)/8, $0x8082
-DATA	round_consts_4x<>+0x030(SB)/8, $0x8082
-DATA	round_consts_4x<>+0x038(SB)/8, $0x8082
-DATA	round_consts_4x<>+0x040(SB)/8, $0x800000000000808a
-DATA	round_consts_4x<>+0x048(SB)/8, $0x800000000000808a
-DATA	round_consts_4x<>+0x050(SB)/8, $0x800000000000808a
-DATA	round_consts_4x<>+0x058(SB)/8, $0x800000000000808a
-DATA	round_consts_4x<>+0x060(SB)/8, $0x8000000080008000
-DATA	round_consts_4x<>+0x068(SB)/8, $0x8000000080008000
-DATA	round_consts_4x<>+0x070(SB)/8, $0x8000000080008000
-DATA	round_consts_4x<>+0x078(SB)/8, $0x8000000080008000
-DATA	round_consts_4x<>+0x080(SB)/8, $0x808b
-DATA	round_consts_4x<>+0x088(SB)/8, $0x808b
-DATA	round_consts_4x<>+0x090(SB)/8, $0x808b
-DATA	round_consts_4x<>+0x098(SB)/8, $0x808b
-DATA	round_consts_4x<>+0x0a0(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x0a8(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x0b0(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x0b8(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x0c0(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x0c8(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x0d0(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x0d8(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x0e0(SB)/8, $0x8000000000008009
-DATA	round_consts_4x<>+0x0e8(SB)/8, $0x8000000000008009
-DATA	round_consts_4x<>+0x0f0(SB)/8, $0x8000000000008009
-DATA	round_consts_4x<>+0x0f8(SB)/8, $0x8000000000008009
-DATA	round_consts_4x<>+0x100(SB)/8, $0x8a
-DATA	round_consts_4x<>+0x108(SB)/8, $0x8a
-DATA	round_consts_4x<>+0x110(SB)/8, $0x8a
-DATA	round_consts_4x<>+0x118(SB)/8, $0x8a
-DATA	round_consts_4x<>+0x120(SB)/8, $0x88
-DATA	round_consts_4x<>+0x128(SB)/8, $0x88
-DATA	round_consts_4x<>+0x130(SB)/8, $0x88
-DATA	round_consts_4x<>+0x138(SB)/8, $0x88
-DATA	round_consts_4x<>+0x140(SB)/8, $0x80008009
-DATA	round_consts_4x<>+0x148(SB)/8, $0x80008009
-DATA	round_consts_4x<>+0x150(SB)/8, $0x80008009
-DATA	round_consts_4x<>+0x158(SB)/8, $0x80008009
-DATA	round_consts_4x<>+0x160(SB)/8, $0x8000000a
-DATA	round_consts_4x<>+0x168(SB)/8, $0x8000000a
-DATA	round_consts_4x<>+0x170(SB)/8, $0x8000000a
-DATA	round_consts_4x<>+0x178(SB)/8, $0x8000000a
-DATA	round_consts_4x<>+0x180(SB)/8, $0x8000808b
-DATA	round_consts_4x<>+0x188(SB)/8, $0x8000808b
-DATA	round_consts_4x<>+0x190(SB)/8, $0x8000808b
-DATA	round_consts_4x<>+0x198(SB)/8, $0x8000808b
-DATA	round_consts_4x<>+0x1a0(SB)/8, $0x800000000000008b
-DATA	round_consts_4x<>+0x1a8(SB)/8, $0x800000000000008b
-DATA	round_consts_4x<>+0x1b0(SB)/8, $0x800000000000008b
-DATA	round_consts_4x<>+0x1b8(SB)/8, $0x800000000000008b
-DATA	round_consts_4x<>+0x1c0(SB)/8, $0x8000000000008089
-DATA	round_consts_4x<>+0x1c8(SB)/8, $0x8000000000008089
-DATA	round_consts_4x<>+0x1d0(SB)/8, $0x8000000000008089
-DATA	round_consts_4x<>+0x1d8(SB)/8, $0x8000000000008089
-DATA	round_consts_4x<>+0x1e0(SB)/8, $0x8000000000008003
-DATA	round_consts_4x<>+0x1e8(SB)/8, $0x8000000000008003
-DATA	round_consts_4x<>+0x1f0(SB)/8, $0x8000000000008003
-DATA	round_consts_4x<>+0x1f8(SB)/8, $0x8000000000008003
-DATA	round_consts_4x<>+0x200(SB)/8, $0x8000000000008002
-DATA	round_consts_4x<>+0x208(SB)/8, $0x8000000000008002
-DATA	round_consts_4x<>+0x210(SB)/8, $0x8000000000008002
-DATA	round_consts_4x<>+0x218(SB)/8, $0x8000000000008002
-DATA	round_consts_4x<>+0x220(SB)/8, $0x8000000000000080
-DATA	round_consts_4x<>+0x228(SB)/8, $0x8000000000000080
-DATA	round_consts_4x<>+0x230(SB)/8, $0x8000000000000080
-DATA	round_consts_4x<>+0x238(SB)/8, $0x8000000000000080
-DATA	round_consts_4x<>+0x240(SB)/8, $0x800a
-DATA	round_consts_4x<>+0x248(SB)/8, $0x800a
-DATA	round_consts_4x<>+0x250(SB)/8, $0x800a
-DATA	round_consts_4x<>+0x258(SB)/8, $0x800a
-DATA	round_consts_4x<>+0x260(SB)/8, $0x800000008000000a
-DATA	round_consts_4x<>+0x268(SB)/8, $0x800000008000000a
-DATA	round_consts_4x<>+0x270(SB)/8, $0x800000008000000a
-DATA	round_consts_4x<>+0x278(SB)/8, $0x800000008000000a
-DATA	round_consts_4x<>+0x280(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x288(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x290(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x298(SB)/8, $0x8000000080008081
-DATA	round_consts_4x<>+0x2a0(SB)/8, $0x8000000000008080
-DATA	round_consts_4x<>+0x2a8(SB)/8, $0x8000000000008080
-DATA	round_consts_4x<>+0x2b0(SB)/8, $0x8000000000008080
-DATA	round_consts_4x<>+0x2b8(SB)/8, $0x8000000000008080
-DATA	round_consts_4x<>+0x2c0(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x2c8(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x2d0(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x2d8(SB)/8, $0x80000001
-DATA	round_consts_4x<>+0x2e0(SB)/8, $0x8000000080008008
-DATA	round_consts_4x<>+0x2e8(SB)/8, $0x8000000080008008
-DATA	round_consts_4x<>+0x2f0(SB)/8, $0x8000000080008008
-DATA	round_consts_4x<>+0x2f8(SB)/8, $0x8000000080008008
-GLOBL	round_consts_4x<>(SB), NOPTR|RODATA, $768
+DATA	round_consts_4x+0x000(SB)/8, $0x1
+DATA	round_consts_4x+0x008(SB)/8, $0x1
+DATA	round_consts_4x+0x010(SB)/8, $0x1
+DATA	round_consts_4x+0x018(SB)/8, $0x1
+DATA	round_consts_4x+0x020(SB)/8, $0x8082
+DATA	round_consts_4x+0x028(SB)/8, $0x8082
+DATA	round_consts_4x+0x030(SB)/8, $0x8082
+DATA	round_consts_4x+0x038(SB)/8, $0x8082
+DATA	round_consts_4x+0x040(SB)/8, $0x800000000000808a
+DATA	round_consts_4x+0x048(SB)/8, $0x800000000000808a
+DATA	round_consts_4x+0x050(SB)/8, $0x800000000000808a
+DATA	round_consts_4x+0x058(SB)/8, $0x800000000000808a
+DATA	round_consts_4x+0x060(SB)/8, $0x8000000080008000
+DATA	round_consts_4x+0x068(SB)/8, $0x8000000080008000
+DATA	round_consts_4x+0x070(SB)/8, $0x8000000080008000
+DATA	round_consts_4x+0x078(SB)/8, $0x8000000080008000
+DATA	round_consts_4x+0x080(SB)/8, $0x808b
+DATA	round_consts_4x+0x088(SB)/8, $0x808b
+DATA	round_consts_4x+0x090(SB)/8, $0x808b
+DATA	round_consts_4x+0x098(SB)/8, $0x808b
+DATA	round_consts_4x+0x0a0(SB)/8, $0x80000001
+DATA	round_consts_4x+0x0a8(SB)/8, $0x80000001
+DATA	round_consts_4x+0x0b0(SB)/8, $0x80000001
+DATA	round_consts_4x+0x0b8(SB)/8, $0x80000001
+DATA	round_consts_4x+0x0c0(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x0c8(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x0d0(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x0d8(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x0e0(SB)/8, $0x8000000000008009
+DATA	round_consts_4x+0x0e8(SB)/8, $0x8000000000008009
+DATA	round_consts_4x+0x0f0(SB)/8, $0x8000000000008009
+DATA	round_consts_4x+0x0f8(SB)/8, $0x8000000000008009
+DATA	round_consts_4x+0x100(SB)/8, $0x8a
+DATA	round_consts_4x+0x108(SB)/8, $0x8a
+DATA	round_consts_4x+0x110(SB)/8, $0x8a
+DATA	round_consts_4x+0x118(SB)/8, $0x8a
+DATA	round_consts_4x+0x120(SB)/8, $0x88
+DATA	round_consts_4x+0x128(SB)/8, $0x88
+DATA	round_consts_4x+0x130(SB)/8, $0x88
+DATA	round_consts_4x+0x138(SB)/8, $0x88
+DATA	round_consts_4x+0x140(SB)/8, $0x80008009
+DATA	round_consts_4x+0x148(SB)/8, $0x80008009
+DATA	round_consts_4x+0x150(SB)/8, $0x80008009
+DATA	round_consts_4x+0x158(SB)/8, $0x80008009
+DATA	round_consts_4x+0x160(SB)/8, $0x8000000a
+DATA	round_consts_4x+0x168(SB)/8, $0x8000000a
+DATA	round_consts_4x+0x170(SB)/8, $0x8000000a
+DATA	round_consts_4x+0x178(SB)/8, $0x8000000a
+DATA	round_consts_4x+0x180(SB)/8, $0x8000808b
+DATA	round_consts_4x+0x188(SB)/8, $0x8000808b
+DATA	round_consts_4x+0x190(SB)/8, $0x8000808b
+DATA	round_consts_4x+0x198(SB)/8, $0x8000808b
+DATA	round_consts_4x+0x1a0(SB)/8, $0x800000000000008b
+DATA	round_consts_4x+0x1a8(SB)/8, $0x800000000000008b
+DATA	round_consts_4x+0x1b0(SB)/8, $0x800000000000008b
+DATA	round_consts_4x+0x1b8(SB)/8, $0x800000000000008b
+DATA	round_consts_4x+0x1c0(SB)/8, $0x8000000000008089
+DATA	round_consts_4x+0x1c8(SB)/8, $0x8000000000008089
+DATA	round_consts_4x+0x1d0(SB)/8, $0x8000000000008089
+DATA	round_consts_4x+0x1d8(SB)/8, $0x8000000000008089
+DATA	round_consts_4x+0x1e0(SB)/8, $0x8000000000008003
+DATA	round_consts_4x+0x1e8(SB)/8, $0x8000000000008003
+DATA	round_consts_4x+0x1f0(SB)/8, $0x8000000000008003
+DATA	round_consts_4x+0x1f8(SB)/8, $0x8000000000008003
+DATA	round_consts_4x+0x200(SB)/8, $0x8000000000008002
+DATA	round_consts_4x+0x208(SB)/8, $0x8000000000008002
+DATA	round_consts_4x+0x210(SB)/8, $0x8000000000008002
+DATA	round_consts_4x+0x218(SB)/8, $0x8000000000008002
+DATA	round_consts_4x+0x220(SB)/8, $0x8000000000000080
+DATA	round_consts_4x+0x228(SB)/8, $0x8000000000000080
+DATA	round_consts_4x+0x230(SB)/8, $0x8000000000000080
+DATA	round_consts_4x+0x238(SB)/8, $0x8000000000000080
+DATA	round_consts_4x+0x240(SB)/8, $0x800a
+DATA	round_consts_4x+0x248(SB)/8, $0x800a
+DATA	round_consts_4x+0x250(SB)/8, $0x800a
+DATA	round_consts_4x+0x258(SB)/8, $0x800a
+DATA	round_consts_4x+0x260(SB)/8, $0x800000008000000a
+DATA	round_consts_4x+0x268(SB)/8, $0x800000008000000a
+DATA	round_consts_4x+0x270(SB)/8, $0x800000008000000a
+DATA	round_consts_4x+0x278(SB)/8, $0x800000008000000a
+DATA	round_consts_4x+0x280(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x288(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x290(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x298(SB)/8, $0x8000000080008081
+DATA	round_consts_4x+0x2a0(SB)/8, $0x8000000000008080
+DATA	round_consts_4x+0x2a8(SB)/8, $0x8000000000008080
+DATA	round_consts_4x+0x2b0(SB)/8, $0x8000000000008080
+DATA	round_consts_4x+0x2b8(SB)/8, $0x8000000000008080
+DATA	round_consts_4x+0x2c0(SB)/8, $0x80000001
+DATA	round_consts_4x+0x2c8(SB)/8, $0x80000001
+DATA	round_consts_4x+0x2d0(SB)/8, $0x80000001
+DATA	round_consts_4x+0x2d8(SB)/8, $0x80000001
+DATA	round_consts_4x+0x2e0(SB)/8, $0x8000000080008008
+DATA	round_consts_4x+0x2e8(SB)/8, $0x8000000080008008
+DATA	round_consts_4x+0x2f0(SB)/8, $0x8000000080008008
+DATA	round_consts_4x+0x2f8(SB)/8, $0x8000000080008008
+GLOBL	round_consts_4x(SB), NOPTR|RODATA, $768
 
 
 
@@ -2748,7 +2696,7 @@ TEXT ·p1600x4LaneAVX512(SB), $1600-8
 	VMOVDQU	Y0, 24*32(SP)
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x<>+384(SB), R11
+	LEAQ	round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 round_loop_lane4avx512:
 	VMOVDQU	0*32(R8), Y0

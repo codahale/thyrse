@@ -5,6 +5,7 @@
 //go:build !purego
 
 #include "textflag.h"
+#include "keccak_amd64_avx2.h"
 #include "keccak_amd64_avx512.h"
 
 // ABSORB_LANE_X8_GATHER gathers one uint64 from 8 instances at the given byte
@@ -154,3 +155,4 @@ done:
 	VMOVDQU64	Z24, 24*64(AX)
 	VZEROUPPER
 	RET
+
