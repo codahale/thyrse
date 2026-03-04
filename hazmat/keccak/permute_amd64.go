@@ -23,6 +23,9 @@ func p1600x4AVX2(a, b, c, d *State1)
 func p1600x4Lane(a *State4)
 
 //go:noescape
+func p1600x8Lane(a *State8)
+
+//go:noescape
 func p1600x4AVX512(a, b, c, d *State1)
 
 func permute12x2AMD64(s *State2) {
@@ -135,6 +138,10 @@ func permute12x8AMD64(s *State8) {
 		}
 		return
 	}
+	if forcedBackend == "amd64_avx2" || forcedBackend == "amd64_sse2" {
+		p1600x8Lane(s)
+		return
+	}
 
 	var t [8]State1
 	for lane := range Lanes {
@@ -152,8 +159,8 @@ func permute12x8AMD64(s *State8) {
 		p1600x4AVX512(&t[0], &t[1], &t[2], &t[3])
 		p1600x4AVX512(&t[4], &t[5], &t[6], &t[7])
 	case cpuid.CPU.Has(cpuid.AVX2):
-		p1600x4AVX2(&t[0], &t[1], &t[2], &t[3])
-		p1600x4AVX2(&t[4], &t[5], &t[6], &t[7])
+		p1600x8Lane(s)
+		return
 	default:
 		p1600x2SSE2(&t[0], &t[1])
 		p1600x2SSE2(&t[2], &t[3])
