@@ -192,6 +192,23 @@ func (s *State2) AbsorbStripe(rate int, in []byte) {
 	}
 }
 
+// AbsorbStripe2 absorbs one stripe per instance from split inputs.
+func (s *State2) AbsorbStripe2(rate int, in0, in1 []byte) {
+	validateStripe(rate, 1, len(in0))
+	validateStripe(rate, 1, len(in1))
+	full := rate >> 3
+	for lane := range full {
+		base := lane << 3
+		s.a[lane][0] ^= binary.LittleEndian.Uint64(in0[base : base+8])
+		s.a[lane][1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
+	}
+	if tail := rate & 7; tail != 0 {
+		base := full << 3
+		s.a[full][0] ^= loadPartialLE(in0[base : base+tail])
+		s.a[full][1] ^= loadPartialLE(in1[base : base+tail])
+	}
+}
+
 func (s *State2) OverwriteStripe(rate int, in []byte) {
 	validateStripe(rate, 2, len(in))
 	full := rate >> 3
@@ -319,6 +336,29 @@ func (s *State4) AbsorbStripe(rate int, in []byte) {
 		s.a[full][2] ^= loadPartialLE(in[o2 : o2+tail])
 		o3 := 3*rate + base
 		s.a[full][3] ^= loadPartialLE(in[o3 : o3+tail])
+	}
+}
+
+// AbsorbStripe4 absorbs one stripe per instance from split inputs.
+func (s *State4) AbsorbStripe4(rate int, in0, in1, in2, in3 []byte) {
+	validateStripe(rate, 1, len(in0))
+	validateStripe(rate, 1, len(in1))
+	validateStripe(rate, 1, len(in2))
+	validateStripe(rate, 1, len(in3))
+	full := rate >> 3
+	for lane := range full {
+		base := lane << 3
+		s.a[lane][0] ^= binary.LittleEndian.Uint64(in0[base : base+8])
+		s.a[lane][1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
+		s.a[lane][2] ^= binary.LittleEndian.Uint64(in2[base : base+8])
+		s.a[lane][3] ^= binary.LittleEndian.Uint64(in3[base : base+8])
+	}
+	if tail := rate & 7; tail != 0 {
+		base := full << 3
+		s.a[full][0] ^= loadPartialLE(in0[base : base+tail])
+		s.a[full][1] ^= loadPartialLE(in1[base : base+tail])
+		s.a[full][2] ^= loadPartialLE(in2[base : base+tail])
+		s.a[full][3] ^= loadPartialLE(in3[base : base+tail])
 	}
 }
 
@@ -533,6 +573,41 @@ func (s *State8) AbsorbStripe(rate int, in []byte) {
 		s.a[full][6] ^= loadPartialLE(in[o6 : o6+tail])
 		o7 := 7*rate + base
 		s.a[full][7] ^= loadPartialLE(in[o7 : o7+tail])
+	}
+}
+
+// AbsorbStripe8 absorbs one stripe per instance from split inputs.
+func (s *State8) AbsorbStripe8(rate int, in0, in1, in2, in3, in4, in5, in6, in7 []byte) {
+	validateStripe(rate, 1, len(in0))
+	validateStripe(rate, 1, len(in1))
+	validateStripe(rate, 1, len(in2))
+	validateStripe(rate, 1, len(in3))
+	validateStripe(rate, 1, len(in4))
+	validateStripe(rate, 1, len(in5))
+	validateStripe(rate, 1, len(in6))
+	validateStripe(rate, 1, len(in7))
+	full := rate >> 3
+	for lane := range full {
+		base := lane << 3
+		s.a[lane][0] ^= binary.LittleEndian.Uint64(in0[base : base+8])
+		s.a[lane][1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
+		s.a[lane][2] ^= binary.LittleEndian.Uint64(in2[base : base+8])
+		s.a[lane][3] ^= binary.LittleEndian.Uint64(in3[base : base+8])
+		s.a[lane][4] ^= binary.LittleEndian.Uint64(in4[base : base+8])
+		s.a[lane][5] ^= binary.LittleEndian.Uint64(in5[base : base+8])
+		s.a[lane][6] ^= binary.LittleEndian.Uint64(in6[base : base+8])
+		s.a[lane][7] ^= binary.LittleEndian.Uint64(in7[base : base+8])
+	}
+	if tail := rate & 7; tail != 0 {
+		base := full << 3
+		s.a[full][0] ^= loadPartialLE(in0[base : base+tail])
+		s.a[full][1] ^= loadPartialLE(in1[base : base+tail])
+		s.a[full][2] ^= loadPartialLE(in2[base : base+tail])
+		s.a[full][3] ^= loadPartialLE(in3[base : base+tail])
+		s.a[full][4] ^= loadPartialLE(in4[base : base+tail])
+		s.a[full][5] ^= loadPartialLE(in5[base : base+tail])
+		s.a[full][6] ^= loadPartialLE(in6[base : base+tail])
+		s.a[full][7] ^= loadPartialLE(in7[base : base+tail])
 	}
 }
 
