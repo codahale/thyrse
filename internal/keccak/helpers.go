@@ -36,6 +36,11 @@ func storePartialLE(out []byte, v uint64) {
 	}
 }
 
+func xorByteInWord(w *uint64, pos int, b byte) {
+	shift := uint((pos & 7) << 3)
+	*w ^= uint64(b) << shift
+}
+
 func (s *State1) getByte(pos int) byte {
 	lane := pos >> 3
 	shift := uint((pos & 7) << 3)
@@ -90,6 +95,25 @@ func (s *State8) setByte(inst, pos int, v byte) {
 
 func (s *State1) Reset() { clear(s.a[:]) }
 
+// ExtractLanesWords copies the first lanes lanes into dst in instance-major order.
+func (s *State1) ExtractLanesWords(lanes int, dst []uint64) {
+	if lanes < 0 || lanes > Lanes || len(dst) != lanes {
+		panic("keccak: invalid lane extraction shape")
+	}
+	copy(dst, s.a[:lanes])
+}
+
+// ExtractCVWords4 extracts the first 4 lanes for CV-sized outputs.
+func (s *State1) ExtractCVWords4(dst *[4]uint64) {
+	dst[0] = s.a[0]
+	dst[1] = s.a[1]
+	dst[2] = s.a[2]
+	dst[3] = s.a[3]
+}
+
+// Lane returns a lane value from a single state.
+func (s *State1) Lane(lane int) uint64 { return s.a[lane] }
+
 func (s *State1) AbsorbStripe(rate int, in []byte) {
 	validateStripe(rate, 1, len(in))
 	full := rate >> 3
@@ -101,6 +125,25 @@ func (s *State1) AbsorbStripe(rate int, in []byte) {
 		base := full << 3
 		s.a[full] ^= loadPartialLE(in[base : base+tail])
 	}
+}
+
+// AbsorbFinalStripe absorbs a final partial block and applies Keccak padding.
+func (s *State1) AbsorbFinalStripe(rate int, tail []byte, ds byte) {
+	validateRate(rate)
+	if len(tail) >= rate {
+		panic("keccak: invalid final tail length")
+	}
+	full := len(tail) >> 3
+	for lane := range full {
+		base := lane << 3
+		s.a[lane] ^= binary.LittleEndian.Uint64(tail[base : base+8])
+	}
+	if rem := len(tail) & 7; rem != 0 {
+		base := full << 3
+		s.a[full] ^= loadPartialLE(tail[base : base+rem])
+	}
+	xorByteInWord(&s.a[len(tail)>>3], len(tail), ds)
+	xorByteInWord(&s.a[(rate-1)>>3], rate-1, 0x80)
 }
 
 func (s *State1) OverwriteStripe(rate int, in []byte) {
@@ -175,6 +218,34 @@ func (s *State1) OverwriteDecryptStripe(rate int, dst, src []byte) {
 
 func (s *State2) Reset() { clear(s.a[:]) }
 
+// ExtractLanesWords copies the first lanes lanes into dst in instance-major order.
+func (s *State2) ExtractLanesWords(lanes int, dst []uint64) {
+	if lanes < 0 || lanes > Lanes || len(dst) != lanes*2 {
+		panic("keccak: invalid lane extraction shape")
+	}
+	for inst := range 2 {
+		base := inst * lanes
+		for lane := range lanes {
+			dst[base+lane] = s.a[lane][inst]
+		}
+	}
+}
+
+// ExtractCVWords4 extracts the first 4 lanes per instance in instance-major order.
+func (s *State2) ExtractCVWords4(dst *[8]uint64) {
+	dst[0] = s.a[0][0]
+	dst[1] = s.a[1][0]
+	dst[2] = s.a[2][0]
+	dst[3] = s.a[3][0]
+	dst[4] = s.a[0][1]
+	dst[5] = s.a[1][1]
+	dst[6] = s.a[2][1]
+	dst[7] = s.a[3][1]
+}
+
+// Lane returns a lane value for one instance in a two-state bundle.
+func (s *State2) Lane(inst, lane int) uint64 { return s.a[lane][inst] }
+
 func (s *State2) AbsorbStripe(rate int, in []byte) {
 	validateStripe(rate, 2, len(in))
 	full := rate >> 3
@@ -190,6 +261,33 @@ func (s *State2) AbsorbStripe(rate int, in []byte) {
 		o1 := rate + base
 		s.a[full][1] ^= loadPartialLE(in[o1 : o1+tail])
 	}
+}
+
+// AbsorbFinalStripe2 absorbs final partial blocks and applies Keccak padding.
+func (s *State2) AbsorbFinalStripe2(rate int, tail0, tail1 []byte, ds byte) {
+	validateRate(rate)
+	if len(tail0) != len(tail1) || len(tail0) >= rate {
+		panic("keccak: invalid final tail length")
+	}
+	full := len(tail0) >> 3
+	for lane := range full {
+		base := lane << 3
+		s.a[lane][0] ^= binary.LittleEndian.Uint64(tail0[base : base+8])
+		s.a[lane][1] ^= binary.LittleEndian.Uint64(tail1[base : base+8])
+	}
+	if rem := len(tail0) & 7; rem != 0 {
+		base := full << 3
+		s.a[full][0] ^= loadPartialLE(tail0[base : base+rem])
+		s.a[full][1] ^= loadPartialLE(tail1[base : base+rem])
+	}
+	posLane := len(tail0) >> 3
+	pos := len(tail0)
+	xorByteInWord(&s.a[posLane][0], pos, ds)
+	xorByteInWord(&s.a[posLane][1], pos, ds)
+	endLane := (rate - 1) >> 3
+	end := rate - 1
+	xorByteInWord(&s.a[endLane][0], end, 0x80)
+	xorByteInWord(&s.a[endLane][1], end, 0x80)
 }
 
 // AbsorbStripe2 absorbs one stripe per instance from split inputs.
@@ -314,6 +412,33 @@ func (s *State2) OverwriteDecryptStripe(rate int, dst, src []byte) {
 
 func (s *State4) Reset() { clear(s.a[:]) }
 
+// ExtractLanesWords copies the first lanes lanes into dst in instance-major order.
+func (s *State4) ExtractLanesWords(lanes int, dst []uint64) {
+	if lanes < 0 || lanes > Lanes || len(dst) != lanes*4 {
+		panic("keccak: invalid lane extraction shape")
+	}
+	for inst := range 4 {
+		base := inst * lanes
+		for lane := range lanes {
+			dst[base+lane] = s.a[lane][inst]
+		}
+	}
+}
+
+// ExtractCVWords4 extracts the first 4 lanes per instance in instance-major order.
+func (s *State4) ExtractCVWords4(dst *[16]uint64) {
+	for inst := range 4 {
+		base := inst * 4
+		dst[base] = s.a[0][inst]
+		dst[base+1] = s.a[1][inst]
+		dst[base+2] = s.a[2][inst]
+		dst[base+3] = s.a[3][inst]
+	}
+}
+
+// Lane returns a lane value for one instance in a four-state bundle.
+func (s *State4) Lane(inst, lane int) uint64 { return s.a[lane][inst] }
+
 func (s *State4) AbsorbStripe(rate int, in []byte) {
 	validateStripe(rate, 4, len(in))
 	full := rate >> 3
@@ -337,6 +462,41 @@ func (s *State4) AbsorbStripe(rate int, in []byte) {
 		o3 := 3*rate + base
 		s.a[full][3] ^= loadPartialLE(in[o3 : o3+tail])
 	}
+}
+
+// AbsorbFinalStripe4 absorbs final partial blocks and applies Keccak padding.
+func (s *State4) AbsorbFinalStripe4(rate int, tail0, tail1, tail2, tail3 []byte, ds byte) {
+	validateRate(rate)
+	if len(tail0) != len(tail1) || len(tail0) != len(tail2) || len(tail0) != len(tail3) || len(tail0) >= rate {
+		panic("keccak: invalid final tail length")
+	}
+	full := len(tail0) >> 3
+	for lane := range full {
+		base := lane << 3
+		s.a[lane][0] ^= binary.LittleEndian.Uint64(tail0[base : base+8])
+		s.a[lane][1] ^= binary.LittleEndian.Uint64(tail1[base : base+8])
+		s.a[lane][2] ^= binary.LittleEndian.Uint64(tail2[base : base+8])
+		s.a[lane][3] ^= binary.LittleEndian.Uint64(tail3[base : base+8])
+	}
+	if rem := len(tail0) & 7; rem != 0 {
+		base := full << 3
+		s.a[full][0] ^= loadPartialLE(tail0[base : base+rem])
+		s.a[full][1] ^= loadPartialLE(tail1[base : base+rem])
+		s.a[full][2] ^= loadPartialLE(tail2[base : base+rem])
+		s.a[full][3] ^= loadPartialLE(tail3[base : base+rem])
+	}
+	posLane := len(tail0) >> 3
+	pos := len(tail0)
+	xorByteInWord(&s.a[posLane][0], pos, ds)
+	xorByteInWord(&s.a[posLane][1], pos, ds)
+	xorByteInWord(&s.a[posLane][2], pos, ds)
+	xorByteInWord(&s.a[posLane][3], pos, ds)
+	endLane := (rate - 1) >> 3
+	end := rate - 1
+	xorByteInWord(&s.a[endLane][0], end, 0x80)
+	xorByteInWord(&s.a[endLane][1], end, 0x80)
+	xorByteInWord(&s.a[endLane][2], end, 0x80)
+	xorByteInWord(&s.a[endLane][3], end, 0x80)
 }
 
 // AbsorbStripe4 absorbs one stripe per instance from split inputs.
@@ -535,6 +695,33 @@ func (s *State4) OverwriteDecryptStripe(rate int, dst, src []byte) {
 
 func (s *State8) Reset() { clear(s.a[:]) }
 
+// ExtractLanesWords copies the first lanes lanes into dst in instance-major order.
+func (s *State8) ExtractLanesWords(lanes int, dst []uint64) {
+	if lanes < 0 || lanes > Lanes || len(dst) != lanes*8 {
+		panic("keccak: invalid lane extraction shape")
+	}
+	for inst := range 8 {
+		base := inst * lanes
+		for lane := range lanes {
+			dst[base+lane] = s.a[lane][inst]
+		}
+	}
+}
+
+// ExtractCVWords4 extracts the first 4 lanes per instance in instance-major order.
+func (s *State8) ExtractCVWords4(dst *[32]uint64) {
+	for inst := range 8 {
+		base := inst * 4
+		dst[base] = s.a[0][inst]
+		dst[base+1] = s.a[1][inst]
+		dst[base+2] = s.a[2][inst]
+		dst[base+3] = s.a[3][inst]
+	}
+}
+
+// Lane returns a lane value for one instance in an eight-state bundle.
+func (s *State8) Lane(inst, lane int) uint64 { return s.a[lane][inst] }
+
 func (s *State8) AbsorbStripe(rate int, in []byte) {
 	validateStripe(rate, 8, len(in))
 	full := rate >> 3
@@ -574,6 +761,59 @@ func (s *State8) AbsorbStripe(rate int, in []byte) {
 		o7 := 7*rate + base
 		s.a[full][7] ^= loadPartialLE(in[o7 : o7+tail])
 	}
+}
+
+// AbsorbFinalStripe8 absorbs final partial blocks and applies Keccak padding.
+func (s *State8) AbsorbFinalStripe8(rate int, tail0, tail1, tail2, tail3, tail4, tail5, tail6, tail7 []byte, ds byte) {
+	validateRate(rate)
+	if len(tail0) != len(tail1) || len(tail0) != len(tail2) || len(tail0) != len(tail3) ||
+		len(tail0) != len(tail4) || len(tail0) != len(tail5) || len(tail0) != len(tail6) ||
+		len(tail0) != len(tail7) || len(tail0) >= rate {
+		panic("keccak: invalid final tail length")
+	}
+	full := len(tail0) >> 3
+	for lane := range full {
+		base := lane << 3
+		s.a[lane][0] ^= binary.LittleEndian.Uint64(tail0[base : base+8])
+		s.a[lane][1] ^= binary.LittleEndian.Uint64(tail1[base : base+8])
+		s.a[lane][2] ^= binary.LittleEndian.Uint64(tail2[base : base+8])
+		s.a[lane][3] ^= binary.LittleEndian.Uint64(tail3[base : base+8])
+		s.a[lane][4] ^= binary.LittleEndian.Uint64(tail4[base : base+8])
+		s.a[lane][5] ^= binary.LittleEndian.Uint64(tail5[base : base+8])
+		s.a[lane][6] ^= binary.LittleEndian.Uint64(tail6[base : base+8])
+		s.a[lane][7] ^= binary.LittleEndian.Uint64(tail7[base : base+8])
+	}
+	if rem := len(tail0) & 7; rem != 0 {
+		base := full << 3
+		s.a[full][0] ^= loadPartialLE(tail0[base : base+rem])
+		s.a[full][1] ^= loadPartialLE(tail1[base : base+rem])
+		s.a[full][2] ^= loadPartialLE(tail2[base : base+rem])
+		s.a[full][3] ^= loadPartialLE(tail3[base : base+rem])
+		s.a[full][4] ^= loadPartialLE(tail4[base : base+rem])
+		s.a[full][5] ^= loadPartialLE(tail5[base : base+rem])
+		s.a[full][6] ^= loadPartialLE(tail6[base : base+rem])
+		s.a[full][7] ^= loadPartialLE(tail7[base : base+rem])
+	}
+	posLane := len(tail0) >> 3
+	pos := len(tail0)
+	xorByteInWord(&s.a[posLane][0], pos, ds)
+	xorByteInWord(&s.a[posLane][1], pos, ds)
+	xorByteInWord(&s.a[posLane][2], pos, ds)
+	xorByteInWord(&s.a[posLane][3], pos, ds)
+	xorByteInWord(&s.a[posLane][4], pos, ds)
+	xorByteInWord(&s.a[posLane][5], pos, ds)
+	xorByteInWord(&s.a[posLane][6], pos, ds)
+	xorByteInWord(&s.a[posLane][7], pos, ds)
+	endLane := (rate - 1) >> 3
+	end := rate - 1
+	xorByteInWord(&s.a[endLane][0], end, 0x80)
+	xorByteInWord(&s.a[endLane][1], end, 0x80)
+	xorByteInWord(&s.a[endLane][2], end, 0x80)
+	xorByteInWord(&s.a[endLane][3], end, 0x80)
+	xorByteInWord(&s.a[endLane][4], end, 0x80)
+	xorByteInWord(&s.a[endLane][5], end, 0x80)
+	xorByteInWord(&s.a[endLane][6], end, 0x80)
+	xorByteInWord(&s.a[endLane][7], end, 0x80)
 }
 
 // AbsorbStripe8 absorbs one stripe per instance from split inputs.
