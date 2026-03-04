@@ -23,10 +23,10 @@ func (s *State1) Reset() { clear(s.a[:]) }
 func (s *State1) FastLoopAbsorb168(in []byte) int {
 	n := (len(in) / rate) * rate
 	for off := 0; off < n; off += rate {
-		stripe := in[off : off+rate]
+		p := (*[rate]byte)(in[off : off+rate])
 		for lane := range rate >> 3 {
 			base := lane << 3
-			s.a[lane] ^= binary.LittleEndian.Uint64(stripe[base : base+8])
+			s.a[lane] ^= binary.LittleEndian.Uint64(p[base : base+8])
 		}
 		s.Permute12()
 	}
@@ -59,12 +59,12 @@ func (s *State2) FastLoopAbsorb168(in0, in1 []byte) int {
 	n := min(len(in0), len(in1))
 	n = (n / rate) * rate
 	for off := 0; off < n; off += rate {
-		s0 := in0[off : off+rate]
-		s1 := in1[off : off+rate]
+		p0 := (*[rate]byte)(in0[off : off+rate])
+		p1 := (*[rate]byte)(in1[off : off+rate])
 		for lane := range rate >> 3 {
 			base := lane << 3
-			s.a[lane][0] ^= binary.LittleEndian.Uint64(s0[base : base+8])
-			s.a[lane][1] ^= binary.LittleEndian.Uint64(s1[base : base+8])
+			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
+			s.a[lane][1] ^= binary.LittleEndian.Uint64(p1[base : base+8])
 		}
 		s.Permute12()
 	}
@@ -105,16 +105,16 @@ func (s *State4) FastLoopAbsorb168(in0, in1, in2, in3 []byte) int {
 	n := min(min(len(in0), len(in1)), min(len(in2), len(in3)))
 	n = (n / rate) * rate
 	for off := 0; off < n; off += rate {
-		s0 := in0[off : off+rate]
-		s1 := in1[off : off+rate]
-		s2 := in2[off : off+rate]
-		s3 := in3[off : off+rate]
+		p0 := (*[rate]byte)(in0[off : off+rate])
+		p1 := (*[rate]byte)(in1[off : off+rate])
+		p2 := (*[rate]byte)(in2[off : off+rate])
+		p3 := (*[rate]byte)(in3[off : off+rate])
 		for lane := range rate >> 3 {
 			base := lane << 3
-			s.a[lane][0] ^= binary.LittleEndian.Uint64(s0[base : base+8])
-			s.a[lane][1] ^= binary.LittleEndian.Uint64(s1[base : base+8])
-			s.a[lane][2] ^= binary.LittleEndian.Uint64(s2[base : base+8])
-			s.a[lane][3] ^= binary.LittleEndian.Uint64(s3[base : base+8])
+			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
+			s.a[lane][1] ^= binary.LittleEndian.Uint64(p1[base : base+8])
+			s.a[lane][2] ^= binary.LittleEndian.Uint64(p2[base : base+8])
+			s.a[lane][3] ^= binary.LittleEndian.Uint64(p3[base : base+8])
 		}
 		s.Permute12()
 	}
@@ -166,24 +166,24 @@ func (s *State8) FastLoopAbsorb168(in0, in1, in2, in3, in4, in5, in6, in7 []byte
 	)
 	n = (n / rate) * rate
 	for off := 0; off < n; off += rate {
-		s0 := in0[off : off+rate]
-		s1 := in1[off : off+rate]
-		s2 := in2[off : off+rate]
-		s3 := in3[off : off+rate]
-		s4 := in4[off : off+rate]
-		s5 := in5[off : off+rate]
-		s6 := in6[off : off+rate]
-		s7 := in7[off : off+rate]
+		p0 := (*[rate]byte)(in0[off : off+rate])
+		p1 := (*[rate]byte)(in1[off : off+rate])
+		p2 := (*[rate]byte)(in2[off : off+rate])
+		p3 := (*[rate]byte)(in3[off : off+rate])
+		p4 := (*[rate]byte)(in4[off : off+rate])
+		p5 := (*[rate]byte)(in5[off : off+rate])
+		p6 := (*[rate]byte)(in6[off : off+rate])
+		p7 := (*[rate]byte)(in7[off : off+rate])
 		for lane := range rate >> 3 {
 			base := lane << 3
-			s.a[lane][0] ^= binary.LittleEndian.Uint64(s0[base : base+8])
-			s.a[lane][1] ^= binary.LittleEndian.Uint64(s1[base : base+8])
-			s.a[lane][2] ^= binary.LittleEndian.Uint64(s2[base : base+8])
-			s.a[lane][3] ^= binary.LittleEndian.Uint64(s3[base : base+8])
-			s.a[lane][4] ^= binary.LittleEndian.Uint64(s4[base : base+8])
-			s.a[lane][5] ^= binary.LittleEndian.Uint64(s5[base : base+8])
-			s.a[lane][6] ^= binary.LittleEndian.Uint64(s6[base : base+8])
-			s.a[lane][7] ^= binary.LittleEndian.Uint64(s7[base : base+8])
+			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
+			s.a[lane][1] ^= binary.LittleEndian.Uint64(p1[base : base+8])
+			s.a[lane][2] ^= binary.LittleEndian.Uint64(p2[base : base+8])
+			s.a[lane][3] ^= binary.LittleEndian.Uint64(p3[base : base+8])
+			s.a[lane][4] ^= binary.LittleEndian.Uint64(p4[base : base+8])
+			s.a[lane][5] ^= binary.LittleEndian.Uint64(p5[base : base+8])
+			s.a[lane][6] ^= binary.LittleEndian.Uint64(p6[base : base+8])
+			s.a[lane][7] ^= binary.LittleEndian.Uint64(p7[base : base+8])
 		}
 		s.Permute12()
 	}
