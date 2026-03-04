@@ -6,32 +6,33 @@
 package kt128
 
 import (
-	"encoding/binary"
 	"slices"
-	"unsafe"
 
-	"github.com/codahale/thyrse/hazmat/turboshake"
 	"github.com/codahale/thyrse/internal/keccak"
 )
 
 const (
 	// BlockSize is the KT128 chunk size in bytes.
 	BlockSize = 8192
+	// rate128 is the TurboSHAKE128 rate in bytes.
+	rate128 = 168
 
-	cvSize        = 32 // Chain value size.
-	leafDS        = 0x0B
-	leafRateWords = turboshake.Rate / 8
-	cvWords       = cvSize / 8
+	cvSize = 32 // Chain value size.
+	leafDS = 0x0B
 )
 
 // Hasher is an incremental KT128 instance that implements hash.Hash and io.Reader.
 type Hasher struct {
-	suffix    []byte            // C || lengthEncode(|C|), precomputed at construction, immutable
-	buf       []byte            // buffered message/leaf data
-	ts        turboshake.Hasher // final-node hasher
-	leafCount int               // total leaf CVs written to ts so far
-	treeMode  bool              // true once S_0 has been flushed to ts
-	finalized bool              // true once finalize has completed
+	suffix      []byte        // C || lengthEncode(|C|), precomputed at construction, immutable
+	buf         []byte        // buffered message/leaf data
+	tsState     keccak.State1 // final-node sponge state
+	tsBuf       [rate128]byte
+	tsPos       int
+	tsDS        byte
+	tsSqueezing bool
+	leafCount   int  // total leaf CVs written to ts so far
+	treeMode    bool // true once S_0 has been flushed to ts
+	finalized   bool // true once finalize has completed
 }
 
 // emptySuffix is the suffix for empty customization: lengthEncode(0) = [0x00].
@@ -66,9 +67,9 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		// Enter tree mode: flush S_0 from buf + start of p.
 		h.buf = append(h.buf, p[:need]...)
 		p = p[need:]
-		h.ts = turboshake.New(0x06)
-		_, _ = h.ts.Write(h.buf[:BlockSize])
-		_, _ = h.ts.Write(kt12Marker[:])
+		h.tsReset(0x06)
+		h.tsWrite(h.buf[:BlockSize])
+		h.tsWrite(kt12Marker[:])
 		// Keep the one overflow byte.
 		h.buf[0] = h.buf[BlockSize]
 		h.buf = h.buf[:1]
@@ -135,28 +136,28 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 	for idx+8 <= nLeaves {
 		off := idx * BlockSize
 		leafCVsX8(data[off:off+8*BlockSize], cvBuf[:])
-		_, _ = h.ts.Write(cvBuf[:8*cvSize])
+		h.tsWrite(cvBuf[:8*cvSize])
 		idx += 8
 	}
 
 	for idx+4 <= nLeaves {
 		off := idx * BlockSize
-		leafCVsX4(data[off:off+4*BlockSize], cvBuf[:])
-		_, _ = h.ts.Write(cvBuf[:4*cvSize])
+		leafCVsX4(data[off:off+4*BlockSize], cvBuf[:4*cvSize])
+		h.tsWrite(cvBuf[:4*cvSize])
 		idx += 4
 	}
 
 	for idx+2 <= nLeaves {
 		off := idx * BlockSize
-		leafCVsX2(data[off:off+2*BlockSize], cvBuf[:])
-		_, _ = h.ts.Write(cvBuf[:2*cvSize])
+		leafCVsX2(data[off:off+2*BlockSize], cvBuf[:2*cvSize])
+		h.tsWrite(cvBuf[:2*cvSize])
 		idx += 2
 	}
 
 	for idx < nLeaves {
 		off := idx * BlockSize
 		leafCVX1(data[off:off+BlockSize], cvBuf[:cvSize])
-		_, _ = h.ts.Write(cvBuf[:cvSize])
+		h.tsWrite(cvBuf[:cvSize])
 		idx++
 	}
 
@@ -166,42 +167,50 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 // Read squeezes output from the XOF. On the first call, it finalizes absorption.
 func (h *Hasher) Read(p []byte) (int, error) {
 	h.finalize()
-	return h.ts.Read(p)
+	return h.tsRead(p)
 }
 
 // Sum appends the current 32-byte hash to b without changing the underlying state.
 func (h *Hasher) Sum(b []byte) []byte {
 	clone := &Hasher{
-		suffix:    h.suffix,
-		buf:       slices.Clone(h.buf),
-		ts:        h.ts,
-		leafCount: h.leafCount,
-		treeMode:  h.treeMode,
-		finalized: h.finalized,
+		suffix:      h.suffix,
+		buf:         slices.Clone(h.buf),
+		tsState:     h.tsState,
+		tsBuf:       h.tsBuf,
+		tsPos:       h.tsPos,
+		tsDS:        h.tsDS,
+		tsSqueezing: h.tsSqueezing,
+		leafCount:   h.leafCount,
+		treeMode:    h.treeMode,
+		finalized:   h.finalized,
 	}
 	clone.finalize()
 
 	out := make([]byte, 32)
-	_, _ = clone.ts.Read(out)
+	_, _ = clone.tsRead(out)
 	return append(b, out...)
 }
 
 // Clone returns an independent copy of the Hasher. The original and clone evolve independently.
 func (h *Hasher) Clone() *Hasher {
 	return &Hasher{
-		suffix:    h.suffix, // immutable, safe to share
-		buf:       slices.Clone(h.buf),
-		ts:        h.ts,
-		leafCount: h.leafCount,
-		treeMode:  h.treeMode,
-		finalized: h.finalized,
+		suffix:      h.suffix, // immutable, safe to share
+		buf:         slices.Clone(h.buf),
+		tsState:     h.tsState,
+		tsBuf:       h.tsBuf,
+		tsPos:       h.tsPos,
+		tsDS:        h.tsDS,
+		tsSqueezing: h.tsSqueezing,
+		leafCount:   h.leafCount,
+		treeMode:    h.treeMode,
+		finalized:   h.finalized,
 	}
 }
 
 // Reset resets the Hasher to its initial state, retaining the customization string.
 func (h *Hasher) Reset() {
 	h.buf = h.buf[:0]
-	h.ts.Reset(0)
+	h.tsReset(0)
 	h.leafCount = 0
 	h.treeMode = false
 	h.finalized = false
@@ -226,15 +235,15 @@ func (h *Hasher) finalize() {
 	if !h.treeMode {
 		if len(h.buf) <= BlockSize {
 			// Single-node: TurboSHAKE128(S, 0x07, L).
-			h.ts = turboshake.New(0x07)
-			_, _ = h.ts.Write(h.buf)
+			h.tsReset(0x07)
+			h.tsWrite(h.buf)
 			return
 		}
 
 		// Enter tree mode: flush S_0.
-		h.ts = turboshake.New(0x06)
-		_, _ = h.ts.Write(h.buf[:BlockSize])
-		_, _ = h.ts.Write(kt12Marker[:])
+		h.tsReset(0x06)
+		h.tsWrite(h.buf[:BlockSize])
+		h.tsWrite(kt12Marker[:])
 		remaining := copy(h.buf, h.buf[BlockSize:])
 		h.buf = h.buf[:remaining]
 		h.treeMode = true
@@ -253,14 +262,14 @@ func (h *Hasher) finalize() {
 			var cvBuf [cvSize]byte
 			off := fullLeaves * BlockSize
 			leafCVX1(h.buf[off:], cvBuf[:])
-			_, _ = h.ts.Write(cvBuf[:])
+			h.tsWrite(cvBuf[:])
 			h.leafCount++
 		}
 	}
 
 	// Terminator: lengthEncode(leafCount) || 0xFF || 0xFF.
-	_, _ = h.ts.Write(lengthEncode(uint64(h.leafCount)))
-	_, _ = h.ts.Write([]byte{0xFF, 0xFF})
+	h.tsWrite(lengthEncode(uint64(h.leafCount)))
+	h.tsWrite([]byte{0xFF, 0xFF})
 }
 
 // kt12Marker is the 8-byte KangarooTwelve marker written after S_0.
@@ -288,14 +297,76 @@ func lengthEncode(x uint64) []byte {
 	return buf
 }
 
+func (h *Hasher) tsReset(ds byte) {
+	h.tsState.Reset()
+	clear(h.tsBuf[:])
+	h.tsPos = 0
+	h.tsDS = ds
+	h.tsSqueezing = false
+}
+
+func (h *Hasher) tsWrite(p []byte) {
+	if h.tsSqueezing {
+		panic("kt128: write after read")
+	}
+
+	// Fast path: absorb full stripes directly from caller buffer when aligned.
+	if h.tsPos == 0 {
+		for len(p) >= rate128 {
+			h.tsState.AbsorbStripe(rate128, p[:rate128])
+			h.tsState.Permute12()
+			p = p[rate128:]
+		}
+	}
+
+	for len(p) > 0 {
+		w := min(rate128-h.tsPos, len(p))
+		copy(h.tsBuf[h.tsPos:h.tsPos+w], p[:w])
+		h.tsPos += w
+		p = p[w:]
+
+		if h.tsPos == rate128 {
+			h.tsState.AbsorbStripe(rate128, h.tsBuf[:])
+			h.tsState.Permute12()
+			clear(h.tsBuf[:])
+			h.tsPos = 0
+		}
+	}
+}
+
+func (h *Hasher) tsRead(p []byte) (int, error) {
+	if !h.tsSqueezing {
+		h.tsBuf[h.tsPos] ^= h.tsDS
+		h.tsBuf[rate128-1] ^= 0x80
+		h.tsState.AbsorbStripe(rate128, h.tsBuf[:])
+		h.tsState.Permute12()
+		h.tsState.SqueezeStripe(rate128, h.tsBuf[:])
+		h.tsPos = 0
+		h.tsSqueezing = true
+	}
+
+	n := len(p)
+	for len(p) > 0 {
+		if h.tsPos == rate128 {
+			h.tsState.Permute12()
+			h.tsState.SqueezeStripe(rate128, h.tsBuf[:])
+			h.tsPos = 0
+		}
+		r := copy(p, h.tsBuf[h.tsPos:])
+		h.tsPos += r
+		p = p[r:]
+	}
+	return n, nil
+}
+
 // leafCVX1 computes a single leaf CV using TurboSHAKE128(data, 0x0B, 32).
 func leafCVX1(data []byte, cv []byte) {
-	const rate = turboshake.Rate
+	const rate = rate128
 
 	var s keccak.State1
 	off := 0
 	for off+rate <= len(data) {
-		absorbRate168State1(&s, data[off:off+rate])
+		s.AbsorbStripe(rate, data[off:off+rate])
 		s.Permute12()
 		off += rate
 	}
@@ -304,22 +375,22 @@ func leafCVX1(data []byte, cv []byte) {
 	copy(final[:], data[off:])
 	final[len(data)-off] ^= leafDS
 	final[rate-1] ^= 0x80
-	absorbRate168State1(&s, final[:])
+	s.AbsorbStripe(rate, final[:])
 	s.Permute12()
 
-	extractCVState1(&s, cv)
+	s.SqueezeStripe(cvSize, cv)
 }
 
 // leafCVsX2 computes 2 leaf CVs in parallel.
 func leafCVsX2(data []byte, cv []byte) {
-	const rate = turboshake.Rate
+	const rate = rate128
 
 	var s keccak.State2
 
 	off := 0
 	for off+rate <= BlockSize {
-		absorbRate168State2(
-			&s,
+		s.AbsorbStripe2(
+			rate,
 			data[off:off+rate],
 			data[BlockSize+off:BlockSize+off+rate],
 		)
@@ -335,22 +406,22 @@ func leafCVsX2(data []byte, cv []byte) {
 	final[rate+rem] ^= leafDS
 	final[rate-1] ^= 0x80
 	final[2*rate-1] ^= 0x80
-	absorbRate168State2(&s, final[:rate], final[rate:])
+	s.AbsorbStripe2(rate, final[:rate], final[rate:])
 	s.Permute12()
 
-	extractCVState2(&s, cv)
+	s.SqueezeStripe(cvSize, cv)
 }
 
 // leafCVsX4 computes 4 leaf CVs in parallel.
 func leafCVsX4(data []byte, cv []byte) {
-	const rate = turboshake.Rate
+	const rate = rate128
 
 	var s keccak.State4
 
 	off := 0
 	for off+rate <= BlockSize {
-		absorbRate168State4(
-			&s,
+		s.AbsorbStripe4(
+			rate,
 			data[off:off+rate],
 			data[BlockSize+off:BlockSize+off+rate],
 			data[2*BlockSize+off:2*BlockSize+off+rate],
@@ -370,8 +441,8 @@ func leafCVsX4(data []byte, cv []byte) {
 		final[inst*rate+rem] ^= leafDS
 		final[(inst+1)*rate-1] ^= 0x80
 	}
-	absorbRate168State4(
-		&s,
+	s.AbsorbStripe4(
+		rate,
 		final[:rate],
 		final[rate:2*rate],
 		final[2*rate:3*rate],
@@ -379,123 +450,19 @@ func leafCVsX4(data []byte, cv []byte) {
 	)
 	s.Permute12()
 
-	extractCVState4(&s, cv)
-}
-
-// These helpers reinterpret StateN lane-major storage as a flat []uint64.
-// This relies on internal/keccak layout stability for Phase 2 hot paths.
-func stateWords1(s *keccak.State1) []uint64 {
-	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes)
-}
-
-func stateWords2(s *keccak.State2) []uint64 {
-	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes*2)
-}
-
-func stateWords4(s *keccak.State4) []uint64 {
-	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes*4)
-}
-
-func stateWords8(s *keccak.State8) []uint64 {
-	return unsafe.Slice((*uint64)(unsafe.Pointer(s)), keccak.Lanes*8)
-}
-
-func absorbRate168State1(s *keccak.State1, in []byte) {
-	w := stateWords1(s)
-	for lane := range leafRateWords {
-		base := lane * 8
-		w[lane] ^= binary.LittleEndian.Uint64(in[base : base+8])
-	}
-}
-
-func absorbRate168State2(s *keccak.State2, in0, in1 []byte) {
-	w := stateWords2(s)
-	for lane := range leafRateWords {
-		base := lane * 8
-		slot := lane * 2
-		w[slot] ^= binary.LittleEndian.Uint64(in0[base : base+8])
-		w[slot+1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
-	}
-}
-
-func absorbRate168State4(s *keccak.State4, in0, in1, in2, in3 []byte) {
-	w := stateWords4(s)
-	for lane := range leafRateWords {
-		base := lane * 8
-		slot := lane * 4
-		w[slot] ^= binary.LittleEndian.Uint64(in0[base : base+8])
-		w[slot+1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
-		w[slot+2] ^= binary.LittleEndian.Uint64(in2[base : base+8])
-		w[slot+3] ^= binary.LittleEndian.Uint64(in3[base : base+8])
-	}
-}
-
-func absorbRate168State8(
-	s *keccak.State8,
-	in0, in1, in2, in3, in4, in5, in6, in7 []byte,
-) {
-	w := stateWords8(s)
-	for lane := range leafRateWords {
-		base := lane * 8
-		slot := lane * 8
-		w[slot] ^= binary.LittleEndian.Uint64(in0[base : base+8])
-		w[slot+1] ^= binary.LittleEndian.Uint64(in1[base : base+8])
-		w[slot+2] ^= binary.LittleEndian.Uint64(in2[base : base+8])
-		w[slot+3] ^= binary.LittleEndian.Uint64(in3[base : base+8])
-		w[slot+4] ^= binary.LittleEndian.Uint64(in4[base : base+8])
-		w[slot+5] ^= binary.LittleEndian.Uint64(in5[base : base+8])
-		w[slot+6] ^= binary.LittleEndian.Uint64(in6[base : base+8])
-		w[slot+7] ^= binary.LittleEndian.Uint64(in7[base : base+8])
-	}
-}
-
-func extractCVState1(s *keccak.State1, cv []byte) {
-	w := stateWords1(s)
-	for lane := range cvWords {
-		binary.LittleEndian.PutUint64(cv[lane*8:(lane+1)*8], w[lane])
-	}
-}
-
-func extractCVState2(s *keccak.State2, cv []byte) {
-	w := stateWords2(s)
-	for inst := range 2 {
-		base := inst * cvSize
-		for lane := range cvWords {
-			binary.LittleEndian.PutUint64(cv[base+lane*8:base+(lane+1)*8], w[lane*2+inst])
-		}
-	}
-}
-
-func extractCVState4(s *keccak.State4, cv []byte) {
-	w := stateWords4(s)
-	for inst := range 4 {
-		base := inst * cvSize
-		for lane := range cvWords {
-			binary.LittleEndian.PutUint64(cv[base+lane*8:base+(lane+1)*8], w[lane*4+inst])
-		}
-	}
-}
-
-func extractCVState8(s *keccak.State8, cv []byte) {
-	w := stateWords8(s)
-	for inst := range 8 {
-		base := inst * cvSize
-		for lane := range cvWords {
-			binary.LittleEndian.PutUint64(cv[base+lane*8:base+(lane+1)*8], w[lane*8+inst])
-		}
-	}
+	s.SqueezeStripe(cvSize, cv)
 }
 
 // leafCVsX8 computes 8 leaf CVs in parallel.
 func leafCVsX8(data []byte, cv []byte) {
-	const rate = turboshake.Rate
+	const rate = rate128
 
 	var s keccak.State8
 
 	off := 0
 	for off+rate <= BlockSize {
-		absorbRate168State8(
-			&s,
+		s.AbsorbStripe8(
+			rate,
 			data[off:off+rate],
 			data[BlockSize+off:BlockSize+off+rate],
 			data[2*BlockSize+off:2*BlockSize+off+rate],
@@ -523,8 +490,8 @@ func leafCVsX8(data []byte, cv []byte) {
 		final[inst*rate+rem] ^= leafDS
 		final[(inst+1)*rate-1] ^= 0x80
 	}
-	absorbRate168State8(
-		&s,
+	s.AbsorbStripe8(
+		rate,
 		final[:rate],
 		final[rate:2*rate],
 		final[2*rate:3*rate],
@@ -536,5 +503,5 @@ func leafCVsX8(data []byte, cv []byte) {
 	)
 	s.Permute12()
 
-	extractCVState8(&s, cv)
+	s.SqueezeStripe(cvSize, cv)
 }
