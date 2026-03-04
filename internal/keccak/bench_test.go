@@ -2,8 +2,6 @@ package keccak
 
 import "testing"
 
-var sinkByte byte //nolint:gochecknoglobals
-
 func BenchmarkPermute12Selected(b *testing.B) {
 	b.Run("x1", func(b *testing.B) {
 		var s State1
@@ -70,107 +68,4 @@ func BenchmarkPermute12Generic(b *testing.B) {
 			permute12x8Generic(&s)
 		}
 	})
-}
-
-func BenchmarkHelpersState1Rate168(b *testing.B) {
-	in := make([]byte, 168)
-	out := make([]byte, 168)
-	var s State1
-
-	b.Run("absorb", func(b *testing.B) {
-		b.SetBytes(168)
-		for b.Loop() {
-			s.AbsorbStripe(168, in)
-		}
-	})
-
-	b.Run("overwrite", func(b *testing.B) {
-		b.SetBytes(168)
-		for b.Loop() {
-			s.OverwriteStripe(168, in)
-		}
-	})
-
-	b.Run("squeeze", func(b *testing.B) {
-		b.SetBytes(168)
-		for b.Loop() {
-			s.SqueezeStripe(168, out)
-		}
-		sinkByte ^= out[0]
-	})
-
-	b.Run("overwrite_encrypt", func(b *testing.B) {
-		b.SetBytes(168)
-		for b.Loop() {
-			s.OverwriteEncryptStripe(168, out, in)
-		}
-		sinkByte ^= out[0]
-	})
-
-	b.Run("overwrite_decrypt", func(b *testing.B) {
-		b.SetBytes(168)
-		for b.Loop() {
-			s.OverwriteDecryptStripe(168, out, in)
-		}
-		sinkByte ^= out[0]
-	})
-}
-
-func BenchmarkHelpersState2Rate168(b *testing.B) {
-	in := make([]byte, 2*168)
-	out := make([]byte, 2*168)
-	var s State2
-
-	b.Run("absorb", func(b *testing.B) {
-		b.SetBytes(2 * 168)
-		for b.Loop() {
-			s.AbsorbStripe(168, in)
-		}
-	})
-
-	b.Run("squeeze", func(b *testing.B) {
-		b.SetBytes(2 * 168)
-		for b.Loop() {
-			s.SqueezeStripe(168, out)
-		}
-		sinkByte ^= out[0]
-	})
-
-	b.Run("overwrite_encrypt", func(b *testing.B) {
-		b.SetBytes(2 * 168)
-		for b.Loop() {
-			s.OverwriteEncryptStripe(168, out, in)
-		}
-		sinkByte ^= out[0]
-	})
-}
-
-func BenchmarkMixedState1Rate168(b *testing.B) {
-	in := make([]byte, 168)
-	out := make([]byte, 168)
-	var s State1
-	b.SetBytes(168)
-
-	for b.Loop() {
-		s.AbsorbStripe(168, in)
-		s.Permute12()
-		s.SqueezeStripe(168, out)
-	}
-
-	sinkByte ^= out[0]
-}
-
-func BenchmarkMixedState2Rate168(b *testing.B) {
-	in := make([]byte, 2*168)
-	out := make([]byte, 2*168)
-	var s State2
-	b.SetBytes(2 * 168)
-
-	for b.Loop() {
-		s.AbsorbStripe(168, in)
-		s.Permute12()
-		s.SqueezeStripe(168, out)
-	}
-
-	sinkByte ^= out[0]
 }

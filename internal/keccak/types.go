@@ -4,7 +4,7 @@ const (
 	// StateBytes is the size of a Keccak-p[1600] state in bytes.
 	StateBytes = 200
 	// Lanes is the number of 64-bit lanes in a Keccak-p[1600] state.
-	Lanes = 25
+	Lanes = StateBytes / 8
 )
 
 // State1 is a single lane-major Keccak-p[1600] state.
