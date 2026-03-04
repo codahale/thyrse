@@ -11,6 +11,9 @@ func p1600(a *State1)
 func p1600x2SSE2(a, b *State1)
 
 //go:noescape
+func p1600x2Lane(a *State2)
+
+//go:noescape
 func p1600x2AVX512(a, b *State1)
 
 //go:noescape
@@ -20,20 +23,20 @@ func p1600x4AVX2(a, b, c, d *State1)
 func p1600x4AVX512(a, b, c, d *State1)
 
 func permute12x2AMD64(s *State2) {
-	var a, b State1
-	for lane := range Lanes {
-		a.a[lane] = s.a[lane][0]
-		b.a[lane] = s.a[lane][1]
-	}
 	if cpuid.CPU.Has(cpuid.AVX512F) && cpuid.CPU.Has(cpuid.AVX512VL) {
+		var a, b State1
+		for lane := range Lanes {
+			a.a[lane] = s.a[lane][0]
+			b.a[lane] = s.a[lane][1]
+		}
 		p1600x2AVX512(&a, &b)
-	} else {
-		p1600x2SSE2(&a, &b)
+		for lane := range Lanes {
+			s.a[lane][0] = a.a[lane]
+			s.a[lane][1] = b.a[lane]
+		}
+		return
 	}
-	for lane := range Lanes {
-		s.a[lane][0] = a.a[lane]
-		s.a[lane][1] = b.a[lane]
-	}
+	p1600x2Lane(s)
 }
 
 func permute12x4AMD64(s *State4) {

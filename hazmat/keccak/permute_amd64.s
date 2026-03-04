@@ -2927,3 +2927,360 @@ DATA	round_consts_4x<>+0x2e8(SB)/8, $0x8000000080008008
 DATA	round_consts_4x<>+0x2f0(SB)/8, $0x8000000080008008
 DATA	round_consts_4x<>+0x2f8(SB)/8, $0x8000000080008008
 GLOBL	round_consts_4x<>(SB), NOPTR|RODATA, $768
+
+
+
+// func p1600x2Lane(a *State2)
+TEXT ·p1600x2Lane(SB), $800-8
+	MOVQ	a+0(FP), DI
+
+	// Load lane-major packed lane pairs directly into buffer A on stack.
+	MOVOU	0*16(DI), X0
+	MOVOU	X0, 0*16(SP)
+	MOVOU	1*16(DI), X0
+	MOVOU	X0, 1*16(SP)
+	MOVOU	2*16(DI), X0
+	MOVOU	X0, 2*16(SP)
+	MOVOU	3*16(DI), X0
+	MOVOU	X0, 3*16(SP)
+	MOVOU	4*16(DI), X0
+	MOVOU	X0, 4*16(SP)
+	MOVOU	5*16(DI), X0
+	MOVOU	X0, 5*16(SP)
+	MOVOU	6*16(DI), X0
+	MOVOU	X0, 6*16(SP)
+	MOVOU	7*16(DI), X0
+	MOVOU	X0, 7*16(SP)
+	MOVOU	8*16(DI), X0
+	MOVOU	X0, 8*16(SP)
+	MOVOU	9*16(DI), X0
+	MOVOU	X0, 9*16(SP)
+	MOVOU	10*16(DI), X0
+	MOVOU	X0, 10*16(SP)
+	MOVOU	11*16(DI), X0
+	MOVOU	X0, 11*16(SP)
+	MOVOU	12*16(DI), X0
+	MOVOU	X0, 12*16(SP)
+	MOVOU	13*16(DI), X0
+	MOVOU	X0, 13*16(SP)
+	MOVOU	14*16(DI), X0
+	MOVOU	X0, 14*16(SP)
+	MOVOU	15*16(DI), X0
+	MOVOU	X0, 15*16(SP)
+	MOVOU	16*16(DI), X0
+	MOVOU	X0, 16*16(SP)
+	MOVOU	17*16(DI), X0
+	MOVOU	X0, 17*16(SP)
+	MOVOU	18*16(DI), X0
+	MOVOU	X0, 18*16(SP)
+	MOVOU	19*16(DI), X0
+	MOVOU	X0, 19*16(SP)
+	MOVOU	20*16(DI), X0
+	MOVOU	X0, 20*16(SP)
+	MOVOU	21*16(DI), X0
+	MOVOU	X0, 21*16(SP)
+	MOVOU	22*16(DI), X0
+	MOVOU	X0, 22*16(SP)
+	MOVOU	23*16(DI), X0
+	MOVOU	X0, 23*16(SP)
+	MOVOU	24*16(DI), X0
+	MOVOU	X0, 24*16(SP)
+	// Set up loop
+	LEAQ	0(SP), R8                          // source = buf A
+	LEAQ	400(SP), R9                        // dest = buf B
+	LEAQ	round_consts_2x<>+192(SB), R11     // RC start (round 12)
+	MOVQ	$12, R10
+
+	PCALIGN	$16
+round_loop:
+	// === THETA ===
+	// Column parities: C[x] = lane[x] ^ lane[x+5] ^ lane[x+10] ^ lane[x+15] ^ lane[x+20]
+	// Note: all memory loads use MOVOU (unaligned) because the stack
+	// buffer may not be 16-byte aligned. PXOR with a memory operand
+	// requires 16-byte alignment and would fault on real AMD64 hardware.
+	MOVOU	0*16(R8), X0
+	MOVOU	5*16(R8), X14
+	PXOR	X14, X0
+	MOVOU	10*16(R8), X14
+	PXOR	X14, X0
+	MOVOU	15*16(R8), X14
+	PXOR	X14, X0
+	MOVOU	20*16(R8), X14
+	PXOR	X14, X0             // X0 = C[0]
+
+	MOVOU	1*16(R8), X1
+	MOVOU	6*16(R8), X14
+	PXOR	X14, X1
+	MOVOU	11*16(R8), X14
+	PXOR	X14, X1
+	MOVOU	16*16(R8), X14
+	PXOR	X14, X1
+	MOVOU	21*16(R8), X14
+	PXOR	X14, X1             // X1 = C[1]
+
+	MOVOU	2*16(R8), X2
+	MOVOU	7*16(R8), X14
+	PXOR	X14, X2
+	MOVOU	12*16(R8), X14
+	PXOR	X14, X2
+	MOVOU	17*16(R8), X14
+	PXOR	X14, X2
+	MOVOU	22*16(R8), X14
+	PXOR	X14, X2             // X2 = C[2]
+
+	MOVOU	3*16(R8), X3
+	MOVOU	8*16(R8), X14
+	PXOR	X14, X3
+	MOVOU	13*16(R8), X14
+	PXOR	X14, X3
+	MOVOU	18*16(R8), X14
+	PXOR	X14, X3
+	MOVOU	23*16(R8), X14
+	PXOR	X14, X3             // X3 = C[3]
+
+	MOVOU	4*16(R8), X4
+	MOVOU	9*16(R8), X14
+	PXOR	X14, X4
+	MOVOU	14*16(R8), X14
+	PXOR	X14, X4
+	MOVOU	19*16(R8), X14
+	PXOR	X14, X4
+	MOVOU	24*16(R8), X14
+	PXOR	X14, X4             // X4 = C[4]
+
+	// Diffusion: D[x] = C[(x-1)%5] ^ ROL64(C[(x+1)%5], 1)
+	// D[0] = C[4] ^ ROL64(C[1], 1)
+	MOVOU	X1, X5
+	ROT64_SSE2(X5, 1)
+	PXOR	X4, X5              // X5 = D[0]
+
+	// D[1] = C[0] ^ ROL64(C[2], 1)
+	MOVOU	X2, X6
+	ROT64_SSE2(X6, 1)
+	PXOR	X0, X6              // X6 = D[1]
+
+	// D[2] = C[1] ^ ROL64(C[3], 1)
+	MOVOU	X3, X7
+	ROT64_SSE2(X7, 1)
+	PXOR	X1, X7              // X7 = D[2]
+
+	// D[3] = C[2] ^ ROL64(C[4], 1)
+	MOVOU	X4, X8
+	ROT64_SSE2(X8, 1)
+	PXOR	X2, X8              // X8 = D[3]
+
+	// D[4] = C[3] ^ ROL64(C[0], 1)
+	MOVOU	X0, X9
+	ROT64_SSE2(X9, 1)
+	PXOR	X3, X9              // X9 = D[4]
+
+	// === RHO + PI + CHI + IOTA ===
+	// Combined step: for each output row, load source lanes (at pi-inverse
+	// positions), XOR with theta D values, rotate by rho amounts, then
+	// apply chi (and iota for row 0).
+	//
+	// Output row 0 (lanes 0-4):
+	//   bc0: src[0]  ^ d0, rot 0
+	//   bc1: src[6]  ^ d1, rot 44
+	//   bc2: src[12] ^ d2, rot 43
+	//   bc3: src[18] ^ d3, rot 21
+	//   bc4: src[24] ^ d4, rot 14
+
+	MOVOU	0*16(R8), X0
+	PXOR	X5, X0
+	// rot 0: no rotation
+
+	MOVOU	6*16(R8), X1
+	PXOR	X6, X1
+	ROT64_SSE2(X1, 44)
+
+	MOVOU	12*16(R8), X2
+	PXOR	X7, X2
+	ROT64_SSE2(X2, 43)
+
+	MOVOU	18*16(R8), X3
+	PXOR	X8, X3
+	ROT64_SSE2(X3, 21)
+
+	MOVOU	24*16(R8), X4
+	PXOR	X9, X4
+	ROT64_SSE2(X4, 14)
+
+	MOVOU	(R11), X15          // load round constant
+	CHI_IOTA_SSE2(0)
+
+	// Output row 1 (lanes 5-9):
+	//   bc0: src[3]  ^ d3, rot 28
+	//   bc1: src[9]  ^ d4, rot 20
+	//   bc2: src[10] ^ d0, rot 3
+	//   bc3: src[16] ^ d1, rot 45
+	//   bc4: src[22] ^ d2, rot 61
+
+	MOVOU	3*16(R8), X0
+	PXOR	X8, X0
+	ROT64_SSE2(X0, 28)
+
+	MOVOU	9*16(R8), X1
+	PXOR	X9, X1
+	ROT64_SSE2(X1, 20)
+
+	MOVOU	10*16(R8), X2
+	PXOR	X5, X2
+	ROT64_SSE2(X2, 3)
+
+	MOVOU	16*16(R8), X3
+	PXOR	X6, X3
+	ROT64_SSE2(X3, 45)
+
+	MOVOU	22*16(R8), X4
+	PXOR	X7, X4
+	ROT64_SSE2(X4, 61)
+
+	CHI_SSE2(5)
+
+	// Output row 2 (lanes 10-14):
+	//   bc0: src[1]  ^ d1, rot 1
+	//   bc1: src[7]  ^ d2, rot 6
+	//   bc2: src[13] ^ d3, rot 25
+	//   bc3: src[19] ^ d4, rot 8
+	//   bc4: src[20] ^ d0, rot 18
+
+	MOVOU	1*16(R8), X0
+	PXOR	X6, X0
+	ROT64_SSE2(X0, 1)
+
+	MOVOU	7*16(R8), X1
+	PXOR	X7, X1
+	ROT64_SSE2(X1, 6)
+
+	MOVOU	13*16(R8), X2
+	PXOR	X8, X2
+	ROT64_SSE2(X2, 25)
+
+	MOVOU	19*16(R8), X3
+	PXOR	X9, X3
+	ROT64_SSE2(X3, 8)
+
+	MOVOU	20*16(R8), X4
+	PXOR	X5, X4
+	ROT64_SSE2(X4, 18)
+
+	CHI_SSE2(10)
+
+	// Output row 3 (lanes 15-19):
+	//   bc0: src[4]  ^ d4, rot 27
+	//   bc1: src[5]  ^ d0, rot 36
+	//   bc2: src[11] ^ d1, rot 10
+	//   bc3: src[17] ^ d2, rot 15
+	//   bc4: src[23] ^ d3, rot 56
+
+	MOVOU	4*16(R8), X0
+	PXOR	X9, X0
+	ROT64_SSE2(X0, 27)
+
+	MOVOU	5*16(R8), X1
+	PXOR	X5, X1
+	ROT64_SSE2(X1, 36)
+
+	MOVOU	11*16(R8), X2
+	PXOR	X6, X2
+	ROT64_SSE2(X2, 10)
+
+	MOVOU	17*16(R8), X3
+	PXOR	X7, X3
+	ROT64_SSE2(X3, 15)
+
+	MOVOU	23*16(R8), X4
+	PXOR	X8, X4
+	ROT64_SSE2(X4, 56)
+
+	CHI_SSE2(15)
+
+	// Output row 4 (lanes 20-24):
+	//   bc0: src[2]  ^ d2, rot 62
+	//   bc1: src[8]  ^ d3, rot 55
+	//   bc2: src[14] ^ d4, rot 39
+	//   bc3: src[15] ^ d0, rot 41
+	//   bc4: src[21] ^ d1, rot 2
+
+	MOVOU	2*16(R8), X0
+	PXOR	X7, X0
+	ROT64_SSE2(X0, 62)
+
+	MOVOU	8*16(R8), X1
+	PXOR	X8, X1
+	ROT64_SSE2(X1, 55)
+
+	MOVOU	14*16(R8), X2
+	PXOR	X9, X2
+	ROT64_SSE2(X2, 39)
+
+	MOVOU	15*16(R8), X3
+	PXOR	X5, X3
+	ROT64_SSE2(X3, 41)
+
+	MOVOU	21*16(R8), X4
+	PXOR	X6, X4
+	ROT64_SSE2(X4, 2)
+
+	CHI_SSE2(20)
+
+	// Swap source/dest and advance round constant
+	XCHGQ	R8, R9
+	ADDQ	$16, R11
+	SUBQ	$1, R10
+	JNZ	round_loop
+
+	// Store lane-major packed lane pairs directly from buffer.
+	MOVOU	0*16(R8), X0
+	MOVOU	X0, 0*16(DI)
+	MOVOU	1*16(R8), X0
+	MOVOU	X0, 1*16(DI)
+	MOVOU	2*16(R8), X0
+	MOVOU	X0, 2*16(DI)
+	MOVOU	3*16(R8), X0
+	MOVOU	X0, 3*16(DI)
+	MOVOU	4*16(R8), X0
+	MOVOU	X0, 4*16(DI)
+	MOVOU	5*16(R8), X0
+	MOVOU	X0, 5*16(DI)
+	MOVOU	6*16(R8), X0
+	MOVOU	X0, 6*16(DI)
+	MOVOU	7*16(R8), X0
+	MOVOU	X0, 7*16(DI)
+	MOVOU	8*16(R8), X0
+	MOVOU	X0, 8*16(DI)
+	MOVOU	9*16(R8), X0
+	MOVOU	X0, 9*16(DI)
+	MOVOU	10*16(R8), X0
+	MOVOU	X0, 10*16(DI)
+	MOVOU	11*16(R8), X0
+	MOVOU	X0, 11*16(DI)
+	MOVOU	12*16(R8), X0
+	MOVOU	X0, 12*16(DI)
+	MOVOU	13*16(R8), X0
+	MOVOU	X0, 13*16(DI)
+	MOVOU	14*16(R8), X0
+	MOVOU	X0, 14*16(DI)
+	MOVOU	15*16(R8), X0
+	MOVOU	X0, 15*16(DI)
+	MOVOU	16*16(R8), X0
+	MOVOU	X0, 16*16(DI)
+	MOVOU	17*16(R8), X0
+	MOVOU	X0, 17*16(DI)
+	MOVOU	18*16(R8), X0
+	MOVOU	X0, 18*16(DI)
+	MOVOU	19*16(R8), X0
+	MOVOU	X0, 19*16(DI)
+	MOVOU	20*16(R8), X0
+	MOVOU	X0, 20*16(DI)
+	MOVOU	21*16(R8), X0
+	MOVOU	X0, 21*16(DI)
+	MOVOU	22*16(R8), X0
+	MOVOU	X0, 22*16(DI)
+	MOVOU	23*16(R8), X0
+	MOVOU	X0, 23*16(DI)
+	MOVOU	24*16(R8), X0
+	MOVOU	X0, 24*16(DI)
+
+	RET
