@@ -39,16 +39,16 @@ const (
 	permute8ARM64Lane
 )
 
-var selectedBackend = selectBackend() //nolint:gochecknoglobals
+var selectedBackend = selectBackend()
 
 // AvailableLanes is the preferred lane width for this CPU/backend selection.
-var AvailableLanes = lanesForBackend(selectedBackend) //nolint:gochecknoglobals
+var AvailableLanes = lanesForBackend(selectedBackend)
 
 var (
-	useArchPermute1 = false           //nolint:gochecknoglobals
-	selectedP2      = permute2Generic //nolint:gochecknoglobals
-	selectedP4      = permute4Generic //nolint:gochecknoglobals
-	selectedP8      = permute8Generic //nolint:gochecknoglobals
+	useArchPermute1 = false
+	selectedP2      = permute2Generic
+	selectedP4      = permute4Generic
+	selectedP8      = permute8Generic
 )
 
 func lanesForBackend(b backend) int {
@@ -90,23 +90,6 @@ func backendByName(name string) backend {
 		return backendGeneric
 	default:
 		panic("keccak: unknown backend override")
-	}
-}
-
-func backendName() string {
-	switch selectedBackend {
-	case backendAMD64AVX512:
-		return "amd64_avx512"
-	case backendAMD64AVX2:
-		return "amd64_avx2"
-	case backendAMD64SSE2:
-		return "amd64_sse2"
-	case backendARM64SHA3:
-		return "arm64_sha3"
-	case backendGeneric:
-		return "generic"
-	default:
-		panic("keccak: unknown backend")
 	}
 }
 

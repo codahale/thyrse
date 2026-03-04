@@ -2,8 +2,6 @@ package keccak
 
 import "encoding/binary"
 
-const rate = rate168
-
 // TurboSHAKE128 is a TurboSHAKE128 instance built on State1.
 //
 // It implements a sponge with rate 168, absorbing via Write and squeezing via
