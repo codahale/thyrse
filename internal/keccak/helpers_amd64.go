@@ -5,18 +5,40 @@ package keccak
 import "unsafe"
 
 //go:noescape
+func fastLoopAbsorb168x1(s *State1, in *byte, n int)
+
+//go:noescape
+func fastLoopAbsorb168x2(s *State2, in *byte, stride, n int)
+
+//go:noescape
+func fastLoopAbsorb168x4(s *State4, in *byte, stride, n int)
+
+//go:noescape
+func fastLoopAbsorb168x8AVX2(s *State8, in *byte, stride, n int)
+
+//go:noescape
 func fastLoopAbsorb168x8AVX512(s *State8, in *byte, stride, n int)
 
-func fastLoopAbsorb168x1Arch(_ *State1, _ []byte) bool { return false }
+func fastLoopAbsorb168x1Arch(s *State1, in []byte) bool {
+	fastLoopAbsorb168x1(s, unsafe.SliceData(in), len(in))
+	return true
+}
 
-func fastLoopAbsorb168x2Arch(_ *State2, _ []byte, _, _ int) bool { return false }
+func fastLoopAbsorb168x2Arch(s *State2, in []byte, stride, n int) bool {
+	fastLoopAbsorb168x2(s, unsafe.SliceData(in), stride, n)
+	return true
+}
 
-func fastLoopAbsorb168x4Arch(_ *State4, _ []byte, _, _ int) bool { return false }
+func fastLoopAbsorb168x4Arch(s *State4, in []byte, stride, n int) bool {
+	fastLoopAbsorb168x4(s, unsafe.SliceData(in), stride, n)
+	return true
+}
 
 func fastLoopAbsorb168x8Arch(s *State8, in []byte, stride, n int) bool {
-	if !hasAVX512 {
-		return false
+	if hasAVX512 {
+		fastLoopAbsorb168x8AVX512(s, unsafe.SliceData(in), stride, n)
+	} else {
+		fastLoopAbsorb168x8AVX2(s, unsafe.SliceData(in), stride, n)
 	}
-	fastLoopAbsorb168x8AVX512(s, unsafe.SliceData(in), stride, n)
 	return true
 }
