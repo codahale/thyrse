@@ -272,3 +272,137 @@ func TestExtractLanesWordsMatchesSqueeze(t *testing.T) {
 		}
 	})
 }
+
+func TestAbsorbWords4(t *testing.T) {
+	var s State1
+	s.AbsorbWords4(1, 2, 3, 4)
+	if got := s.Lane(0); got != 1 {
+		t.Fatalf("lane 0 = %d, want 1", got)
+	}
+	if got := s.Lane(1); got != 2 {
+		t.Fatalf("lane 1 = %d, want 2", got)
+	}
+	if got := s.Lane(2); got != 3 {
+		t.Fatalf("lane 2 = %d, want 3", got)
+	}
+	if got := s.Lane(3); got != 4 {
+		t.Fatalf("lane 3 = %d, want 4", got)
+	}
+}
+
+func TestFastLoopAbsorb168State1(t *testing.T) {
+	in := testPattern(3*168 + 17)
+	var a, b State1
+	n := a.FastLoopAbsorb168(in)
+	if n != 3*168 {
+		t.Fatalf("consumed %d, want %d", n, 3*168)
+	}
+	for off := 0; off < n; off += 168 {
+		b.Absorb168(in[off : off+168])
+		b.Permute12()
+	}
+	if a != b {
+		t.Fatalf("state mismatch after fast loop")
+	}
+
+	a.AbsorbFinal(in[n:], 0x0B)
+	a.Permute12()
+	b.AbsorbFinalStripe(168, in[n:], 0x0B)
+	b.Permute12()
+	if a != b {
+		t.Fatalf("state mismatch after final absorb")
+	}
+}
+
+func TestFastLoopAbsorb168State2(t *testing.T) {
+	in0 := testPattern(2*168 + 17)
+	in1 := testPattern(2*168 + 29)[:2*168+17]
+	var a, b State2
+	n := a.FastLoopAbsorb168(in0, in1)
+	if n != 2*168 {
+		t.Fatalf("consumed %d, want %d", n, 2*168)
+	}
+	for off := 0; off < n; off += 168 {
+		b.AbsorbStripe2(168, in0[off:off+168], in1[off:off+168])
+		b.Permute12()
+	}
+	if a != b {
+		t.Fatalf("state mismatch after fast loop")
+	}
+
+	a.AbsorbFinal(in0[n:], in1[n:], 0x0B)
+	a.Permute12()
+	b.AbsorbFinalStripe2(168, in0[n:], in1[n:], 0x0B)
+	b.Permute12()
+	if a != b {
+		t.Fatalf("state mismatch after final absorb")
+	}
+}
+
+func TestFastLoopAbsorb168State4(t *testing.T) {
+	in0 := testPattern(2*168 + 5)
+	in1 := testPattern(2*168 + 7)[:2*168+5]
+	in2 := testPattern(2*168 + 9)[:2*168+5]
+	in3 := testPattern(2*168 + 11)[:2*168+5]
+	var a, b State4
+	n := a.FastLoopAbsorb168(in0, in1, in2, in3)
+	if n != 2*168 {
+		t.Fatalf("consumed %d, want %d", n, 2*168)
+	}
+	for off := 0; off < n; off += 168 {
+		b.AbsorbStripe4(168, in0[off:off+168], in1[off:off+168], in2[off:off+168], in3[off:off+168])
+		b.Permute12()
+	}
+	if a != b {
+		t.Fatalf("state mismatch after fast loop")
+	}
+
+	a.AbsorbFinal(in0[n:], in1[n:], in2[n:], in3[n:], 0x0B)
+	a.Permute12()
+	b.AbsorbFinalStripe4(168, in0[n:], in1[n:], in2[n:], in3[n:], 0x0B)
+	b.Permute12()
+	if a != b {
+		t.Fatalf("state mismatch after final absorb")
+	}
+}
+
+func TestFastLoopAbsorb168State8(t *testing.T) {
+	in0 := testPattern(2*168 + 3)
+	in1 := testPattern(2*168 + 5)[:2*168+3]
+	in2 := testPattern(2*168 + 7)[:2*168+3]
+	in3 := testPattern(2*168 + 9)[:2*168+3]
+	in4 := testPattern(2*168 + 11)[:2*168+3]
+	in5 := testPattern(2*168 + 13)[:2*168+3]
+	in6 := testPattern(2*168 + 15)[:2*168+3]
+	in7 := testPattern(2*168 + 17)[:2*168+3]
+	var a, b State8
+	n := a.FastLoopAbsorb168(in0, in1, in2, in3, in4, in5, in6, in7)
+	if n != 2*168 {
+		t.Fatalf("consumed %d, want %d", n, 2*168)
+	}
+	for off := 0; off < n; off += 168 {
+		b.AbsorbStripe8(
+			168,
+			in0[off:off+168],
+			in1[off:off+168],
+			in2[off:off+168],
+			in3[off:off+168],
+			in4[off:off+168],
+			in5[off:off+168],
+			in6[off:off+168],
+			in7[off:off+168],
+		)
+		b.Permute12()
+	}
+	if a != b {
+		t.Fatalf("state mismatch after fast loop")
+	}
+
+	a.AbsorbFinal(in0[n:], in1[n:], in2[n:], in3[n:], in4[n:], in5[n:], in6[n:], in7[n:], 0x0B)
+	a.Permute12()
+	b.AbsorbFinalStripe8(168, in0[n:], in1[n:], in2[n:], in3[n:], in4[n:], in5[n:], in6[n:], in7[n:], 0x0B)
+	b.Permute12()
+	if a != b {
+		t.Fatalf("state mismatch after final absorb")
+	}
+}

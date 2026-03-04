@@ -325,51 +325,6 @@ func TestClone(t *testing.T) {
 	})
 }
 
-func TestTSWriteCV32MatchesTSWrite(t *testing.T) {
-	makeCV := func(seed byte) []byte {
-		cv := make([]byte, cvSize)
-		for i := range cv {
-			cv[i] = seed + byte(i*7)
-		}
-		return cv
-	}
-
-	for _, tc := range []struct {
-		name      string
-		prefixLen int
-		nCV       int
-	}{
-		{name: "aligned/one", prefixLen: 0, nCV: 1},
-		{name: "aligned/many", prefixLen: 0, nCV: 9},
-		{name: "misaligned/small", prefixLen: 3, nCV: 2},
-		{name: "near_boundary", prefixLen: rate128 - 16, nCV: 2},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			a := New()
-			b := New()
-			a.tsReset(0x06)
-			b.tsReset(0x06)
-
-			prefix := ptn(tc.prefixLen)
-			a.tsWrite(prefix)
-			b.tsWrite(prefix)
-
-			for i := 0; i < tc.nCV; i++ {
-				cv := makeCV(byte(i * 31))
-				a.tsWrite(cv)
-				b.tsWriteCV32(cv)
-			}
-
-			var outA, outB [256]byte
-			_, _ = a.tsRead(outA[:])
-			_, _ = b.tsRead(outB[:])
-			if !bytes.Equal(outA[:], outB[:]) {
-				t.Fatalf("squeeze mismatch")
-			}
-		})
-	}
-}
-
 var sizes = slices.Concat(testdata.Sizes, []testdata.Size{
 	{Name: "8KiB+1B", N: BlockSize + 1},
 })

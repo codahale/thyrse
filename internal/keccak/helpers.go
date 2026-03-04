@@ -2,6 +2,8 @@ package keccak
 
 import "encoding/binary"
 
+const rate168 = 168
+
 func validateRate(rate int) {
 	if rate < 0 || rate > StateBytes {
 		panic("keccak: invalid rate")
@@ -127,6 +129,32 @@ func (s *State1) AbsorbStripe(rate int, in []byte) {
 	}
 }
 
+// Absorb168 absorbs one 168-byte stripe.
+func (s *State1) Absorb168(in []byte) {
+	if len(in) != rate168 {
+		panic("keccak: invalid stripe length")
+	}
+	s.AbsorbStripe(rate168, in)
+}
+
+// FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
+func (s *State1) FastLoopAbsorb168(in []byte) int {
+	n := (len(in) / rate168) * rate168
+	for off := 0; off < n; off += rate168 {
+		s.Absorb168(in[off : off+rate168])
+		s.Permute12()
+	}
+	return n
+}
+
+// AbsorbWords4 xors four 64-bit words into lanes 0..3.
+func (s *State1) AbsorbWords4(w0, w1, w2, w3 uint64) {
+	s.a[0] ^= w0
+	s.a[1] ^= w1
+	s.a[2] ^= w2
+	s.a[3] ^= w3
+}
+
 // AbsorbFinalStripe absorbs a final partial block and applies Keccak padding.
 func (s *State1) AbsorbFinalStripe(rate int, tail []byte, ds byte) {
 	validateRate(rate)
@@ -144,6 +172,11 @@ func (s *State1) AbsorbFinalStripe(rate int, tail []byte, ds byte) {
 	}
 	xorByteInWord(&s.a[len(tail)>>3], len(tail), ds)
 	xorByteInWord(&s.a[(rate-1)>>3], rate-1, 0x80)
+}
+
+// AbsorbFinal absorbs a final partial 168-byte block and applies Keccak padding.
+func (s *State1) AbsorbFinal(tail []byte, ds byte) {
+	s.AbsorbFinalStripe(rate168, tail, ds)
 }
 
 func (s *State1) OverwriteStripe(rate int, in []byte) {
@@ -305,6 +338,22 @@ func (s *State2) AbsorbStripe2(rate int, in0, in1 []byte) {
 		s.a[full][0] ^= loadPartialLE(in0[base : base+tail])
 		s.a[full][1] ^= loadPartialLE(in1[base : base+tail])
 	}
+}
+
+// FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
+func (s *State2) FastLoopAbsorb168(in0, in1 []byte) int {
+	n := min(len(in0), len(in1))
+	n = (n / rate168) * rate168
+	for off := 0; off < n; off += rate168 {
+		s.AbsorbStripe2(rate168, in0[off:off+rate168], in1[off:off+rate168])
+		s.Permute12()
+	}
+	return n
+}
+
+// AbsorbFinal absorbs final partial 168-byte blocks and applies Keccak padding.
+func (s *State2) AbsorbFinal(tail0, tail1 []byte, ds byte) {
+	s.AbsorbFinalStripe2(rate168, tail0, tail1, ds)
 }
 
 func (s *State2) OverwriteStripe(rate int, in []byte) {
@@ -520,6 +569,28 @@ func (s *State4) AbsorbStripe4(rate int, in0, in1, in2, in3 []byte) {
 		s.a[full][2] ^= loadPartialLE(in2[base : base+tail])
 		s.a[full][3] ^= loadPartialLE(in3[base : base+tail])
 	}
+}
+
+// FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
+func (s *State4) FastLoopAbsorb168(in0, in1, in2, in3 []byte) int {
+	n := min(min(len(in0), len(in1)), min(len(in2), len(in3)))
+	n = (n / rate168) * rate168
+	for off := 0; off < n; off += rate168 {
+		s.AbsorbStripe4(
+			rate168,
+			in0[off:off+rate168],
+			in1[off:off+rate168],
+			in2[off:off+rate168],
+			in3[off:off+rate168],
+		)
+		s.Permute12()
+	}
+	return n
+}
+
+// AbsorbFinal absorbs final partial 168-byte blocks and applies Keccak padding.
+func (s *State4) AbsorbFinal(tail0, tail1, tail2, tail3 []byte, ds byte) {
+	s.AbsorbFinalStripe4(rate168, tail0, tail1, tail2, tail3, ds)
 }
 
 func (s *State4) OverwriteStripe(rate int, in []byte) {
@@ -849,6 +920,35 @@ func (s *State8) AbsorbStripe8(rate int, in0, in1, in2, in3, in4, in5, in6, in7 
 		s.a[full][6] ^= loadPartialLE(in6[base : base+tail])
 		s.a[full][7] ^= loadPartialLE(in7[base : base+tail])
 	}
+}
+
+// FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
+func (s *State8) FastLoopAbsorb168(in0, in1, in2, in3, in4, in5, in6, in7 []byte) int {
+	n := min(
+		min(min(len(in0), len(in1)), min(len(in2), len(in3))),
+		min(min(len(in4), len(in5)), min(len(in6), len(in7))),
+	)
+	n = (n / rate168) * rate168
+	for off := 0; off < n; off += rate168 {
+		s.AbsorbStripe8(
+			rate168,
+			in0[off:off+rate168],
+			in1[off:off+rate168],
+			in2[off:off+rate168],
+			in3[off:off+rate168],
+			in4[off:off+rate168],
+			in5[off:off+rate168],
+			in6[off:off+rate168],
+			in7[off:off+rate168],
+		)
+		s.Permute12()
+	}
+	return n
+}
+
+// AbsorbFinal absorbs final partial 168-byte blocks and applies Keccak padding.
+func (s *State8) AbsorbFinal(tail0, tail1, tail2, tail3, tail4, tail5, tail6, tail7 []byte, ds byte) {
+	s.AbsorbFinalStripe8(rate168, tail0, tail1, tail2, tail3, tail4, tail5, tail6, tail7, ds)
 }
 
 func (s *State8) OverwriteStripe(rate int, in []byte) {
