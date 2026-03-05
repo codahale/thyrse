@@ -1,6 +1,9 @@
 package keccak
 
-import "encoding/binary"
+import (
+	"crypto/subtle"
+	"encoding/binary"
+)
 
 // TurboSHAKE128 is a TurboSHAKE128 instance built on State1.
 //
@@ -188,4 +191,50 @@ func (t *TurboSHAKE128) Read(p []byte) (int, error) {
 		}
 	}
 	return n, nil
+}
+
+// Chain clones a into b, applies domain separation padding with a.ds on a and
+// ds on b, permutes both in parallel via State2, and leaves both in squeezing
+// mode.
+func (a *TurboSHAKE128) Chain(b *TurboSHAKE128, ds byte) {
+	*b = *a
+	var s2 State2
+	for i := range Lanes {
+		s2.a[i] = [2]uint64{a.s.a[i], b.s.a[i]}
+	}
+	xorByteInWord(&s2.a[a.pos>>3][0], a.pos, a.ds)
+	xorByteInWord(&s2.a[a.pos>>3][1], a.pos, ds)
+	endLane := (Rate - 1) >> 3
+	xorByteInWord(&s2.a[endLane][0], Rate-1, 0x80)
+	xorByteInWord(&s2.a[endLane][1], Rate-1, 0x80)
+	s2.Permute12()
+	for i := range Lanes {
+		a.s.a[i] = s2.a[i][0]
+		b.s.a[i] = s2.a[i][1]
+	}
+	a.pos, b.pos = 0, 0
+	a.squeezing, b.squeezing = true, true
+}
+
+// Equal returns 1 if t and other represent identical states, 0 otherwise.
+// The comparison is constant-time with respect to the keccak state.
+func (t *TurboSHAKE128) Equal(other *TurboSHAKE128) int {
+	var acc uint64
+	for i := range Lanes {
+		acc |= t.s.a[i] ^ other.s.a[i]
+	}
+	acc |= acc >> 32
+	acc |= acc >> 16
+	acc |= acc >> 8
+	acc |= acc >> 4
+	acc |= acc >> 2
+	acc |= acc >> 1
+	lanesEq := int(1 - (acc & 1))
+	var s int
+	if t.squeezing == other.squeezing {
+		s = 1
+	}
+	return s & lanesEq &
+		subtle.ConstantTimeByteEq(t.ds, other.ds) &
+		subtle.ConstantTimeEq(int32(t.pos), int32(other.pos))
 }

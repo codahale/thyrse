@@ -15,7 +15,7 @@ import (
 
 	"github.com/codahale/thyrse/hazmat/kt128"
 	"github.com/codahale/thyrse/hazmat/treewrap"
-	"github.com/codahale/thyrse/hazmat/turboshake"
+	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
 
@@ -31,7 +31,7 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 // Operations append frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal) evaluate
 // TurboSHAKE128 over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
-	h         turboshake.Hasher
+	h         keccak.TurboSHAKE128
 	initLabel string
 }
 
@@ -39,7 +39,7 @@ type Protocol struct {
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
 	var p Protocol
-	p.h = turboshake.New(dsChain)
+	p.h = keccak.NewTurboSHAKE128(dsChain)
 	p.initLabel = label
 	p.writeOpLabel(opInit, label)
 	return &p
@@ -364,7 +364,7 @@ func (p *Protocol) Clear() {
 	p.initLabel = ""
 }
 
-// finalize performs the dual TurboSHAKE128 finalization in parallel using [turboshake.Chain].
+// finalize performs the dual TurboSHAKE128 finalization in parallel using [keccak.TurboSHAKE128.Chain].
 //
 // For Derive, Mask, and Seal: p.h (constructed with dsChain=0x20) produces the
 // chain value, and the clone (finalized with outputDS) produces the output read
@@ -377,10 +377,10 @@ func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 
 	oh := p.h
 	if outputDS == dsRatchet {
-		turboshake.Chain(&p.h, &oh, dsRatchet)
+		p.h.Chain(&oh, dsRatchet)
 		_, _ = oh.Read(cv[:])
 	} else {
-		turboshake.Chain(&p.h, &oh, outputDS)
+		p.h.Chain(&oh, outputDS)
 		_, _ = p.h.Read(cv[:])
 		if dst != nil {
 			_, _ = oh.Read(dst)
