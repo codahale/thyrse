@@ -238,12 +238,12 @@ func (s *State2) AbsorbFinal(tail0, tail1 []byte, ds byte) {
 	}
 	posLane := len(tail0) >> 3
 	pos := len(tail0)
-	xorByteInWord(&s.a[posLane][0], pos, ds)
-	xorByteInWord(&s.a[posLane][1], pos, ds)
 	endLane := (Rate - 1) >> 3
 	end := Rate - 1
-	xorByteInWord(&s.a[endLane][0], end, 0x80)
-	xorByteInWord(&s.a[endLane][1], end, 0x80)
+	for inst := range 2 {
+		xorByteInWord(&s.a[posLane][inst], pos, ds)
+		xorByteInWord(&s.a[endLane][inst], end, 0x80)
+	}
 }
 
 // FastLoopEncrypt167 XORs plaintext into state, outputs ciphertext, pads, and permutes.
@@ -310,13 +310,13 @@ func (s *State2) PadPermute(pos int, ds byte) {
 	shift := uint((pos & 7) << 3)
 	dsMask := uint64(ds) << shift
 	posLane := pos >> 3
-	s.a[posLane][0] ^= dsMask
-	s.a[posLane][1] ^= dsMask
 	endShift := uint(((Rate - 1) & 7) << 3)
 	endMask := uint64(0x80) << endShift
 	endLane := (Rate - 1) >> 3
-	s.a[endLane][0] ^= endMask
-	s.a[endLane][1] ^= endMask
+	for inst := range 2 {
+		s.a[posLane][inst] ^= dsMask
+		s.a[endLane][inst] ^= endMask
+	}
 	s.Permute12()
 }
 
@@ -405,16 +405,12 @@ func (s *State4) AbsorbFinal(tail0, tail1, tail2, tail3 []byte, ds byte) {
 	}
 	posLane := len(tail0) >> 3
 	pos := len(tail0)
-	xorByteInWord(&s.a[posLane][0], pos, ds)
-	xorByteInWord(&s.a[posLane][1], pos, ds)
-	xorByteInWord(&s.a[posLane][2], pos, ds)
-	xorByteInWord(&s.a[posLane][3], pos, ds)
 	endLane := (Rate - 1) >> 3
 	end := Rate - 1
-	xorByteInWord(&s.a[endLane][0], end, 0x80)
-	xorByteInWord(&s.a[endLane][1], end, 0x80)
-	xorByteInWord(&s.a[endLane][2], end, 0x80)
-	xorByteInWord(&s.a[endLane][3], end, 0x80)
+	for inst := range 4 {
+		xorByteInWord(&s.a[posLane][inst], pos, ds)
+		xorByteInWord(&s.a[endLane][inst], end, 0x80)
+	}
 }
 
 // FastLoopEncrypt167 XORs plaintext into state, outputs ciphertext, pads, and permutes.
@@ -480,17 +476,13 @@ func (s *State4) PadPermute(pos int, ds byte) {
 	shift := uint((pos & 7) << 3)
 	dsMask := uint64(ds) << shift
 	posLane := pos >> 3
-	s.a[posLane][0] ^= dsMask
-	s.a[posLane][1] ^= dsMask
-	s.a[posLane][2] ^= dsMask
-	s.a[posLane][3] ^= dsMask
 	endShift := uint(((Rate - 1) & 7) << 3)
 	endMask := uint64(0x80) << endShift
 	endLane := (Rate - 1) >> 3
-	s.a[endLane][0] ^= endMask
-	s.a[endLane][1] ^= endMask
-	s.a[endLane][2] ^= endMask
-	s.a[endLane][3] ^= endMask
+	for inst := range 4 {
+		s.a[posLane][inst] ^= dsMask
+		s.a[endLane][inst] ^= endMask
+	}
 	s.Permute12()
 }
 
@@ -597,24 +589,12 @@ func (s *State8) AbsorbFinal(tail0, tail1, tail2, tail3, tail4, tail5, tail6, ta
 	}
 	posLane := len(tail0) >> 3
 	pos := len(tail0)
-	xorByteInWord(&s.a[posLane][0], pos, ds)
-	xorByteInWord(&s.a[posLane][1], pos, ds)
-	xorByteInWord(&s.a[posLane][2], pos, ds)
-	xorByteInWord(&s.a[posLane][3], pos, ds)
-	xorByteInWord(&s.a[posLane][4], pos, ds)
-	xorByteInWord(&s.a[posLane][5], pos, ds)
-	xorByteInWord(&s.a[posLane][6], pos, ds)
-	xorByteInWord(&s.a[posLane][7], pos, ds)
 	endLane := (Rate - 1) >> 3
 	end := Rate - 1
-	xorByteInWord(&s.a[endLane][0], end, 0x80)
-	xorByteInWord(&s.a[endLane][1], end, 0x80)
-	xorByteInWord(&s.a[endLane][2], end, 0x80)
-	xorByteInWord(&s.a[endLane][3], end, 0x80)
-	xorByteInWord(&s.a[endLane][4], end, 0x80)
-	xorByteInWord(&s.a[endLane][5], end, 0x80)
-	xorByteInWord(&s.a[endLane][6], end, 0x80)
-	xorByteInWord(&s.a[endLane][7], end, 0x80)
+	for inst := range 8 {
+		xorByteInWord(&s.a[posLane][inst], pos, ds)
+		xorByteInWord(&s.a[endLane][inst], end, 0x80)
+	}
 }
 
 // FastLoopEncrypt167 XORs plaintext into state, outputs ciphertext, pads, and permutes.
