@@ -13,11 +13,31 @@ package treewrap
 import (
 	"encoding/binary"
 
-	"github.com/codahale/thyrse/hazmat/legacykeccak"
 	"github.com/codahale/thyrse/hazmat/turboshake"
 	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
+
+func permute(b *[200]byte) {
+	var s keccak.State1
+	s.LoadFromBytes(b)
+	s.Permute12()
+	s.StoreToBytes(b)
+}
+
+func permute2(b0, b1 *[200]byte) {
+	var s keccak.State2
+	s.LoadFromBytes(b0, b1)
+	s.Permute12()
+	s.StoreToBytes(b0, b1)
+}
+
+func permute4(b0, b1, b2, b3 *[200]byte) {
+	var s keccak.State4
+	s.LoadFromBytes(b0, b1, b2, b3)
+	s.Permute12()
+	s.StoreToBytes(b0, b1, b2, b3)
+}
 
 const (
 	// KeySize is the size of the key in bytes.
@@ -54,7 +74,7 @@ type cryptor struct {
 func (c *cryptor) finalizeCV() {
 	c.s[c.pos] ^= finalDS
 	c.s[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600(&c.s)
+	permute(&c.s)
 	copy(c.cvBuf[:cvSize], c.s[:cvSize])
 	c.feedCVs(c.cvBuf[:cvSize])
 	c.idx++
@@ -90,10 +110,10 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 		// Empty input: process one empty chunk with singleNodeDS fast-path.
 		var s0 [200]byte
 		leafPad(&s0, &c.key, 0)
-		legacykeccak.P1600(&s0)
+		permute(&s0)
 		s0[0] ^= singleNodeDS
 		s0[turboshake.Rate-1] ^= 0x80
-		legacykeccak.P1600(&s0)
+		permute(&s0)
 		var tag [TagSize]byte
 		copy(tag[:], s0[:TagSize])
 		return tag
@@ -104,7 +124,7 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 		var tag [TagSize]byte
 		c.s[c.pos] ^= singleNodeDS
 		c.s[turboshake.Rate-1] ^= 0x80
-		legacykeccak.P1600(&c.s)
+		permute(&c.s)
 		copy(tag[:], c.s[:TagSize])
 		return tag
 	}
@@ -160,7 +180,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	if e.idx == 0 && e.chunkOff == 0 && len(src) <= ChunkSize {
 		e.s = [200]byte{}
 		leafPad(&e.s, &e.key, 0)
-		legacykeccak.P1600(&e.s)
+		permute(&e.s)
 		e.pos = 0
 		e.chunkOff = 0
 		e.encryptPartial(dst, src)
@@ -178,7 +198,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	if len(src) > 0 {
 		e.s = [200]byte{}
 		leafPad(&e.s, &e.key, uint64(e.idx))
-		legacykeccak.P1600(&e.s)
+		permute(&e.s)
 		e.pos = 0
 		e.chunkOff = 0
 		e.encryptPartial(dst[:len(src)], src)
@@ -191,7 +211,7 @@ func (e *Encryptor) encryptPartial(dst, src []byte) {
 		if e.pos == blockRate {
 			e.s[blockRate] ^= intermediateDS
 			e.s[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600(&e.s)
+			permute(&e.s)
 			e.pos = 0
 		}
 
@@ -284,7 +304,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	if d.idx == 0 && d.chunkOff == 0 && len(src) <= ChunkSize {
 		d.s = [200]byte{}
 		leafPad(&d.s, &d.key, 0)
-		legacykeccak.P1600(&d.s)
+		permute(&d.s)
 		d.pos = 0
 		d.chunkOff = 0
 		d.decryptPartial(dst, src)
@@ -302,7 +322,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	if len(src) > 0 {
 		d.s = [200]byte{}
 		leafPad(&d.s, &d.key, uint64(d.idx))
-		legacykeccak.P1600(&d.s)
+		permute(&d.s)
 		d.pos = 0
 		d.chunkOff = 0
 		d.decryptPartial(dst[:len(src)], src)
@@ -315,7 +335,7 @@ func (d *Decryptor) decryptPartial(dst, src []byte) {
 		if d.pos == blockRate {
 			d.s[blockRate] ^= intermediateDS
 			d.s[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600(&d.s)
+			permute(&d.s)
 			d.pos = 0
 		}
 
@@ -455,7 +475,7 @@ func encryptX1(key *[KeySize]byte, index uint64, pt, ct, cvBuf []byte) {
 	pos := finalPos(len(pt))
 	b0[pos] ^= finalDS
 	b0[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600(&b0)
+	permute(&b0)
 	copy(cvBuf[:cvSize], b0[:cvSize])
 }
 
@@ -480,7 +500,7 @@ func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 	b0[turboshake.Rate-1] ^= 0x80
 	b1[pos] ^= finalDS
 	b1[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x2(&b0, &b1)
+	permute2(&b0, &b1)
 	copy(cvBuf[:cvSize], b0[:cvSize])
 	copy(cvBuf[cvSize:], b1[:cvSize])
 }
@@ -514,7 +534,7 @@ func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 	b2[turboshake.Rate-1] ^= 0x80
 	b3[pos] ^= finalDS
 	b3[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x4(&b0, &b1, &b2, &b3)
+	permute4(&b0, &b1, &b2, &b3)
 	copy(cvBuf[:cvSize], b0[:cvSize])
 	copy(cvBuf[cvSize:2*cvSize], b1[:cvSize])
 	copy(cvBuf[2*cvSize:3*cvSize], b2[:cvSize])
@@ -538,7 +558,7 @@ func decryptX1(key *[KeySize]byte, index uint64, ct, pt, cvBuf []byte) {
 	pos := finalPos(len(ct))
 	b0[pos] ^= finalDS
 	b0[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600(&b0)
+	permute(&b0)
 	copy(cvBuf[:cvSize], b0[:cvSize])
 }
 
@@ -563,7 +583,7 @@ func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 	b0[turboshake.Rate-1] ^= 0x80
 	b1[pos] ^= finalDS
 	b1[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x2(&b0, &b1)
+	permute2(&b0, &b1)
 	copy(cvBuf[:cvSize], b0[:cvSize])
 	copy(cvBuf[cvSize:], b1[:cvSize])
 }
@@ -597,7 +617,7 @@ func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 	b2[turboshake.Rate-1] ^= 0x80
 	b3[pos] ^= finalDS
 	b3[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x4(&b0, &b1, &b2, &b3)
+	permute4(&b0, &b1, &b2, &b3)
 	copy(cvBuf[:cvSize], b0[:cvSize])
 	copy(cvBuf[cvSize:2*cvSize], b1[:cvSize])
 	copy(cvBuf[2*cvSize:3*cvSize], b2[:cvSize])
