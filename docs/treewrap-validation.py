@@ -40,8 +40,8 @@ def load_spec_namespace(spec_path: Path) -> dict[str, Any]:
     required = [
         "encrypt_and_mac",
         "decrypt_and_mac",
-        "treewrap_aead_encrypt",
-        "treewrap_aead_decrypt",
+        "treewrap128_encrypt",
+        "treewrap128_decrypt",
         "TAU",
         "B",
     ]
@@ -133,7 +133,7 @@ def compute_bare_expected(ns: dict[str, Any], key: bytes, case: dict[str, Any]) 
 
 
 def compute_aead_expected(ns: dict[str, Any], case: dict[str, Any]) -> dict[str, str]:
-    enc = ns["treewrap_aead_encrypt"]
+    enc = ns["treewrap128_encrypt"]
     tau = int(ns["TAU"])
 
     key = bytes_from_hex(case["key_hex"])
@@ -212,8 +212,8 @@ def validate_bare_case(ns: dict[str, Any], key: bytes, case: dict[str, Any], fai
 
 
 def validate_aead_case(ns: dict[str, Any], case: dict[str, Any], failures: list[str]) -> None:
-    enc = ns["treewrap_aead_encrypt"]
-    dec = ns["treewrap_aead_decrypt"]
+    enc = ns["treewrap128_encrypt"]
+    dec = ns["treewrap128_decrypt"]
     tau = int(ns["TAU"])
 
     cid = case["id"]
@@ -327,22 +327,29 @@ def render_section_9(vectors: dict[str, Any]) -> str:
     lines.append("## 9. Test Vectors")
     lines.append("")
 
+    lines.append("### 9.1 Internal Function Vectors")
+    lines.append("")
+
     key = bytes_from_hex(bare["key_hex"])
-    lines.append("All bare TreeWrap vectors use:")
+    lines.append("All internal function vectors use:")
     lines.append("")
     lines.append(f"- **Key:** 32 bytes `{fmt_bytes_short(key)}`")
-    lines.append("- **Plaintext:** `len` bytes `00 01 02 ... (len−1) mod 256`")
+    lines.append("- **Plaintext:** `len` bytes `00 01 02 ... (len-1) mod 256`")
     lines.append("")
     lines.append("Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. All values are hexadecimal.")
     lines.append("")
 
     for case in bare["vectors"]:
         cid = case["id"]
+        # Renumber: 9.1 -> 9.1.1, 9.2 -> 9.1.2, etc.
+        old_num = cid.split(" ")[0]  # e.g. "9.1"
+        sub = old_num.split(".")[1]  # e.g. "1"
+        new_id = f"9.1.{sub}"
         title = case["title"]
         msg = make_message(case["message"])
         exp = case["expected"]
 
-        lines.append(f"### {cid} {title}")
+        lines.append(f"#### {new_id} {title}")
         lines.append("")
         lines.append("| Field | Value |")
         lines.append("|-------|-------|")
@@ -363,23 +370,28 @@ def render_section_9(vectors: dict[str, Any]) -> str:
             lines.append("")
 
         if "swap_tag_hex" in exp:
-            lines.append("Swapping chunks 0 and 1 (bytes 0–8,191 and 8,192–16,383) yields tag")
+            lines.append("Swapping chunks 0 and 1 (bytes 0-8,191 and 8,192-16,383) yields tag")
             lines.append(f"`{exp['swap_tag_hex']}`.")
             lines.append("")
 
-    lines.append("### 9.6 Round-Trip Consistency")
+    lines.append("#### 9.1.6 Round-Trip Consistency")
     lines.append("")
-    lines.append("For all bare vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as `EncryptAndMAC`.")
+    lines.append("For all internal function vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as")
+    lines.append("`EncryptAndMAC`.")
     lines.append("")
 
-    lines.append("### 9.7 TreeWrap-AEAD Vectors")
+    lines.append("### 9.2 TreeWrap128 Vectors")
     lines.append("")
-    lines.append("These vectors validate the `treewrap_aead_encrypt` / `treewrap_aead_decrypt` wrapper in §5.2, including SP 800-185")
+    lines.append("These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including SP 800-185")
     lines.append("`encode_string` key derivation.")
     lines.append("")
 
     for case in aead["vectors"]:
         cid = case["id"]
+        # Renumber: 9.7.1 -> 9.2.1, 9.7.2 -> 9.2.2, etc.
+        old_num = cid.split(" ")[0]  # e.g. "9.7.1"
+        sub = old_num.split(".")[2]  # e.g. "1"
+        new_id = f"9.2.{sub}"
         title = case["title"]
         key = bytes_from_hex(case["key_hex"])
         nonce = bytes_from_hex(case["nonce_hex"])
@@ -387,7 +399,7 @@ def render_section_9(vectors: dict[str, Any]) -> str:
         msg = make_message(case["message"])
         exp = case["expected"]
 
-        lines.append(f"#### {cid} {title}")
+        lines.append(f"#### {new_id} {title}")
         lines.append("")
         lines.append("| Field | Value |")
         lines.append("|-------|-------|")
@@ -407,13 +419,13 @@ def render_section_9(vectors: dict[str, Any]) -> str:
             lines.append(f"| ct[:32] | `{exp['ct_prefix32_hex']}` |")
             lines.append(f"| tag | `{exp['tag_hex']}` |")
         lines.append("")
-        lines.append("`treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.")
+        lines.append("`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.")
         lines.append("Changing `N`, `AD`, or `tag` causes decryption to return `None`.")
         checks = case.get("checks", {})
         if checks.get("nonce_reuse_xor_leak"):
             lines.append("Reusing the same `(K, N, AD)` with a different message is deterministic and yields")
             lines.append("`ct1 xor ct2 = m1 xor m2` for equal-length messages (validated by this vector).")
-            lines.append("Nonce reuse is out of scope for §6 nonce-respecting claims.")
+            lines.append("Nonce reuse is out of scope for Section 6 nonce-respecting claims.")
         if checks.get("swap_nonce_ad"):
             lines.append("Swapping `N` and `AD` (same byte length) yields a different `ct‖tag` and does not")
             lines.append("validate the original `ct‖tag`.")
