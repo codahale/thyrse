@@ -130,8 +130,8 @@ func (s *State1) ExtractBytes(dst []byte) {
 	}
 }
 
-// EncryptBytes performs SpongeWrap encryption on a partial block:
-// for each byte i, dst[i] = state[i] ^ src[i], then state absorbs src.
+// EncryptBytes performs overwrite-mode encryption starting at byte 0:
+// dst[i] = src[i] ^ state[i], state[i] = dst[i].
 func (s *State1) EncryptBytes(src, dst []byte) {
 	full := len(src) >> 3
 	for i := range full {
@@ -148,8 +148,39 @@ func (s *State1) EncryptBytes(src, dst []byte) {
 	}
 }
 
-// DecryptBytes performs SpongeWrap decryption on a partial block:
-// for each byte i, dst[i] = state[i] ^ src[i], then state absorbs src (ciphertext).
+// EncryptBytesAt performs overwrite-mode encryption starting at byte position pos.
+func (s *State1) EncryptBytesAt(pos int, src, dst []byte) {
+	lane := pos >> 3
+	off := pos & 7
+
+	if off != 0 {
+		n := min(8-off, len(src))
+		shift := uint(off) << 3
+		w := loadPartialLE(src[:n]) << shift
+		s.a[lane] ^= w
+		storePartialLE(dst[:n], s.a[lane]>>shift)
+		src = src[n:]
+		dst = dst[n:]
+		lane++
+	}
+
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		w := binary.LittleEndian.Uint64(src[base : base+8])
+		s.a[lane+i] ^= w
+		binary.LittleEndian.PutUint64(dst[base:base+8], s.a[lane+i])
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		w := loadPartialLE(src[base : base+rem])
+		s.a[lane+full] ^= w
+		storePartialLE(dst[base:base+rem], s.a[lane+full])
+	}
+}
+
+// DecryptBytes performs overwrite-mode decryption starting at byte 0:
+// dst[i] = src[i] ^ state[i], state[i] = src[i].
 func (s *State1) DecryptBytes(src, dst []byte) {
 	full := len(src) >> 3
 	for i := range full {
@@ -164,6 +195,39 @@ func (s *State1) DecryptBytes(src, dst []byte) {
 		mask := uint64(1)<<(rem*8) - 1
 		storePartialLE(dst[base:base+rem], ct^(s.a[full]&mask))
 		s.a[full] = (s.a[full] & ^mask) | ct
+	}
+}
+
+// DecryptBytesAt performs overwrite-mode decryption starting at byte position pos.
+func (s *State1) DecryptBytesAt(pos int, src, dst []byte) {
+	lane := pos >> 3
+	off := pos & 7
+
+	if off != 0 {
+		n := min(8-off, len(src))
+		shift := uint(off) << 3
+		mask := (uint64(1)<<(uint(n)*8) - 1) << shift
+		ct := loadPartialLE(src[:n]) << shift
+		storePartialLE(dst[:n], (ct^(s.a[lane]&mask))>>shift)
+		s.a[lane] = (s.a[lane] & ^mask) | ct
+		src = src[n:]
+		dst = dst[n:]
+		lane++
+	}
+
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		ct := binary.LittleEndian.Uint64(src[base : base+8])
+		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.a[lane+i])
+		s.a[lane+i] = ct
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		ct := loadPartialLE(src[base : base+rem])
+		mask := uint64(1)<<(uint(rem)*8) - 1
+		storePartialLE(dst[base:base+rem], ct^(s.a[lane+full]&mask))
+		s.a[lane+full] = (s.a[lane+full] & ^mask) | ct
 	}
 }
 

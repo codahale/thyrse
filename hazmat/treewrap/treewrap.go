@@ -18,19 +18,20 @@ import (
 	"github.com/codahale/thyrse/internal/mem"
 )
 
-func permute(b *[200]byte) {
-	var s keccak.State1
-	s.LoadFromBytes(b)
-	s.Permute12()
-	s.StoreToBytes(b)
-}
-
 // leafPadBuf builds the leaf init data (key || LE64(index)) for AbsorbFinal.
 func leafPadBuf(key *[KeySize]byte, index uint64) [KeySize + 8]byte {
 	var buf [KeySize + 8]byte
 	copy(buf[:KeySize], key[:])
 	binary.LittleEndian.PutUint64(buf[KeySize:], index)
 	return buf
+}
+
+// initLeaf initializes a State1 for a leaf sponge (absorb key||index, pad, permute).
+func initLeaf(s *keccak.State1, key *[KeySize]byte, index uint64) {
+	s.Reset()
+	buf := leafPadBuf(key, index)
+	s.AbsorbFinal(buf[:], initDS)
+	s.Permute12()
 }
 
 const (
@@ -54,7 +55,7 @@ const (
 
 type cryptor struct {
 	key        [KeySize]byte
-	s          [200]byte
+	s          keccak.State1
 	h          turboshake.Hasher
 	cvBuf      [4 * cvSize]byte
 	tagStarted bool
@@ -66,10 +67,10 @@ type cryptor struct {
 
 // finalizeCV squeezes the chain value from the current chunk's sponge state.
 func (c *cryptor) finalizeCV() {
-	c.s[c.pos] ^= finalDS
-	c.s[turboshake.Rate-1] ^= 0x80
-	permute(&c.s)
-	copy(c.cvBuf[:cvSize], c.s[:cvSize])
+	c.s.XORByteAt(c.pos, finalDS)
+	c.s.XORByteAt(turboshake.Rate-1, 0x80)
+	c.s.Permute12()
+	c.s.ExtractBytes(c.cvBuf[:cvSize])
 	c.feedCVs(c.cvBuf[:cvSize])
 	c.idx++
 	c.chunkOff = 0
@@ -102,24 +103,23 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 
 	if c.chunkOff == 0 && c.idx == 0 {
 		// Empty input: process one empty chunk with singleNodeDS fast-path.
-		var s0 [200]byte
-		leafPad(&s0, &c.key, 0)
-		permute(&s0)
-		s0[0] ^= singleNodeDS
-		s0[turboshake.Rate-1] ^= 0x80
-		permute(&s0)
+		var s0 keccak.State1
+		initLeaf(&s0, &c.key, 0)
+		s0.XORByteAt(0, singleNodeDS)
+		s0.XORByteAt(turboshake.Rate-1, 0x80)
+		s0.Permute12()
 		var tag [TagSize]byte
-		copy(tag[:], s0[:TagSize])
+		s0.ExtractBytes(tag[:])
 		return tag
 	}
 
 	if c.idx == 0 {
 		// Fast path for n=1: derive tag directly from the single chunk.
 		var tag [TagSize]byte
-		c.s[c.pos] ^= singleNodeDS
-		c.s[turboshake.Rate-1] ^= 0x80
-		permute(&c.s)
-		copy(tag[:], c.s[:TagSize])
+		c.s.XORByteAt(c.pos, singleNodeDS)
+		c.s.XORByteAt(turboshake.Rate-1, 0x80)
+		c.s.Permute12()
+		c.s.ExtractBytes(tag[:])
 		return tag
 	}
 
@@ -172,9 +172,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	}
 
 	if e.idx == 0 && e.chunkOff == 0 && len(src) <= ChunkSize {
-		e.s = [200]byte{}
-		leafPad(&e.s, &e.key, 0)
-		permute(&e.s)
+		initLeaf(&e.s, &e.key, 0)
 		e.pos = 0
 		e.chunkOff = 0
 		e.encryptPartial(dst, src)
@@ -190,9 +188,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial chunk with remaining bytes.
 	if len(src) > 0 {
-		e.s = [200]byte{}
-		leafPad(&e.s, &e.key, uint64(e.idx))
-		permute(&e.s)
+		initLeaf(&e.s, &e.key, uint64(e.idx))
 		e.pos = 0
 		e.chunkOff = 0
 		e.encryptPartial(dst[:len(src)], src)
@@ -203,14 +199,14 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 func (e *Encryptor) encryptPartial(dst, src []byte) {
 	for len(src) > 0 {
 		if e.pos == blockRate {
-			e.s[blockRate] ^= intermediateDS
-			e.s[turboshake.Rate-1] ^= 0x80
-			permute(&e.s)
+			e.s.XORByteAt(blockRate, intermediateDS)
+			e.s.XORByteAt(turboshake.Rate-1, 0x80)
+			e.s.Permute12()
 			e.pos = 0
 		}
 
 		n := min(blockRate-e.pos, len(src))
-		mem.XORAndCopy(dst[:n], src[:n], e.s[e.pos:e.pos+n])
+		e.s.EncryptBytesAt(e.pos, src[:n], dst[:n])
 		e.pos += n
 		e.chunkOff += n
 		dst = dst[n:]
@@ -296,9 +292,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	}
 
 	if d.idx == 0 && d.chunkOff == 0 && len(src) <= ChunkSize {
-		d.s = [200]byte{}
-		leafPad(&d.s, &d.key, 0)
-		permute(&d.s)
+		initLeaf(&d.s, &d.key, 0)
 		d.pos = 0
 		d.chunkOff = 0
 		d.decryptPartial(dst, src)
@@ -314,9 +308,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial chunk with remaining bytes.
 	if len(src) > 0 {
-		d.s = [200]byte{}
-		leafPad(&d.s, &d.key, uint64(d.idx))
-		permute(&d.s)
+		initLeaf(&d.s, &d.key, uint64(d.idx))
 		d.pos = 0
 		d.chunkOff = 0
 		d.decryptPartial(dst[:len(src)], src)
@@ -327,14 +319,14 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 func (d *Decryptor) decryptPartial(dst, src []byte) {
 	for len(src) > 0 {
 		if d.pos == blockRate {
-			d.s[blockRate] ^= intermediateDS
-			d.s[turboshake.Rate-1] ^= 0x80
-			permute(&d.s)
+			d.s.XORByteAt(blockRate, intermediateDS)
+			d.s.XORByteAt(turboshake.Rate-1, 0x80)
+			d.s.Permute12()
 			d.pos = 0
 		}
 
 		n := min(blockRate-d.pos, len(src))
-		mem.XORAndReplace(dst[:n], src[:n], d.s[d.pos:d.pos+n])
+		d.s.DecryptBytesAt(d.pos, src[:n], dst[:n])
 		d.pos += n
 		d.chunkOff += n
 		dst = dst[n:]
@@ -429,15 +421,6 @@ func lengthEncode(x uint64) []byte {
 	buf[n] = byte(n)
 
 	return buf
-}
-
-// leafPad prepares a Keccak state for a leaf sponge init (absorb key || LE64(index)
-// and apply padding). The caller must invoke the permutation.
-func leafPad(s *[200]byte, key *[KeySize]byte, index uint64) {
-	copy(s[:KeySize], key[:])
-	binary.LittleEndian.PutUint64(s[KeySize:KeySize+8], index)
-	s[KeySize+8] = initDS
-	s[turboshake.Rate-1] = 0x80
 }
 
 // finalPos returns the sponge position after encrypting/decrypting chunkLen bytes.
