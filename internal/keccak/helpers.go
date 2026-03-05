@@ -114,6 +114,59 @@ func (s *State1) FastLoopDecrypt167(src, dst []byte, paddingByte byte) int {
 	return n
 }
 
+// XORByteAt XORs byte b into the state at byte position pos.
+func (s *State1) XORByteAt(pos int, b byte) {
+	xorByteInWord(&s.a[pos>>3], pos, b)
+}
+
+// ExtractBytes copies the first len(dst) bytes from the state.
+func (s *State1) ExtractBytes(dst []byte) {
+	full := len(dst) >> 3
+	for i := range full {
+		binary.LittleEndian.PutUint64(dst[i*8:i*8+8], s.a[i])
+	}
+	if rem := len(dst) & 7; rem > 0 {
+		storePartialLE(dst[full*8:], s.a[full])
+	}
+}
+
+// EncryptBytes performs SpongeWrap encryption on a partial block:
+// for each byte i, dst[i] = state[i] ^ src[i], then state absorbs src.
+func (s *State1) EncryptBytes(src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		w := binary.LittleEndian.Uint64(src[base : base+8])
+		s.a[i] ^= w
+		binary.LittleEndian.PutUint64(dst[base:base+8], s.a[i])
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		w := loadPartialLE(src[base : base+rem])
+		s.a[full] ^= w
+		storePartialLE(dst[base:base+rem], s.a[full])
+	}
+}
+
+// DecryptBytes performs SpongeWrap decryption on a partial block:
+// for each byte i, dst[i] = state[i] ^ src[i], then state absorbs src (ciphertext).
+func (s *State1) DecryptBytes(src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		ct := binary.LittleEndian.Uint64(src[base : base+8])
+		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.a[i])
+		s.a[i] = ct
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		ct := loadPartialLE(src[base : base+rem])
+		mask := uint64(1)<<(rem*8) - 1
+		storePartialLE(dst[base:base+rem], ct^(s.a[full]&mask))
+		s.a[full] = (s.a[full] & ^mask) | ct
+	}
+}
+
 func (s *State2) Reset() { clear(s.a[:]) }
 
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
@@ -221,6 +274,61 @@ func (s *State2) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byt
 		s.Permute12()
 	}
 	return n
+}
+
+// XORByteAt XORs byte b into all instances at byte position pos.
+func (s *State2) XORByteAt(pos int, b byte) {
+	shift := uint((pos & 7) << 3)
+	mask := uint64(b) << shift
+	lane := pos >> 3
+	s.a[lane][0] ^= mask
+	s.a[lane][1] ^= mask
+}
+
+// ExtractBytes copies the first len(dst) bytes from instance inst.
+func (s *State2) ExtractBytes(inst int, dst []byte) {
+	full := len(dst) >> 3
+	for i := range full {
+		binary.LittleEndian.PutUint64(dst[i*8:i*8+8], s.a[i][inst])
+	}
+	if rem := len(dst) & 7; rem > 0 {
+		storePartialLE(dst[full*8:], s.a[full][inst])
+	}
+}
+
+// EncryptBytes performs SpongeWrap encryption on a partial block for instance inst.
+func (s *State2) EncryptBytes(inst int, src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		w := binary.LittleEndian.Uint64(src[base : base+8])
+		s.a[i][inst] ^= w
+		binary.LittleEndian.PutUint64(dst[base:base+8], s.a[i][inst])
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		w := loadPartialLE(src[base : base+rem])
+		s.a[full][inst] ^= w
+		storePartialLE(dst[base:base+rem], s.a[full][inst])
+	}
+}
+
+// DecryptBytes performs SpongeWrap decryption on a partial block for instance inst.
+func (s *State2) DecryptBytes(inst int, src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		ct := binary.LittleEndian.Uint64(src[base : base+8])
+		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.a[i][inst])
+		s.a[i][inst] = ct
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		ct := loadPartialLE(src[base : base+rem])
+		mask := uint64(1)<<(rem*8) - 1
+		storePartialLE(dst[base:base+rem], ct^(s.a[full][inst]&mask))
+		s.a[full][inst] = (s.a[full][inst] & ^mask) | ct
+	}
 }
 
 func (s *State4) Reset() { clear(s.a[:]) }
@@ -341,6 +449,63 @@ func (s *State4) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byt
 		s.Permute12()
 	}
 	return n
+}
+
+// XORByteAt XORs byte b into all instances at byte position pos.
+func (s *State4) XORByteAt(pos int, b byte) {
+	shift := uint((pos & 7) << 3)
+	mask := uint64(b) << shift
+	lane := pos >> 3
+	s.a[lane][0] ^= mask
+	s.a[lane][1] ^= mask
+	s.a[lane][2] ^= mask
+	s.a[lane][3] ^= mask
+}
+
+// ExtractBytes copies the first len(dst) bytes from instance inst.
+func (s *State4) ExtractBytes(inst int, dst []byte) {
+	full := len(dst) >> 3
+	for i := range full {
+		binary.LittleEndian.PutUint64(dst[i*8:i*8+8], s.a[i][inst])
+	}
+	if rem := len(dst) & 7; rem > 0 {
+		storePartialLE(dst[full*8:], s.a[full][inst])
+	}
+}
+
+// EncryptBytes performs SpongeWrap encryption on a partial block for instance inst.
+func (s *State4) EncryptBytes(inst int, src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		w := binary.LittleEndian.Uint64(src[base : base+8])
+		s.a[i][inst] ^= w
+		binary.LittleEndian.PutUint64(dst[base:base+8], s.a[i][inst])
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		w := loadPartialLE(src[base : base+rem])
+		s.a[full][inst] ^= w
+		storePartialLE(dst[base:base+rem], s.a[full][inst])
+	}
+}
+
+// DecryptBytes performs SpongeWrap decryption on a partial block for instance inst.
+func (s *State4) DecryptBytes(inst int, src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		ct := binary.LittleEndian.Uint64(src[base : base+8])
+		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.a[i][inst])
+		s.a[i][inst] = ct
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		ct := loadPartialLE(src[base : base+rem])
+		mask := uint64(1)<<(rem*8) - 1
+		storePartialLE(dst[base:base+rem], ct^(s.a[full][inst]&mask))
+		s.a[full][inst] = (s.a[full][inst] & ^mask) | ct
+	}
 }
 
 func (s *State8) Reset() { clear(s.a[:]) }

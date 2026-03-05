@@ -25,18 +25,12 @@ func permute(b *[200]byte) {
 	s.StoreToBytes(b)
 }
 
-func permute2(b0, b1 *[200]byte) {
-	var s keccak.State2
-	s.LoadFromBytes(b0, b1)
-	s.Permute12()
-	s.StoreToBytes(b0, b1)
-}
-
-func permute4(b0, b1, b2, b3 *[200]byte) {
-	var s keccak.State4
-	s.LoadFromBytes(b0, b1, b2, b3)
-	s.Permute12()
-	s.StoreToBytes(b0, b1, b2, b3)
+// leafPadBuf builds the leaf init data (key || LE64(index)) for AbsorbFinal.
+func leafPadBuf(key *[KeySize]byte, index uint64) [KeySize + 8]byte {
+	var buf [KeySize + 8]byte
+	copy(buf[:KeySize], key[:])
+	binary.LittleEndian.PutUint64(buf[KeySize:], index)
+	return buf
 }
 
 const (
@@ -459,167 +453,133 @@ func finalPos(chunkLen int) int {
 }
 
 func encryptX1(key *[KeySize]byte, index uint64, pt, ct, cvBuf []byte) {
-	var b0 [200]byte
-	leafPad(&b0, key, index)
 	var s keccak.State1
-	s.LoadFromBytes(&b0)
+	initBuf := leafPadBuf(key, index)
+	s.AbsorbFinal(initBuf[:], initDS)
 	s.Permute12()
 
 	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopEncrypt167(pt, ct, padByte)
 
-	s.StoreToBytes(&b0)
 	tail := len(pt) - done
-	mem.XORAndCopy(ct[done:done+tail], pt[done:done+tail], b0[:tail])
+	s.EncryptBytes(pt[done:done+tail], ct[done:done+tail])
 
 	pos := finalPos(len(pt))
-	b0[pos] ^= finalDS
-	b0[turboshake.Rate-1] ^= 0x80
-	permute(&b0)
-	copy(cvBuf[:cvSize], b0[:cvSize])
+	s.XORByteAt(pos, finalDS)
+	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.Permute12()
+	s.ExtractBytes(cvBuf[:cvSize])
 }
 
 func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
-	var b0, b1 [200]byte
-	leafPad(&b0, key, baseIndex)
-	leafPad(&b1, key, baseIndex+1)
 	var s keccak.State2
-	s.LoadFromBytes(&b0, &b1)
+	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
+	s.AbsorbFinal(b0[:], b1[:], initDS)
 	s.Permute12()
 
 	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopEncrypt167(pt, ct, ChunkSize, padByte)
 
-	s.StoreToBytes(&b0, &b1)
 	tail := ChunkSize - done
-	mem.XORAndCopy(ct[done:done+tail], pt[done:done+tail], b0[:tail])
-	mem.XORAndCopy(ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
+	s.EncryptBytes(0, pt[done:done+tail], ct[done:done+tail])
+	s.EncryptBytes(1, pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail])
 
 	pos := finalPos(ChunkSize)
-	b0[pos] ^= finalDS
-	b0[turboshake.Rate-1] ^= 0x80
-	b1[pos] ^= finalDS
-	b1[turboshake.Rate-1] ^= 0x80
-	permute2(&b0, &b1)
-	copy(cvBuf[:cvSize], b0[:cvSize])
-	copy(cvBuf[cvSize:], b1[:cvSize])
+	s.XORByteAt(pos, finalDS)
+	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.Permute12()
+	s.ExtractBytes(0, cvBuf[:cvSize])
+	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
 }
 
 func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
-	var b0, b1, b2, b3 [200]byte
-	leafPad(&b0, key, baseIndex)
-	leafPad(&b1, key, baseIndex+1)
-	leafPad(&b2, key, baseIndex+2)
-	leafPad(&b3, key, baseIndex+3)
 	var s keccak.State4
-	s.LoadFromBytes(&b0, &b1, &b2, &b3)
+	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
+	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
+	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], initDS)
 	s.Permute12()
 
 	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopEncrypt167(pt, ct, ChunkSize, padByte)
 
-	s.StoreToBytes(&b0, &b1, &b2, &b3)
 	tail := ChunkSize - done
-	mem.XORAndCopy(ct[done:done+tail], pt[done:done+tail], b0[:tail])
-	mem.XORAndCopy(ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
-	mem.XORAndCopy(ct[2*ChunkSize+done:2*ChunkSize+done+tail], pt[2*ChunkSize+done:2*ChunkSize+done+tail], b2[:tail])
-	mem.XORAndCopy(ct[3*ChunkSize+done:3*ChunkSize+done+tail], pt[3*ChunkSize+done:3*ChunkSize+done+tail], b3[:tail])
+	s.EncryptBytes(0, pt[done:done+tail], ct[done:done+tail])
+	s.EncryptBytes(1, pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail])
+	s.EncryptBytes(2, pt[2*ChunkSize+done:2*ChunkSize+done+tail], ct[2*ChunkSize+done:2*ChunkSize+done+tail])
+	s.EncryptBytes(3, pt[3*ChunkSize+done:3*ChunkSize+done+tail], ct[3*ChunkSize+done:3*ChunkSize+done+tail])
 
 	pos := finalPos(ChunkSize)
-	b0[pos] ^= finalDS
-	b0[turboshake.Rate-1] ^= 0x80
-	b1[pos] ^= finalDS
-	b1[turboshake.Rate-1] ^= 0x80
-	b2[pos] ^= finalDS
-	b2[turboshake.Rate-1] ^= 0x80
-	b3[pos] ^= finalDS
-	b3[turboshake.Rate-1] ^= 0x80
-	permute4(&b0, &b1, &b2, &b3)
-	copy(cvBuf[:cvSize], b0[:cvSize])
-	copy(cvBuf[cvSize:2*cvSize], b1[:cvSize])
-	copy(cvBuf[2*cvSize:3*cvSize], b2[:cvSize])
-	copy(cvBuf[3*cvSize:], b3[:cvSize])
+	s.XORByteAt(pos, finalDS)
+	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.Permute12()
+	s.ExtractBytes(0, cvBuf[:cvSize])
+	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
+	s.ExtractBytes(2, cvBuf[2*cvSize:3*cvSize])
+	s.ExtractBytes(3, cvBuf[3*cvSize:4*cvSize])
 }
 
 func decryptX1(key *[KeySize]byte, index uint64, ct, pt, cvBuf []byte) {
-	var b0 [200]byte
-	leafPad(&b0, key, index)
 	var s keccak.State1
-	s.LoadFromBytes(&b0)
+	initBuf := leafPadBuf(key, index)
+	s.AbsorbFinal(initBuf[:], initDS)
 	s.Permute12()
 
 	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopDecrypt167(ct, pt, padByte)
 
-	s.StoreToBytes(&b0)
 	tail := len(ct) - done
-	mem.XORAndReplace(pt[done:done+tail], ct[done:done+tail], b0[:tail])
+	s.DecryptBytes(ct[done:done+tail], pt[done:done+tail])
 
 	pos := finalPos(len(ct))
-	b0[pos] ^= finalDS
-	b0[turboshake.Rate-1] ^= 0x80
-	permute(&b0)
-	copy(cvBuf[:cvSize], b0[:cvSize])
+	s.XORByteAt(pos, finalDS)
+	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.Permute12()
+	s.ExtractBytes(cvBuf[:cvSize])
 }
 
 func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
-	var b0, b1 [200]byte
-	leafPad(&b0, key, baseIndex)
-	leafPad(&b1, key, baseIndex+1)
 	var s keccak.State2
-	s.LoadFromBytes(&b0, &b1)
+	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
+	s.AbsorbFinal(b0[:], b1[:], initDS)
 	s.Permute12()
 
 	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopDecrypt167(ct, pt, ChunkSize, padByte)
 
-	s.StoreToBytes(&b0, &b1)
 	tail := ChunkSize - done
-	mem.XORAndReplace(pt[done:done+tail], ct[done:done+tail], b0[:tail])
-	mem.XORAndReplace(pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
+	s.DecryptBytes(0, ct[done:done+tail], pt[done:done+tail])
+	s.DecryptBytes(1, ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail])
 
 	pos := finalPos(ChunkSize)
-	b0[pos] ^= finalDS
-	b0[turboshake.Rate-1] ^= 0x80
-	b1[pos] ^= finalDS
-	b1[turboshake.Rate-1] ^= 0x80
-	permute2(&b0, &b1)
-	copy(cvBuf[:cvSize], b0[:cvSize])
-	copy(cvBuf[cvSize:], b1[:cvSize])
+	s.XORByteAt(pos, finalDS)
+	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.Permute12()
+	s.ExtractBytes(0, cvBuf[:cvSize])
+	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
 }
 
 func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
-	var b0, b1, b2, b3 [200]byte
-	leafPad(&b0, key, baseIndex)
-	leafPad(&b1, key, baseIndex+1)
-	leafPad(&b2, key, baseIndex+2)
-	leafPad(&b3, key, baseIndex+3)
 	var s keccak.State4
-	s.LoadFromBytes(&b0, &b1, &b2, &b3)
+	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
+	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
+	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], initDS)
 	s.Permute12()
 
 	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopDecrypt167(ct, pt, ChunkSize, padByte)
 
-	s.StoreToBytes(&b0, &b1, &b2, &b3)
 	tail := ChunkSize - done
-	mem.XORAndReplace(pt[done:done+tail], ct[done:done+tail], b0[:tail])
-	mem.XORAndReplace(pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
-	mem.XORAndReplace(pt[2*ChunkSize+done:2*ChunkSize+done+tail], ct[2*ChunkSize+done:2*ChunkSize+done+tail], b2[:tail])
-	mem.XORAndReplace(pt[3*ChunkSize+done:3*ChunkSize+done+tail], ct[3*ChunkSize+done:3*ChunkSize+done+tail], b3[:tail])
+	s.DecryptBytes(0, ct[done:done+tail], pt[done:done+tail])
+	s.DecryptBytes(1, ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail])
+	s.DecryptBytes(2, ct[2*ChunkSize+done:2*ChunkSize+done+tail], pt[2*ChunkSize+done:2*ChunkSize+done+tail])
+	s.DecryptBytes(3, ct[3*ChunkSize+done:3*ChunkSize+done+tail], pt[3*ChunkSize+done:3*ChunkSize+done+tail])
 
 	pos := finalPos(ChunkSize)
-	b0[pos] ^= finalDS
-	b0[turboshake.Rate-1] ^= 0x80
-	b1[pos] ^= finalDS
-	b1[turboshake.Rate-1] ^= 0x80
-	b2[pos] ^= finalDS
-	b2[turboshake.Rate-1] ^= 0x80
-	b3[pos] ^= finalDS
-	b3[turboshake.Rate-1] ^= 0x80
-	permute4(&b0, &b1, &b2, &b3)
-	copy(cvBuf[:cvSize], b0[:cvSize])
-	copy(cvBuf[cvSize:2*cvSize], b1[:cvSize])
-	copy(cvBuf[2*cvSize:3*cvSize], b2[:cvSize])
-	copy(cvBuf[3*cvSize:], b3[:cvSize])
+	s.XORByteAt(pos, finalDS)
+	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.Permute12()
+	s.ExtractBytes(0, cvBuf[:cvSize])
+	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
+	s.ExtractBytes(2, cvBuf[2*cvSize:3*cvSize])
+	s.ExtractBytes(3, cvBuf[3*cvSize:4*cvSize])
 }
