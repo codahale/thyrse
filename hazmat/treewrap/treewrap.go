@@ -423,7 +423,7 @@ func encryptX1(key *[KeySize]byte, index uint64, pt, ct []byte, h *keccak.TurboS
 	s.Permute12()
 
 	done := s.FastLoopEncrypt167(pt, ct, padByte)
-	s.EncryptBytes(pt[done:], ct[done:])
+	s.EncryptBytesAt(0, pt[done:], ct[done:])
 
 	s.PadPermute(finalPos(len(pt)), finalDS)
 	h.WriteCV(&s)
@@ -469,7 +469,7 @@ func decryptX1(key *[KeySize]byte, index uint64, ct, pt []byte, h *keccak.TurboS
 	s.Permute12()
 
 	done := s.FastLoopDecrypt167(ct, pt, padByte)
-	s.DecryptBytes(ct[done:], pt[done:])
+	s.DecryptBytesAt(0, ct[done:], pt[done:])
 
 	s.PadPermute(finalPos(len(ct)), finalDS)
 	h.WriteCV(&s)
