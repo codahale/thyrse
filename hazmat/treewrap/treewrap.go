@@ -15,6 +15,7 @@ import (
 
 	"github.com/codahale/thyrse/hazmat/legacykeccak"
 	"github.com/codahale/thyrse/hazmat/turboshake"
+	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
 
@@ -438,219 +439,167 @@ func finalPos(chunkLen int) int {
 }
 
 func encryptX1(key *[KeySize]byte, index uint64, pt, ct, cvBuf []byte) {
-	var s0 [200]byte
-	leafPad(&s0, key, index)
-	legacykeccak.P1600(&s0)
+	var b0 [200]byte
+	leafPad(&b0, key, index)
+	var s keccak.State1
+	s.LoadFromBytes(&b0)
+	s.Permute12()
 
-	chunkLen := len(pt)
-	off := 0
-	for off < chunkLen {
-		n := min(blockRate, chunkLen-off)
-		mem.XORAndCopy(ct[off:off+n], pt[off:off+n], s0[:n])
-		off += n
-		if off < chunkLen {
-			s0[blockRate] ^= intermediateDS
-			s0[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600(&s0)
-		}
-	}
+	const padByte = intermediateDS ^ 0x80 // 0xE2
+	done := s.FastLoopEncrypt167(pt, ct, padByte)
 
-	pos := finalPos(chunkLen)
-	s0[pos] ^= finalDS
-	s0[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600(&s0)
-	copy(cvBuf[:cvSize], s0[:cvSize])
+	s.StoreToBytes(&b0)
+	tail := len(pt) - done
+	mem.XORAndCopy(ct[done:done+tail], pt[done:done+tail], b0[:tail])
+
+	pos := finalPos(len(pt))
+	b0[pos] ^= finalDS
+	b0[turboshake.Rate-1] ^= 0x80
+	legacykeccak.P1600(&b0)
+	copy(cvBuf[:cvSize], b0[:cvSize])
 }
 
 func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
-	var s0, s1 [200]byte
-	leafPad(&s0, key, baseIndex)
-	leafPad(&s1, key, baseIndex+1)
-	legacykeccak.P1600x2(&s0, &s1)
+	var b0, b1 [200]byte
+	leafPad(&b0, key, baseIndex)
+	leafPad(&b1, key, baseIndex+1)
+	var s keccak.State2
+	s.LoadFromBytes(&b0, &b1)
+	s.Permute12()
 
-	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
-	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
+	const padByte = intermediateDS ^ 0x80 // 0xE2
+	done := s.FastLoopEncrypt167(pt, ct, ChunkSize, padByte)
 
-	off := 0
-	for off < ChunkSize {
-		n := min(blockRate, ChunkSize-off)
-		mem.XORAndCopy(ct0[off:off+n], pt0[off:off+n], s0[:n])
-		mem.XORAndCopy(ct1[off:off+n], pt1[off:off+n], s1[:n])
-		off += n
-		if off < ChunkSize {
-			s0[blockRate] ^= intermediateDS
-			s0[turboshake.Rate-1] ^= 0x80
-			s1[blockRate] ^= intermediateDS
-			s1[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600x2(&s0, &s1)
-		}
-	}
+	s.StoreToBytes(&b0, &b1)
+	tail := ChunkSize - done
+	mem.XORAndCopy(ct[done:done+tail], pt[done:done+tail], b0[:tail])
+	mem.XORAndCopy(ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
 
 	pos := finalPos(ChunkSize)
-	s0[pos] ^= finalDS
-	s0[turboshake.Rate-1] ^= 0x80
-	s1[pos] ^= finalDS
-	s1[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x2(&s0, &s1)
-	copy(cvBuf[:cvSize], s0[:cvSize])
-	copy(cvBuf[cvSize:], s1[:cvSize])
+	b0[pos] ^= finalDS
+	b0[turboshake.Rate-1] ^= 0x80
+	b1[pos] ^= finalDS
+	b1[turboshake.Rate-1] ^= 0x80
+	legacykeccak.P1600x2(&b0, &b1)
+	copy(cvBuf[:cvSize], b0[:cvSize])
+	copy(cvBuf[cvSize:], b1[:cvSize])
 }
 
 func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
-	var s0, s1, s2, s3 [200]byte
-	leafPad(&s0, key, baseIndex)
-	leafPad(&s1, key, baseIndex+1)
-	leafPad(&s2, key, baseIndex+2)
-	leafPad(&s3, key, baseIndex+3)
-	legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
+	var b0, b1, b2, b3 [200]byte
+	leafPad(&b0, key, baseIndex)
+	leafPad(&b1, key, baseIndex+1)
+	leafPad(&b2, key, baseIndex+2)
+	leafPad(&b3, key, baseIndex+3)
+	var s keccak.State4
+	s.LoadFromBytes(&b0, &b1, &b2, &b3)
+	s.Permute12()
 
-	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
-	pt2, pt3 := pt[2*ChunkSize:3*ChunkSize], pt[3*ChunkSize:4*ChunkSize]
-	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
-	ct2, ct3 := ct[2*ChunkSize:3*ChunkSize], ct[3*ChunkSize:4*ChunkSize]
+	const padByte = intermediateDS ^ 0x80 // 0xE2
+	done := s.FastLoopEncrypt167(pt, ct, ChunkSize, padByte)
 
-	off := 0
-	for off < ChunkSize {
-		n := min(blockRate, ChunkSize-off)
-		mem.XORAndCopy(ct0[off:off+n], pt0[off:off+n], s0[:n])
-		mem.XORAndCopy(ct1[off:off+n], pt1[off:off+n], s1[:n])
-		mem.XORAndCopy(ct2[off:off+n], pt2[off:off+n], s2[:n])
-		mem.XORAndCopy(ct3[off:off+n], pt3[off:off+n], s3[:n])
-		off += n
-		if off < ChunkSize {
-			s0[blockRate] ^= intermediateDS
-			s0[turboshake.Rate-1] ^= 0x80
-			s1[blockRate] ^= intermediateDS
-			s1[turboshake.Rate-1] ^= 0x80
-			s2[blockRate] ^= intermediateDS
-			s2[turboshake.Rate-1] ^= 0x80
-			s3[blockRate] ^= intermediateDS
-			s3[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
-		}
-	}
+	s.StoreToBytes(&b0, &b1, &b2, &b3)
+	tail := ChunkSize - done
+	mem.XORAndCopy(ct[done:done+tail], pt[done:done+tail], b0[:tail])
+	mem.XORAndCopy(ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
+	mem.XORAndCopy(ct[2*ChunkSize+done:2*ChunkSize+done+tail], pt[2*ChunkSize+done:2*ChunkSize+done+tail], b2[:tail])
+	mem.XORAndCopy(ct[3*ChunkSize+done:3*ChunkSize+done+tail], pt[3*ChunkSize+done:3*ChunkSize+done+tail], b3[:tail])
 
 	pos := finalPos(ChunkSize)
-	s0[pos] ^= finalDS
-	s0[turboshake.Rate-1] ^= 0x80
-	s1[pos] ^= finalDS
-	s1[turboshake.Rate-1] ^= 0x80
-	s2[pos] ^= finalDS
-	s2[turboshake.Rate-1] ^= 0x80
-	s3[pos] ^= finalDS
-	s3[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
-	copy(cvBuf[:cvSize], s0[:cvSize])
-	copy(cvBuf[cvSize:2*cvSize], s1[:cvSize])
-	copy(cvBuf[2*cvSize:3*cvSize], s2[:cvSize])
-	copy(cvBuf[3*cvSize:], s3[:cvSize])
+	b0[pos] ^= finalDS
+	b0[turboshake.Rate-1] ^= 0x80
+	b1[pos] ^= finalDS
+	b1[turboshake.Rate-1] ^= 0x80
+	b2[pos] ^= finalDS
+	b2[turboshake.Rate-1] ^= 0x80
+	b3[pos] ^= finalDS
+	b3[turboshake.Rate-1] ^= 0x80
+	legacykeccak.P1600x4(&b0, &b1, &b2, &b3)
+	copy(cvBuf[:cvSize], b0[:cvSize])
+	copy(cvBuf[cvSize:2*cvSize], b1[:cvSize])
+	copy(cvBuf[2*cvSize:3*cvSize], b2[:cvSize])
+	copy(cvBuf[3*cvSize:], b3[:cvSize])
 }
 
 func decryptX1(key *[KeySize]byte, index uint64, ct, pt, cvBuf []byte) {
-	var s0 [200]byte
-	leafPad(&s0, key, index)
-	legacykeccak.P1600(&s0)
+	var b0 [200]byte
+	leafPad(&b0, key, index)
+	var s keccak.State1
+	s.LoadFromBytes(&b0)
+	s.Permute12()
 
-	chunkLen := len(ct)
-	off := 0
-	for off < chunkLen {
-		n := min(blockRate, chunkLen-off)
-		mem.XORAndReplace(pt[off:off+n], ct[off:off+n], s0[:n])
-		off += n
-		if off < chunkLen {
-			s0[blockRate] ^= intermediateDS
-			s0[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600(&s0)
-		}
-	}
+	const padByte = intermediateDS ^ 0x80 // 0xE2
+	done := s.FastLoopDecrypt167(ct, pt, padByte)
 
-	pos := finalPos(chunkLen)
-	s0[pos] ^= finalDS
-	s0[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600(&s0)
-	copy(cvBuf[:cvSize], s0[:cvSize])
+	s.StoreToBytes(&b0)
+	tail := len(ct) - done
+	mem.XORAndReplace(pt[done:done+tail], ct[done:done+tail], b0[:tail])
+
+	pos := finalPos(len(ct))
+	b0[pos] ^= finalDS
+	b0[turboshake.Rate-1] ^= 0x80
+	legacykeccak.P1600(&b0)
+	copy(cvBuf[:cvSize], b0[:cvSize])
 }
 
 func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
-	var s0, s1 [200]byte
-	leafPad(&s0, key, baseIndex)
-	leafPad(&s1, key, baseIndex+1)
-	legacykeccak.P1600x2(&s0, &s1)
+	var b0, b1 [200]byte
+	leafPad(&b0, key, baseIndex)
+	leafPad(&b1, key, baseIndex+1)
+	var s keccak.State2
+	s.LoadFromBytes(&b0, &b1)
+	s.Permute12()
 
-	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
-	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
+	const padByte = intermediateDS ^ 0x80 // 0xE2
+	done := s.FastLoopDecrypt167(ct, pt, ChunkSize, padByte)
 
-	off := 0
-	for off < ChunkSize {
-		n := min(blockRate, ChunkSize-off)
-		mem.XORAndReplace(pt0[off:off+n], ct0[off:off+n], s0[:n])
-		mem.XORAndReplace(pt1[off:off+n], ct1[off:off+n], s1[:n])
-		off += n
-		if off < ChunkSize {
-			s0[blockRate] ^= intermediateDS
-			s0[turboshake.Rate-1] ^= 0x80
-			s1[blockRate] ^= intermediateDS
-			s1[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600x2(&s0, &s1)
-		}
-	}
+	s.StoreToBytes(&b0, &b1)
+	tail := ChunkSize - done
+	mem.XORAndReplace(pt[done:done+tail], ct[done:done+tail], b0[:tail])
+	mem.XORAndReplace(pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
 
 	pos := finalPos(ChunkSize)
-	s0[pos] ^= finalDS
-	s0[turboshake.Rate-1] ^= 0x80
-	s1[pos] ^= finalDS
-	s1[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x2(&s0, &s1)
-	copy(cvBuf[:cvSize], s0[:cvSize])
-	copy(cvBuf[cvSize:], s1[:cvSize])
+	b0[pos] ^= finalDS
+	b0[turboshake.Rate-1] ^= 0x80
+	b1[pos] ^= finalDS
+	b1[turboshake.Rate-1] ^= 0x80
+	legacykeccak.P1600x2(&b0, &b1)
+	copy(cvBuf[:cvSize], b0[:cvSize])
+	copy(cvBuf[cvSize:], b1[:cvSize])
 }
 
 func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
-	var s0, s1, s2, s3 [200]byte
-	leafPad(&s0, key, baseIndex)
-	leafPad(&s1, key, baseIndex+1)
-	leafPad(&s2, key, baseIndex+2)
-	leafPad(&s3, key, baseIndex+3)
-	legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
+	var b0, b1, b2, b3 [200]byte
+	leafPad(&b0, key, baseIndex)
+	leafPad(&b1, key, baseIndex+1)
+	leafPad(&b2, key, baseIndex+2)
+	leafPad(&b3, key, baseIndex+3)
+	var s keccak.State4
+	s.LoadFromBytes(&b0, &b1, &b2, &b3)
+	s.Permute12()
 
-	ct0, ct1 := ct[:ChunkSize], ct[ChunkSize:2*ChunkSize]
-	ct2, ct3 := ct[2*ChunkSize:3*ChunkSize], ct[3*ChunkSize:4*ChunkSize]
-	pt0, pt1 := pt[:ChunkSize], pt[ChunkSize:2*ChunkSize]
-	pt2, pt3 := pt[2*ChunkSize:3*ChunkSize], pt[3*ChunkSize:4*ChunkSize]
+	const padByte = intermediateDS ^ 0x80 // 0xE2
+	done := s.FastLoopDecrypt167(ct, pt, ChunkSize, padByte)
 
-	off := 0
-	for off < ChunkSize {
-		n := min(blockRate, ChunkSize-off)
-		mem.XORAndReplace(pt0[off:off+n], ct0[off:off+n], s0[:n])
-		mem.XORAndReplace(pt1[off:off+n], ct1[off:off+n], s1[:n])
-		mem.XORAndReplace(pt2[off:off+n], ct2[off:off+n], s2[:n])
-		mem.XORAndReplace(pt3[off:off+n], ct3[off:off+n], s3[:n])
-		off += n
-		if off < ChunkSize {
-			s0[blockRate] ^= intermediateDS
-			s0[turboshake.Rate-1] ^= 0x80
-			s1[blockRate] ^= intermediateDS
-			s1[turboshake.Rate-1] ^= 0x80
-			s2[blockRate] ^= intermediateDS
-			s2[turboshake.Rate-1] ^= 0x80
-			s3[blockRate] ^= intermediateDS
-			s3[turboshake.Rate-1] ^= 0x80
-			legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
-		}
-	}
+	s.StoreToBytes(&b0, &b1, &b2, &b3)
+	tail := ChunkSize - done
+	mem.XORAndReplace(pt[done:done+tail], ct[done:done+tail], b0[:tail])
+	mem.XORAndReplace(pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail], b1[:tail])
+	mem.XORAndReplace(pt[2*ChunkSize+done:2*ChunkSize+done+tail], ct[2*ChunkSize+done:2*ChunkSize+done+tail], b2[:tail])
+	mem.XORAndReplace(pt[3*ChunkSize+done:3*ChunkSize+done+tail], ct[3*ChunkSize+done:3*ChunkSize+done+tail], b3[:tail])
 
 	pos := finalPos(ChunkSize)
-	s0[pos] ^= finalDS
-	s0[turboshake.Rate-1] ^= 0x80
-	s1[pos] ^= finalDS
-	s1[turboshake.Rate-1] ^= 0x80
-	s2[pos] ^= finalDS
-	s2[turboshake.Rate-1] ^= 0x80
-	s3[pos] ^= finalDS
-	s3[turboshake.Rate-1] ^= 0x80
-	legacykeccak.P1600x4(&s0, &s1, &s2, &s3)
-	copy(cvBuf[:cvSize], s0[:cvSize])
-	copy(cvBuf[cvSize:2*cvSize], s1[:cvSize])
-	copy(cvBuf[2*cvSize:3*cvSize], s2[:cvSize])
-	copy(cvBuf[3*cvSize:], s3[:cvSize])
+	b0[pos] ^= finalDS
+	b0[turboshake.Rate-1] ^= 0x80
+	b1[pos] ^= finalDS
+	b1[turboshake.Rate-1] ^= 0x80
+	b2[pos] ^= finalDS
+	b2[turboshake.Rate-1] ^= 0x80
+	b3[pos] ^= finalDS
+	b3[turboshake.Rate-1] ^= 0x80
+	legacykeccak.P1600x4(&b0, &b1, &b2, &b3)
+	copy(cvBuf[:cvSize], b0[:cvSize])
+	copy(cvBuf[cvSize:2*cvSize], b1[:cvSize])
+	copy(cvBuf[2*cvSize:3*cvSize], b2[:cvSize])
+	copy(cvBuf[3*cvSize:], b3[:cvSize])
 }
