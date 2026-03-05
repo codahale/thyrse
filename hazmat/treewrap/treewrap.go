@@ -52,32 +52,22 @@ const (
 )
 
 type cryptor struct {
-	key        [KeySize]byte
-	s          keccak.State1
-	h          keccak.TurboSHAKE128
-	tagStarted bool
-	finalized  bool
-	idx        int
-	pos        int
-	chunkOff   int
+	key       [KeySize]byte
+	s         keccak.State1
+	h         keccak.TurboSHAKE128
+	finalized bool
+	idx       int
+	pos       int
+	chunkOff  int
 }
 
 // finalizeCV squeezes the chain value from the current chunk's sponge state.
 func (c *cryptor) finalizeCV() {
 	c.s.PadPermute(c.pos, finalDS)
-	c.ensureTagStarted()
 	c.h.WriteCV(&c.s)
 	c.idx++
 	c.chunkOff = 0
 	c.pos = 0
-}
-
-// ensureTagStarted writes the Sakura chaining hop indicator before the first CV.
-func (c *cryptor) ensureTagStarted() {
-	if !c.tagStarted {
-		_, _ = c.h.Write(sakuraTopology[:])
-		c.tagStarted = true
-	}
 }
 
 // finalizeTag writes the Sakura terminator and squeezes the tag.
@@ -203,7 +193,6 @@ func (e *Encryptor) encryptPartial(dst, src []byte) {
 
 // encryptComplete processes nFlush complete chunks via the SIMD cascade.
 func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
-	e.ensureTagStarted()
 	idx := 0
 
 	for idx+4 <= nFlush {
@@ -319,7 +308,6 @@ func (d *Decryptor) decryptPartial(dst, src []byte) {
 
 // decryptComplete processes nFlush complete chunks via the SIMD cascade.
 func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
-	d.ensureTagStarted()
 	idx := 0
 
 	for idx+4 <= nFlush {
@@ -375,12 +363,6 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 	d.XORKeyStream(pt, ciphertext)
 	return ret, d.Finalize()
 }
-
-// sakuraTopology is The Sakura chaining hop indicator. The byte `0x03` (`0b00000011`) encodes two flags: bit 0
-// signals that inner-node chain values follow, and bit 1 signals a single-level tree (chain values feed directly into
-// the final node without further tree reduction). The seven zero bytes encode default tree parameters (i.e., no
-// subtree interleaving).
-var sakuraTopology = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 // lengthEncode encodes x as in KangarooTwelve: big-endian with no leading zeros, followed by a byte giving the length
 // of the encoding.
