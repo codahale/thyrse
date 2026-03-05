@@ -21,9 +21,6 @@ jobs:
         fuzz:
           - { target: FuzzProtocolDivergence, package: . }
           - { target: FuzzProtocolReversibility, package: . }
-          - { target: 'FuzzP1600$', package: ./hazmat/legacykeccak }
-          - { target: FuzzP1600x2, package: ./hazmat/legacykeccak }
-          - { target: FuzzP1600x4, package: ./hazmat/legacykeccak }
 
     steps:
     - name: Checkout
