@@ -20,12 +20,12 @@ const (
 
 // Hasher is an incremental KT128 instance that implements hash.Hash and io.Reader.
 type Hasher struct {
-	suffix    []byte              // C || lengthEncode(|C|), precomputed at construction, immutable
-	buf       []byte              // buffered message/leaf data
+	suffix    []byte               // C || lengthEncode(|C|), precomputed at construction, immutable
+	buf       []byte               // buffered message/leaf data
 	ts        keccak.TurboSHAKE128 // final-node TurboSHAKE128 state
-	leafCount int                 // total leaf CVs written to ts so far
-	treeMode  bool                // true once S_0 has been flushed to ts
-	finalized bool                // true once finalize has completed
+	leafCount int                  // total leaf CVs written to ts so far
+	treeMode  bool                 // true once S_0 has been flushed to ts
+	finalized bool                 // true once finalize has completed
 }
 
 // emptySuffix is the suffix for empty customization: lengthEncode(0) = [0x00].
