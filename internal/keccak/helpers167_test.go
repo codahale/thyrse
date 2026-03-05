@@ -11,7 +11,7 @@ import (
 func TestFastLoopEncryptDecrypt167(t *testing.T) {
 	const padByte byte = 0x0B
 	const nBlocks = 5
-	const blockSize = rate167
+	const blockSize = Rate167
 
 	t.Run("x1", func(t *testing.T) {
 		n := nBlocks * blockSize
@@ -171,7 +171,7 @@ func seedState1(s *State1, seed []byte) {
 
 // genericEncrypt1 runs x1 encrypt using pure Go logic.
 func genericEncrypt1(s *State1, pt, ct []byte, padWord uint64) {
-	for off := 0; off < len(pt); off += rate167 {
+	for off := 0; off < len(pt); off += Rate167 {
 		for lane := range 20 {
 			base := lane << 3
 			w := uint64(pt[off+base]) | uint64(pt[off+base+1])<<8 | uint64(pt[off+base+2])<<16 | uint64(pt[off+base+3])<<24 |
@@ -197,7 +197,7 @@ func genericEncrypt1(s *State1, pt, ct []byte, padWord uint64) {
 
 // genericDecrypt1 runs x1 decrypt using pure Go logic.
 func genericDecrypt1(s *State1, ct, pt []byte, padWord uint64) {
-	for off := 0; off < len(ct); off += rate167 {
+	for off := 0; off < len(ct); off += Rate167 {
 		for lane := range 20 {
 			base := lane << 3
 			w := uint64(ct[off+base]) | uint64(ct[off+base+1])<<8 | uint64(ct[off+base+2])<<16 | uint64(ct[off+base+3])<<24 |
@@ -227,7 +227,7 @@ func genericDecrypt1(s *State1, ct, pt []byte, padWord uint64) {
 func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 	const padByte byte = 0x07
 	const nBlocks = 3
-	const n = nBlocks * rate167
+	const n = nBlocks * Rate167
 	padWord := uint64(padByte) << 56
 
 	t.Run("x1", func(t *testing.T) {
@@ -393,7 +393,7 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 	const padByte byte = 0x07
 	const nBlocks = 3
-	const n = nBlocks * rate167
+	const n = nBlocks * Rate167
 	padWord := uint64(padByte) << 56
 
 	t.Run("x1", func(t *testing.T) {
@@ -553,9 +553,9 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 func BenchmarkFastLoopEncrypt167(b *testing.B) {
 	for _, size := range helperSizes {
 		// Adjust sizes to rate 167.
-		n := (size.n / rate167) * rate167
+		n := (size.n / Rate167) * Rate167
 		if n == 0 {
-			n = rate167
+			n = Rate167
 		}
 
 		in := makeInput(n)
@@ -607,9 +607,9 @@ func BenchmarkFastLoopEncrypt167(b *testing.B) {
 
 func BenchmarkFastLoopDecrypt167(b *testing.B) {
 	for _, size := range helperSizes {
-		n := (size.n / rate167) * rate167
+		n := (size.n / Rate167) * Rate167
 		if n == 0 {
-			n = rate167
+			n = Rate167
 		}
 
 		in := makeInput(n)

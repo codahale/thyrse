@@ -43,21 +43,18 @@ const (
 	// ChunkSize is the size of each leaf chunk in bytes.
 	ChunkSize = 8 * 1024
 
-	cvSize         = 32  // Chain value size (= capacity).
-	spongeRate     = 168 // TurboSHAKE128 sponge rate (bytes).
-	blockRate      = spongeRate - 1 // 167: usable data bytes per sponge block.
-	initDS         = 0x60                // Domain separation byte for leaf init (key/index absorption).
-	singleNodeDS   = 0x61                // Domain separation byte for single-node tag.
-	intermediateDS = 0x62                // Domain separation byte for intermediate leaf sponges.
-	finalDS        = 0x63                // Domain separation byte for final leaf sponges.
-	tagDS          = 0x64                // Domain separation byte for tag computation.
+	initDS         = 0x60                  // Domain separation byte for leaf init (key/index absorption).
+	singleNodeDS   = 0x61                  // Domain separation byte for single-node tag.
+	intermediateDS = 0x62                  // Domain separation byte for intermediate leaf sponges.
+	finalDS        = 0x63                  // Domain separation byte for final leaf sponges.
+	tagDS          = 0x64                  // Domain separation byte for tag computation.
+	padByte        = intermediateDS ^ 0x80 // Combined padding byte for FastLoop methods.
 )
 
 type cryptor struct {
 	key        [KeySize]byte
 	s          keccak.State1
 	h          keccak.TurboSHAKE128
-	cvBuf      [4 * cvSize]byte
 	tagStarted bool
 	finalized  bool
 	idx        int
@@ -67,24 +64,20 @@ type cryptor struct {
 
 // finalizeCV squeezes the chain value from the current chunk's sponge state.
 func (c *cryptor) finalizeCV() {
-	c.s.XORByteAt(c.pos, finalDS)
-	c.s.XORByteAt(spongeRate-1, 0x80)
-	c.s.Permute12()
-	c.s.ExtractBytes(c.cvBuf[:cvSize])
-	c.feedCVs(c.cvBuf[:cvSize])
+	c.s.PadPermute(c.pos, finalDS)
+	c.ensureTagStarted()
+	c.h.WriteCV(&c.s)
 	c.idx++
 	c.chunkOff = 0
 	c.pos = 0
 }
 
-// feedCVs writes chain values into the hasher with Sakura final-node framing. Before the first CV, it writes the
-// Sakura chaining hop indicator.
-func (c *cryptor) feedCVs(cvs []byte) {
+// ensureTagStarted writes the Sakura chaining hop indicator before the first CV.
+func (c *cryptor) ensureTagStarted() {
 	if !c.tagStarted {
 		_, _ = c.h.Write(sakuraTopology[:])
 		c.tagStarted = true
 	}
-	_, _ = c.h.Write(cvs)
 }
 
 // finalizeTag writes the Sakura terminator and squeezes the tag.
@@ -105,9 +98,7 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 		// Empty input: process one empty chunk with singleNodeDS fast-path.
 		var s0 keccak.State1
 		initLeaf(&s0, &c.key, 0)
-		s0.XORByteAt(0, singleNodeDS)
-		s0.XORByteAt(spongeRate-1, 0x80)
-		s0.Permute12()
+		s0.PadPermute(0, singleNodeDS)
 		var tag [TagSize]byte
 		s0.ExtractBytes(tag[:])
 		return tag
@@ -116,9 +107,7 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 	if c.idx == 0 {
 		// Fast path for n=1: derive tag directly from the single chunk.
 		var tag [TagSize]byte
-		c.s.XORByteAt(c.pos, singleNodeDS)
-		c.s.XORByteAt(spongeRate-1, 0x80)
-		c.s.Permute12()
+		c.s.PadPermute(c.pos, singleNodeDS)
 		c.s.ExtractBytes(tag[:])
 		return tag
 	}
@@ -198,14 +187,12 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 // encryptPartial processes bytes through the current chunk's sponge state.
 func (e *Encryptor) encryptPartial(dst, src []byte) {
 	for len(src) > 0 {
-		if e.pos == blockRate {
-			e.s.XORByteAt(blockRate, intermediateDS)
-			e.s.XORByteAt(spongeRate-1, 0x80)
-			e.s.Permute12()
+		if e.pos == keccak.Rate167 {
+			e.s.PadPermute(keccak.Rate167, intermediateDS)
 			e.pos = 0
 		}
 
-		n := min(blockRate-e.pos, len(src))
+		n := min(keccak.Rate167-e.pos, len(src))
 		e.s.EncryptBytesAt(e.pos, src[:n], dst[:n])
 		e.pos += n
 		e.chunkOff += n
@@ -216,28 +203,26 @@ func (e *Encryptor) encryptPartial(dst, src []byte) {
 
 // encryptComplete processes nFlush complete chunks via the SIMD cascade.
 func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
+	e.ensureTagStarted()
 	idx := 0
 
 	for idx+4 <= nFlush {
 		off := idx * ChunkSize
-		encryptX4(&e.key, uint64(e.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], e.cvBuf[:])
-		e.feedCVs(e.cvBuf[:4*cvSize])
+		encryptX4(&e.key, uint64(e.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], &e.h)
 		e.idx += 4
 		idx += 4
 	}
 
 	for idx+2 <= nFlush {
 		off := idx * ChunkSize
-		encryptX2(&e.key, uint64(e.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], e.cvBuf[:2*cvSize])
-		e.feedCVs(e.cvBuf[:2*cvSize])
+		encryptX2(&e.key, uint64(e.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], &e.h)
 		e.idx += 2
 		idx += 2
 	}
 
 	for idx < nFlush {
 		off := idx * ChunkSize
-		encryptX1(&e.key, uint64(e.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], e.cvBuf[:cvSize])
-		e.feedCVs(e.cvBuf[:cvSize])
+		encryptX1(&e.key, uint64(e.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], &e.h)
 		e.idx++
 		idx++
 	}
@@ -318,14 +303,12 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 // decryptPartial processes bytes through the current chunk's sponge state.
 func (d *Decryptor) decryptPartial(dst, src []byte) {
 	for len(src) > 0 {
-		if d.pos == blockRate {
-			d.s.XORByteAt(blockRate, intermediateDS)
-			d.s.XORByteAt(spongeRate-1, 0x80)
-			d.s.Permute12()
+		if d.pos == keccak.Rate167 {
+			d.s.PadPermute(keccak.Rate167, intermediateDS)
 			d.pos = 0
 		}
 
-		n := min(blockRate-d.pos, len(src))
+		n := min(keccak.Rate167-d.pos, len(src))
 		d.s.DecryptBytesAt(d.pos, src[:n], dst[:n])
 		d.pos += n
 		d.chunkOff += n
@@ -336,28 +319,26 @@ func (d *Decryptor) decryptPartial(dst, src []byte) {
 
 // decryptComplete processes nFlush complete chunks via the SIMD cascade.
 func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
+	d.ensureTagStarted()
 	idx := 0
 
 	for idx+4 <= nFlush {
 		off := idx * ChunkSize
-		decryptX4(&d.key, uint64(d.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], d.cvBuf[:])
-		d.feedCVs(d.cvBuf[:4*cvSize])
+		decryptX4(&d.key, uint64(d.idx), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], &d.h)
 		d.idx += 4
 		idx += 4
 	}
 
 	for idx+2 <= nFlush {
 		off := idx * ChunkSize
-		decryptX2(&d.key, uint64(d.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], d.cvBuf[:2*cvSize])
-		d.feedCVs(d.cvBuf[:2*cvSize])
+		decryptX2(&d.key, uint64(d.idx), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], &d.h)
 		d.idx += 2
 		idx += 2
 	}
 
 	for idx < nFlush {
 		off := idx * ChunkSize
-		decryptX1(&d.key, uint64(d.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], d.cvBuf[:cvSize])
-		d.feedCVs(d.cvBuf[:cvSize])
+		decryptX1(&d.key, uint64(d.idx), src[off:off+ChunkSize], dst[off:off+ChunkSize], &d.h)
 		d.idx++
 		idx++
 	}
@@ -428,141 +409,101 @@ func finalPos(chunkLen int) int {
 	if chunkLen == 0 {
 		return 0
 	}
-	p := chunkLen % blockRate
+	p := chunkLen % keccak.Rate167
 	if p == 0 {
-		return blockRate
+		return keccak.Rate167
 	}
 	return p
 }
 
-func encryptX1(key *[KeySize]byte, index uint64, pt, ct, cvBuf []byte) {
+func encryptX1(key *[KeySize]byte, index uint64, pt, ct []byte, h *keccak.TurboSHAKE128) {
 	var s keccak.State1
 	initBuf := leafPadBuf(key, index)
 	s.AbsorbFinal(initBuf[:], initDS)
 	s.Permute12()
 
-	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopEncrypt167(pt, ct, padByte)
+	s.EncryptBytes(pt[done:], ct[done:])
 
-	tail := len(pt) - done
-	s.EncryptBytes(pt[done:done+tail], ct[done:done+tail])
-
-	pos := finalPos(len(pt))
-	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(spongeRate-1, 0x80)
-	s.Permute12()
-	s.ExtractBytes(cvBuf[:cvSize])
+	s.PadPermute(finalPos(len(pt)), finalDS)
+	h.WriteCV(&s)
 }
 
-func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
+func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, h *keccak.TurboSHAKE128) {
 	var s keccak.State2
 	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
 	s.AbsorbFinal(b0[:], b1[:], initDS)
 	s.Permute12()
 
-	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopEncrypt167(pt, ct, ChunkSize, padByte)
-
 	tail := ChunkSize - done
 	s.EncryptBytes(0, pt[done:done+tail], ct[done:done+tail])
 	s.EncryptBytes(1, pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail])
 
-	pos := finalPos(ChunkSize)
-	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(spongeRate-1, 0x80)
-	s.Permute12()
-	s.ExtractBytes(0, cvBuf[:cvSize])
-	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
+	s.PadPermute(finalPos(ChunkSize), finalDS)
+	h.WriteCVx2(&s)
 }
 
-func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
+func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, h *keccak.TurboSHAKE128) {
 	var s keccak.State4
 	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
 	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
 	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], initDS)
 	s.Permute12()
 
-	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopEncrypt167(pt, ct, ChunkSize, padByte)
-
 	tail := ChunkSize - done
 	s.EncryptBytes(0, pt[done:done+tail], ct[done:done+tail])
 	s.EncryptBytes(1, pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail])
 	s.EncryptBytes(2, pt[2*ChunkSize+done:2*ChunkSize+done+tail], ct[2*ChunkSize+done:2*ChunkSize+done+tail])
 	s.EncryptBytes(3, pt[3*ChunkSize+done:3*ChunkSize+done+tail], ct[3*ChunkSize+done:3*ChunkSize+done+tail])
 
-	pos := finalPos(ChunkSize)
-	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(spongeRate-1, 0x80)
-	s.Permute12()
-	s.ExtractBytes(0, cvBuf[:cvSize])
-	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
-	s.ExtractBytes(2, cvBuf[2*cvSize:3*cvSize])
-	s.ExtractBytes(3, cvBuf[3*cvSize:4*cvSize])
+	s.PadPermute(finalPos(ChunkSize), finalDS)
+	h.WriteCVx4(&s)
 }
 
-func decryptX1(key *[KeySize]byte, index uint64, ct, pt, cvBuf []byte) {
+func decryptX1(key *[KeySize]byte, index uint64, ct, pt []byte, h *keccak.TurboSHAKE128) {
 	var s keccak.State1
 	initBuf := leafPadBuf(key, index)
 	s.AbsorbFinal(initBuf[:], initDS)
 	s.Permute12()
 
-	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopDecrypt167(ct, pt, padByte)
+	s.DecryptBytes(ct[done:], pt[done:])
 
-	tail := len(ct) - done
-	s.DecryptBytes(ct[done:done+tail], pt[done:done+tail])
-
-	pos := finalPos(len(ct))
-	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(spongeRate-1, 0x80)
-	s.Permute12()
-	s.ExtractBytes(cvBuf[:cvSize])
+	s.PadPermute(finalPos(len(ct)), finalDS)
+	h.WriteCV(&s)
 }
 
-func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
+func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, h *keccak.TurboSHAKE128) {
 	var s keccak.State2
 	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
 	s.AbsorbFinal(b0[:], b1[:], initDS)
 	s.Permute12()
 
-	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopDecrypt167(ct, pt, ChunkSize, padByte)
-
 	tail := ChunkSize - done
 	s.DecryptBytes(0, ct[done:done+tail], pt[done:done+tail])
 	s.DecryptBytes(1, ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail])
 
-	pos := finalPos(ChunkSize)
-	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(spongeRate-1, 0x80)
-	s.Permute12()
-	s.ExtractBytes(0, cvBuf[:cvSize])
-	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
+	s.PadPermute(finalPos(ChunkSize), finalDS)
+	h.WriteCVx2(&s)
 }
 
-func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
+func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, h *keccak.TurboSHAKE128) {
 	var s keccak.State4
 	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
 	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
 	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], initDS)
 	s.Permute12()
 
-	const padByte = intermediateDS ^ 0x80 // 0xE2
 	done := s.FastLoopDecrypt167(ct, pt, ChunkSize, padByte)
-
 	tail := ChunkSize - done
 	s.DecryptBytes(0, ct[done:done+tail], pt[done:done+tail])
 	s.DecryptBytes(1, ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail])
 	s.DecryptBytes(2, ct[2*ChunkSize+done:2*ChunkSize+done+tail], pt[2*ChunkSize+done:2*ChunkSize+done+tail])
 	s.DecryptBytes(3, ct[3*ChunkSize+done:3*ChunkSize+done+tail], pt[3*ChunkSize+done:3*ChunkSize+done+tail])
 
-	pos := finalPos(ChunkSize)
-	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(spongeRate-1, 0x80)
-	s.Permute12()
-	s.ExtractBytes(0, cvBuf[:cvSize])
-	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
-	s.ExtractBytes(2, cvBuf[2*cvSize:3*cvSize])
-	s.ExtractBytes(3, cvBuf[3*cvSize:4*cvSize])
+	s.PadPermute(finalPos(ChunkSize), finalDS)
+	h.WriteCVx4(&s)
 }

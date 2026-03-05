@@ -21,7 +21,7 @@ type permuteCaseN struct {
 }
 
 type spongeCase struct {
-	Rate   int    `json:"rate"`
+	Rate   int    `json:"Rate"`
 	DS     byte   `json:"ds"`
 	Msg    string `json:"msg"`
 	OutLen int    `json:"out_len"`

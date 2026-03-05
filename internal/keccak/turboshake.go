@@ -45,24 +45,24 @@ func (t *TurboSHAKE128) Write(p []byte) (int, error) {
 		t.s.a[t.pos>>3] ^= binary.LittleEndian.Uint64(tmp[:])
 		t.pos += need
 		p = p[need:]
-		if t.pos == rate {
+		if t.pos == Rate {
 			t.s.Permute12()
 			t.pos = 0
 		}
 	}
 
 	// Absorb full stripes directly via FastLoopAbsorb168.
-	if t.pos == 0 && len(p) >= rate {
+	if t.pos == 0 && len(p) >= Rate {
 		absorbed := t.s.FastLoopAbsorb168(p)
 		p = p[absorbed:]
 	}
 
 	// Absorb remaining full lanes.
-	for len(p) >= 8 && t.pos+8 <= rate {
+	for len(p) >= 8 && t.pos+8 <= Rate {
 		t.s.a[t.pos>>3] ^= binary.LittleEndian.Uint64(p[:8])
 		t.pos += 8
 		p = p[8:]
-		if t.pos == rate {
+		if t.pos == Rate {
 			t.s.Permute12()
 			t.pos = 0
 		}
@@ -112,10 +112,10 @@ func (t *TurboSHAKE128) writeCVWords(w0, w1, w2, w3 uint64) {
 	}
 
 	// 32 bytes = 4 lanes. Rate is 168 = 21 lanes, so at most we need to
-	// permute once if pos > (rate - 32).
-	if t.pos+32 > rate {
+	// permute once if pos > (Rate - 32).
+	if t.pos+32 > Rate {
 		// Fill remaining lanes in this block, permute, then continue.
-		remaining := (rate - t.pos) >> 3
+		remaining := (Rate - t.pos) >> 3
 		words := [4]uint64{w0, w1, w2, w3}
 		for i := range remaining {
 			t.s.a[t.pos>>3] ^= words[i]
@@ -136,7 +136,7 @@ func (t *TurboSHAKE128) writeCVWords(w0, w1, w2, w3 uint64) {
 	t.s.a[lane+2] ^= w2
 	t.s.a[lane+3] ^= w3
 	t.pos += 32
-	if t.pos == rate {
+	if t.pos == Rate {
 		t.s.Permute12()
 		t.pos = 0
 	}
@@ -148,7 +148,7 @@ func (t *TurboSHAKE128) Read(p []byte) (int, error) {
 	if !t.squeezing {
 		// Apply domain separation and padding, then permute.
 		xorByteInWord(&t.s.a[t.pos>>3], t.pos, t.ds)
-		xorByteInWord(&t.s.a[(rate-1)>>3], rate-1, 0x80)
+		xorByteInWord(&t.s.a[(Rate-1)>>3], Rate-1, 0x80)
 		t.s.Permute12()
 		t.pos = 0
 		t.squeezing = true
@@ -156,7 +156,7 @@ func (t *TurboSHAKE128) Read(p []byte) (int, error) {
 
 	n := len(p)
 	for len(p) > 0 {
-		if t.pos == rate {
+		if t.pos == Rate {
 			t.s.Permute12()
 			t.pos = 0
 		}
@@ -173,13 +173,13 @@ func (t *TurboSHAKE128) Read(p []byte) (int, error) {
 			continue
 		}
 		// Full lanes.
-		for len(p) >= 8 && t.pos+8 <= rate {
+		for len(p) >= 8 && t.pos+8 <= Rate {
 			binary.LittleEndian.PutUint64(p[:8], t.s.a[t.pos>>3])
 			t.pos += 8
 			p = p[8:]
 		}
 		// Partial final lane.
-		if len(p) > 0 && t.pos < rate {
+		if len(p) > 0 && t.pos < Rate {
 			var tmp [8]byte
 			binary.LittleEndian.PutUint64(tmp[:], t.s.a[t.pos>>3])
 			w := copy(p, tmp[:])

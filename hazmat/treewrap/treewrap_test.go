@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/testdata"
 )
 
@@ -27,8 +28,8 @@ func TestRoundTrip(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", blockRate},
-		{"168 bytes", blockRate + 1},
+		{"167 bytes", keccak.Rate167},
+		{"168 bytes", keccak.Rate167 + 1},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -78,7 +79,7 @@ func TestRoundTripInPlace(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", blockRate},
+		{"167 bytes", keccak.Rate167},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -190,138 +191,6 @@ func TestDecryptAndMAC(t *testing.T) {
 	})
 }
 
-func TestEncryptX2MatchesX1(t *testing.T) {
-	key := testKey()
-
-	// x1 path: two separate calls.
-	cv1 := make([]byte, 2*cvSize)
-	pt := make([]byte, 2*ChunkSize)
-	for i := range pt {
-		pt[i] = byte(i)
-	}
-
-	ct1 := make([]byte, 2*ChunkSize)
-	encryptX1(key, 0, pt[:ChunkSize], ct1[:ChunkSize], cv1[:cvSize])
-	encryptX1(key, 1, pt[ChunkSize:], ct1[ChunkSize:], cv1[cvSize:])
-
-	// x2 path: single call.
-	cv2 := make([]byte, 2*cvSize)
-	ct2 := make([]byte, 2*ChunkSize)
-	encryptX2(key, 0, pt, ct2, cv2)
-
-	if !bytes.Equal(ct1, ct2) {
-		t.Error("encryptX2 ciphertext does not match encryptX1")
-	}
-	if !bytes.Equal(cv1, cv2) {
-		t.Error("encryptX2 chain values do not match encryptX1")
-	}
-}
-
-func TestEncryptX4MatchesX1(t *testing.T) {
-	key := testKey()
-
-	pt := make([]byte, 4*ChunkSize)
-	for i := range pt {
-		pt[i] = byte(i)
-	}
-
-	// x1 path.
-	cv1 := make([]byte, 4*cvSize)
-	ct1 := make([]byte, 4*ChunkSize)
-	for i := range 4 {
-		encryptX1(key, uint64(i), pt[i*ChunkSize:(i+1)*ChunkSize], ct1[i*ChunkSize:(i+1)*ChunkSize], cv1[i*cvSize:(i+1)*cvSize])
-	}
-
-	// x4 path.
-	cv4 := make([]byte, 4*cvSize)
-	ct4 := make([]byte, 4*ChunkSize)
-	encryptX4(key, 0, pt, ct4, cv4)
-
-	if !bytes.Equal(ct1, ct4) {
-		t.Error("encryptX4 ciphertext does not match encryptX1")
-	}
-	if !bytes.Equal(cv1, cv4) {
-		t.Error("encryptX4 chain values do not match encryptX1")
-	}
-}
-
-func TestDecryptX2MatchesX1(t *testing.T) {
-	key := testKey()
-
-	// First encrypt to get ciphertext.
-	pt := make([]byte, 2*ChunkSize)
-	for i := range pt {
-		pt[i] = byte(i)
-	}
-	ct, _ := EncryptAndMAC(nil, key, pt)
-
-	// x1 path.
-	cv1 := make([]byte, 2*cvSize)
-	pt1 := make([]byte, 2*ChunkSize)
-	decryptX1(key, 0, ct[:ChunkSize], pt1[:ChunkSize], cv1[:cvSize])
-	decryptX1(key, 1, ct[ChunkSize:], pt1[ChunkSize:], cv1[cvSize:])
-
-	// x2 path.
-	cv2 := make([]byte, 2*cvSize)
-	pt2 := make([]byte, 2*ChunkSize)
-	decryptX2(key, 0, ct, pt2, cv2)
-
-	if !bytes.Equal(pt1, pt2) {
-		t.Error("decryptX2 plaintext does not match decryptX1")
-	}
-	if !bytes.Equal(cv1, cv2) {
-		t.Error("decryptX2 chain values do not match decryptX1")
-	}
-}
-
-func TestDecryptX4MatchesX1(t *testing.T) {
-	key := testKey()
-
-	pt := make([]byte, 4*ChunkSize)
-	for i := range pt {
-		pt[i] = byte(i)
-	}
-	ct, _ := EncryptAndMAC(nil, key, pt)
-
-	// x1 path.
-	cv1 := make([]byte, 4*cvSize)
-	pt1 := make([]byte, 4*ChunkSize)
-	for i := range 4 {
-		decryptX1(key, uint64(i), ct[i*ChunkSize:(i+1)*ChunkSize], pt1[i*ChunkSize:(i+1)*ChunkSize], cv1[i*cvSize:(i+1)*cvSize])
-	}
-
-	// x4 path.
-	cv4 := make([]byte, 4*cvSize)
-	pt4 := make([]byte, 4*ChunkSize)
-	decryptX4(key, 0, ct, pt4, cv4)
-
-	if !bytes.Equal(pt1, pt4) {
-		t.Error("decryptX4 plaintext does not match decryptX1")
-	}
-	if !bytes.Equal(cv1, cv4) {
-		t.Error("decryptX4 chain values do not match decryptX1")
-	}
-}
-
-func TestLengthEncode(t *testing.T) {
-	tests := []struct {
-		input uint64
-		want  string
-	}{
-		{0, "00"},
-		{1, "0101"},
-		{255, "ff01"},
-		{256, "010002"},
-		{65535, "ffff02"},
-	}
-	for _, tt := range tests {
-		got := hex.EncodeToString(lengthEncode(tt.input))
-		if got != tt.want {
-			t.Errorf("lengthEncode(%d) = %s, want %s", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestEncryptAndMAC(t *testing.T) {
 	key := testKey()
 
@@ -368,8 +237,8 @@ func TestEncryptorDecryptorRoundTrip(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", blockRate},
-		{"168 bytes", blockRate + 1},
+		{"167 bytes", keccak.Rate167},
+		{"168 bytes", keccak.Rate167 + 1},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -418,7 +287,7 @@ func TestEncryptorEquivalence(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", blockRate},
+		{"167 bytes", keccak.Rate167},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -462,7 +331,7 @@ func TestDecryptorEquivalence(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", blockRate},
+		{"167 bytes", keccak.Rate167},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -503,7 +372,7 @@ func TestEncryptorMultiWrite(t *testing.T) {
 	key := testKey()
 
 	sizes := []int{
-		1, blockRate, blockRate + 1, ChunkSize, ChunkSize + 1,
+		1, keccak.Rate167, keccak.Rate167 + 1, ChunkSize, ChunkSize + 1,
 		2 * ChunkSize, 4 * ChunkSize, 5*ChunkSize + 100,
 	}
 
@@ -513,7 +382,7 @@ func TestEncryptorMultiWrite(t *testing.T) {
 	}{
 		{"single-byte", 1},
 		{"small", 100},
-		{"block-rate", blockRate},
+		{"block-rate", keccak.Rate167},
 		{"chunk-aligned", ChunkSize},
 		{"chunk-plus-one", ChunkSize + 1},
 	}
@@ -554,7 +423,7 @@ func TestDecryptorMultiWrite(t *testing.T) {
 	key := testKey()
 
 	sizes := []int{
-		1, blockRate, blockRate + 1, ChunkSize, ChunkSize + 1,
+		1, keccak.Rate167, keccak.Rate167 + 1, ChunkSize, ChunkSize + 1,
 		2 * ChunkSize, 4 * ChunkSize, 5*ChunkSize + 100,
 	}
 
@@ -564,7 +433,7 @@ func TestDecryptorMultiWrite(t *testing.T) {
 	}{
 		{"single-byte", 1},
 		{"small", 100},
-		{"block-rate", blockRate},
+		{"block-rate", keccak.Rate167},
 		{"chunk-aligned", ChunkSize},
 		{"chunk-plus-one", ChunkSize + 1},
 	}
