@@ -14,6 +14,11 @@ type TurboSHAKE128 struct {
 	squeezing bool
 }
 
+// NewTurboSHAKE128 returns a TurboSHAKE128 initialized with the given domain separation byte.
+func NewTurboSHAKE128(ds byte) TurboSHAKE128 {
+	return TurboSHAKE128{ds: ds}
+}
+
 // Reset zeros the state and reinitializes it with the given domain separation byte.
 func (t *TurboSHAKE128) Reset(ds byte) {
 	t.s.Reset()

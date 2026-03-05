@@ -13,7 +13,6 @@ package treewrap
 import (
 	"encoding/binary"
 
-	"github.com/codahale/thyrse/hazmat/turboshake"
 	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
@@ -44,8 +43,9 @@ const (
 	// ChunkSize is the size of each leaf chunk in bytes.
 	ChunkSize = 8 * 1024
 
-	cvSize         = 32                  // Chain value size (= capacity).
-	blockRate      = turboshake.Rate - 1 // 167: usable data bytes per sponge block.
+	cvSize         = 32  // Chain value size (= capacity).
+	spongeRate     = 168 // TurboSHAKE128 sponge rate (bytes).
+	blockRate      = spongeRate - 1 // 167: usable data bytes per sponge block.
 	initDS         = 0x60                // Domain separation byte for leaf init (key/index absorption).
 	singleNodeDS   = 0x61                // Domain separation byte for single-node tag.
 	intermediateDS = 0x62                // Domain separation byte for intermediate leaf sponges.
@@ -56,7 +56,7 @@ const (
 type cryptor struct {
 	key        [KeySize]byte
 	s          keccak.State1
-	h          turboshake.Hasher
+	h          keccak.TurboSHAKE128
 	cvBuf      [4 * cvSize]byte
 	tagStarted bool
 	finalized  bool
@@ -68,7 +68,7 @@ type cryptor struct {
 // finalizeCV squeezes the chain value from the current chunk's sponge state.
 func (c *cryptor) finalizeCV() {
 	c.s.XORByteAt(c.pos, finalDS)
-	c.s.XORByteAt(turboshake.Rate-1, 0x80)
+	c.s.XORByteAt(spongeRate-1, 0x80)
 	c.s.Permute12()
 	c.s.ExtractBytes(c.cvBuf[:cvSize])
 	c.feedCVs(c.cvBuf[:cvSize])
@@ -106,7 +106,7 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 		var s0 keccak.State1
 		initLeaf(&s0, &c.key, 0)
 		s0.XORByteAt(0, singleNodeDS)
-		s0.XORByteAt(turboshake.Rate-1, 0x80)
+		s0.XORByteAt(spongeRate-1, 0x80)
 		s0.Permute12()
 		var tag [TagSize]byte
 		s0.ExtractBytes(tag[:])
@@ -117,7 +117,7 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 		// Fast path for n=1: derive tag directly from the single chunk.
 		var tag [TagSize]byte
 		c.s.XORByteAt(c.pos, singleNodeDS)
-		c.s.XORByteAt(turboshake.Rate-1, 0x80)
+		c.s.XORByteAt(spongeRate-1, 0x80)
 		c.s.Permute12()
 		c.s.ExtractBytes(tag[:])
 		return tag
@@ -142,7 +142,7 @@ func NewEncryptor(key *[KeySize]byte) Encryptor {
 	return Encryptor{
 		cryptor: cryptor{
 			key: *key,
-			h:   turboshake.New(tagDS),
+			h:   keccak.NewTurboSHAKE128(tagDS),
 		},
 	}
 }
@@ -200,7 +200,7 @@ func (e *Encryptor) encryptPartial(dst, src []byte) {
 	for len(src) > 0 {
 		if e.pos == blockRate {
 			e.s.XORByteAt(blockRate, intermediateDS)
-			e.s.XORByteAt(turboshake.Rate-1, 0x80)
+			e.s.XORByteAt(spongeRate-1, 0x80)
 			e.s.Permute12()
 			e.pos = 0
 		}
@@ -262,7 +262,7 @@ func NewDecryptor(key *[KeySize]byte) Decryptor {
 	return Decryptor{
 		cryptor: cryptor{
 			key: *key,
-			h:   turboshake.New(tagDS),
+			h:   keccak.NewTurboSHAKE128(tagDS),
 		},
 	}
 }
@@ -320,7 +320,7 @@ func (d *Decryptor) decryptPartial(dst, src []byte) {
 	for len(src) > 0 {
 		if d.pos == blockRate {
 			d.s.XORByteAt(blockRate, intermediateDS)
-			d.s.XORByteAt(turboshake.Rate-1, 0x80)
+			d.s.XORByteAt(spongeRate-1, 0x80)
 			d.s.Permute12()
 			d.pos = 0
 		}
@@ -449,7 +449,7 @@ func encryptX1(key *[KeySize]byte, index uint64, pt, ct, cvBuf []byte) {
 
 	pos := finalPos(len(pt))
 	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.XORByteAt(spongeRate-1, 0x80)
 	s.Permute12()
 	s.ExtractBytes(cvBuf[:cvSize])
 }
@@ -469,7 +469,7 @@ func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 
 	pos := finalPos(ChunkSize)
 	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.XORByteAt(spongeRate-1, 0x80)
 	s.Permute12()
 	s.ExtractBytes(0, cvBuf[:cvSize])
 	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
@@ -493,7 +493,7 @@ func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct, cvBuf []byte) {
 
 	pos := finalPos(ChunkSize)
 	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.XORByteAt(spongeRate-1, 0x80)
 	s.Permute12()
 	s.ExtractBytes(0, cvBuf[:cvSize])
 	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
@@ -515,7 +515,7 @@ func decryptX1(key *[KeySize]byte, index uint64, ct, pt, cvBuf []byte) {
 
 	pos := finalPos(len(ct))
 	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.XORByteAt(spongeRate-1, 0x80)
 	s.Permute12()
 	s.ExtractBytes(cvBuf[:cvSize])
 }
@@ -535,7 +535,7 @@ func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 
 	pos := finalPos(ChunkSize)
 	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.XORByteAt(spongeRate-1, 0x80)
 	s.Permute12()
 	s.ExtractBytes(0, cvBuf[:cvSize])
 	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
@@ -559,7 +559,7 @@ func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt, cvBuf []byte) {
 
 	pos := finalPos(ChunkSize)
 	s.XORByteAt(pos, finalDS)
-	s.XORByteAt(turboshake.Rate-1, 0x80)
+	s.XORByteAt(spongeRate-1, 0x80)
 	s.Permute12()
 	s.ExtractBytes(0, cvBuf[:cvSize])
 	s.ExtractBytes(1, cvBuf[cvSize:2*cvSize])
