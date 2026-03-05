@@ -141,6 +141,40 @@ class LeafCipher:
 The encodings used here (`left_encode`, `encode_string`, `length_encode`) are defined as Python functions in Appendix B.
 `left_encode` and `encode_string` follow NIST SP 800-185; `length_encode` follows RFC 9861.
 
+### Tree Topology
+
+TreeWrap uses the Sakura final-node-growing topology (ePrint 2013/231, §5.1) without kangaroo hopping. Every chunk —
+including the first — is processed by an independent leaf cipher that produces a C-byte chain value. A single final node
+absorbs all chain values and produces the tag via TurboSHAKE128. This differs from KangarooTwelve, which uses the same
+Sakura topology but with kangaroo hopping: the first chunk's data is absorbed directly into the final node, and only
+subsequent chunks produce chain values.
+
+For $n > 1$ chunks, the final-node TurboSHAKE128 input is a bare Sakura ⟨chaining hop⟩ (Figure 4):
+
+$$
+\underbrace{\mathit{cv}_0 \;\|\; \cdots \;\|\; \mathit{cv}_{n-1}}_{\text{chain values}} \;\|\; \underbrace{\mathrm{length\_encode}(n)}_{\text{⟨coded nrCVs⟩}} \;\|\; \underbrace{\mathtt{0xFF} \;\|\; \mathtt{0xFF}}_{\text{⟨interleaving block size⟩}}
+$$
+
+where:
+
+- **`cv_i`** (C = 32 bytes each): the chain value squeezed from leaf $i$.
+- **`length_encode(n)`**: the Sakura ⟨coded nrCVs⟩ field, encoded per RFC 9861.
+- **`0xFF || 0xFF`**: the Sakura ⟨interleaving block size⟩ encoding $I = \infty$ (no block interleaving); mantissa and
+  exponent both `0xFF`.
+
+The Sakura grammar derivation is: `⟨final node⟩` = `⟨node⟩ '1'` = `⟨chaining hop⟩ '1'` =
+`nrCVs⟨CV⟩ ⟨coded nrCVs⟩ ⟨interleaving block size⟩ '0' '1'`. The trailing frame bits — ⟨chaining hop⟩ `'0'` and
+⟨final node⟩ `'1'` — are not encoded as explicit data bytes; final-node separability (Sakura Lemma 4) is ensured by the
+TurboSHAKE128 domain byte `0x64`, which is distinct from all leaf cipher domain bytes (`0x60`–`0x63`).
+
+The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (§5.1).
+
+**Encoding injectivity.** This encoding is injective over the tuple $(n,\, \mathit{cv}_0, \ldots, \mathit{cv}_{n-1})$.
+The suffix `length_encode(n) || 0xFF || 0xFF` is self-delimiting: `0xFF` cannot be a valid `length_encode` byte-count
+(chain-value counts fit in at most 8 bytes), so the interleaving block size bytes are unambiguously terminal, and the
+byte immediately preceding them gives the byte-count of $n$. Given $n$, the chain values are parsed as $n$ consecutive
+$C$-byte blocks starting at offset 0.
+
 ### 5.1 EncryptAndMAC / DecryptAndMAC
 
 **`TreeWrap.EncryptAndMAC(key, plaintext) → (ciphertext, tag)`**\
@@ -167,6 +201,9 @@ The encodings used here (`left_encode`, `encode_string`, `length_encode`) are de
 *Procedure:*
 
 ```python
+# Sakura interleaving block size for I = infinity (§5, Tree Topology).
+SAKURA_SUFFIX = b"\xff\xff"
+
 def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes]:
     """Shared logic for EncryptAndMAC / DecryptAndMAC."""
     n = max(1, -(-len(data) // B))
@@ -185,11 +222,11 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
         out_parts.append(L.encrypt(chunk) if direction == "E" else L.decrypt(chunk))
         cvs.append(L.chain_value())
 
-    final_input = bytes([0x03, 0, 0, 0, 0, 0, 0, 0])
+    final_input = b""
     for cv in cvs:
         final_input += cv
     final_input += length_encode(n)
-    final_input += b"\xff\xff"
+    final_input += SAKURA_SUFFIX
     tag = turboshake128(final_input, 0x64, TAU)
     return b"".join(out_parts), tag
 
@@ -680,58 +717,58 @@ Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. 
 
 ### 9.1 Empty Plaintext (MAC-only, n = 1)
 
-| Field | Value                                                              |
-|-------|--------------------------------------------------------------------|
-| len   | 0                                                                  |
-| ct    | (empty)                                                            |
-| tag   | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
+| Field | Value |
+|-------|-------|
+| len | 0 |
+| ct | (empty) |
+| tag | `668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d` |
 
 ### 9.2 One-Byte Plaintext (n = 1)
 
-| Field | Value                                                              |
-|-------|--------------------------------------------------------------------|
-| len   | 1                                                                  |
-| ct    | `f1`                                                               |
-| tag   | `c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35` |
+| Field | Value |
+|-------|-------|
+| len | 1 |
+| ct | `f1` |
+| tag | `c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35` |
 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
 `8e419b1ad3363b42ebdf788c914c94e826a0d4864b6eb828c33ac460a60f7cee`.
 
 ### 9.3 B-Byte Plaintext (exactly one chunk, n = 1)
 
-| Field   | Value                                                              |
-|---------|--------------------------------------------------------------------|
-| len     | 8192                                                               |
+| Field | Value |
+|-------|-------|
+| len | 8192 |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2` |
+| tag | `16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2` |
 
 Flipping bit 0 of `ct[0]` yields tag
 `252c145ed845841ee9156ed46febaf03ad213d727256c761a36db0bf10901ea8`.
 
 ### 9.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
 
-| Field   | Value                                                              |
-|---------|--------------------------------------------------------------------|
-| len     | 8193                                                               |
+| Field | Value |
+|-------|-------|
+| len | 8193 |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1` |
+| tag | `f09415d1d6ff856183f846834abba98f8069cf4ff83dafa4feb6ee333d64ea7e` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`76398352ca9c7594808135f297f085bda06bb1ccd0f328246e22cedc7ecfdf65`.
+`7b8bf21669d034a434f3b6ac2c62eb55b9305bedb236092d886383425facdf83`.
 
 ### 9.5 4B-Byte Plaintext (four full chunks, n = 4)
 
-| Field   | Value                                                              |
-|---------|--------------------------------------------------------------------|
-| len     | 32768                                                              |
+| Field | Value |
+|-------|-------|
+| len | 32768 |
 | ct[:32] | `f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163` |
-| tag     | `0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0` |
+| tag | `6e5ec10b445ae5ff86f3bc21917e6f7e02fc1c7a04238e9edecc611a1662ae84` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`579b5003e457831607da1ac382aea6cda97b0dcd2fd8fbbbe0c5124b0ce36260`.
+`cf096b01b4ec8c8e0525d09dbe62dcb416af2850680d39d329730aa81c2e5698`.
 
 Swapping chunks 0 and 1 (bytes 0–8,191 and 8,192–16,383) yields tag
-`e1d0c423874fec642ad161b2700209c74a74b41451cc70f8cc1c6b894cd0aa98`.
+`d25ee1e118395795c41d83aa991f64f820cea9779baef39065edb9aa2a1b2b14`.
 
 ### 9.6 Round-Trip Consistency
 
@@ -744,12 +781,12 @@ These vectors validate the `treewrap_aead_encrypt` / `treewrap_aead_decrypt` wra
 
 #### 9.7.1 Empty Message
 
-| Field  | Value                                                              |
-|--------|--------------------------------------------------------------------|
-| K      | 32 bytes `00 01 02 ... 1f`                                         |
-| N      | 12 bytes `00 01 02 ... 0b`                                         |
-| AD     | (empty)                                                            |
-| M len  | 0                                                                  |
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `00 01 02 ... 1f` |
+| N | 12 bytes `00 01 02 ... 0b` |
+| AD | (empty) |
+| M len | 0 |
 | ct‖tag | `25b1c33a42d3dd8546c0de7df2edc6d3fa1d39b4e1ee9696b6a046c6f853d54e` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
@@ -757,12 +794,12 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 9.7.2 33-Byte Message With 5-Byte AD
 
-| Field  | Value                                                                                                                                |
-|--------|--------------------------------------------------------------------------------------------------------------------------------------|
-| K      | 32 bytes `00 01 02 ... 1f`                                                                                                           |
-| N      | 12 bytes `a0 a1 a2 ... ab`                                                                                                           |
-| AD     | 10 11 12 ... 14                                                                                                                      |
-| M len  | 33 (`00 01 02 ... mod 256`)                                                                                                          |
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `00 01 02 ... 1f` |
+| N | 12 bytes `a0 a1 a2 ... ab` |
+| AD | 10 11 12 ... 14 |
+| M len | 33 (`00 01 02 ... mod 256`) |
 | ct‖tag | `d88f1d9d2b6f31316427abef58ef07ef047d4e9d3faec99c677a5b7d895b682fe8b98d90320dd7d3773160424f8b1a7aa4522038c5871e62689cdb90ef8820aa64` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
@@ -770,26 +807,26 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 9.7.3 Multi-Chunk Message (8193 Bytes)
 
-| Field   | Value                                                              |
-|---------|--------------------------------------------------------------------|
-| K       | 32 bytes `42 43 44 ... 61`                                         |
-| N       | 12 bytes `c0 c1 c2 ... cb`                                         |
-| AD      | 00 01 02 ... 10                                                    |
-| M len   | 8193 (`00 01 02 ... mod 256`)                                      |
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `42 43 44 ... 61` |
+| N | 12 bytes `c0 c1 c2 ... cb` |
+| AD | 00 01 02 ... 10 |
+| M len | 8193 (`00 01 02 ... mod 256`) |
 | ct[:32] | `f5774bff15f14fd3b08bc8e48c63cad9d84b348b1c3097551db20dce21b0b36d` |
-| tag     | `ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f` |
+| tag | `a5371e4a8a3ec6cce1354035667cf4be0678486c5184a3a9b8af6ff056bd8ad2` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 9.7.4 Nonce Reuse Behavior (Equal-Length Messages)
 
-| Field  | Value                                                                                                                                                                                              |
-|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| K      | 32 bytes `00 11 22 ... ff`                                                                                                                                                                         |
-| N      | 12 bytes `ff ee dd cc bb aa 99 88 77 66 55 44`                                                                                                                                                     |
-| AD     | a1 a2 a3 ... a4                                                                                                                                                                                    |
-| M len  | 64 (`00 01 02 ... mod 256`)                                                                                                                                                                        |
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `00 11 22 ... ff` |
+| N | 12 bytes `ff ee dd cc bb aa 99 88 77 66 55 44` |
+| AD | a1 a2 a3 ... a4 |
+| M len | 64 (`00 01 02 ... mod 256`) |
 | ct‖tag | `b846bc924f26508d37919646aa5e687082a1e200f33d3ab75edfc5a0cff110d4ee5afa9a9d088462af37c8b7b01029ba1db288f616c7d2a0d0febf918d1f4d5fa0fe05304729364477e5844d6886885148044629740668b6e98045d4eed0cf58` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
@@ -800,12 +837,12 @@ Nonce reuse is out of scope for §6 nonce-respecting claims.
 
 #### 9.7.5 Swapped Nonce and AD Domains
 
-| Field  | Value                                                                                                                                                              |
-|--------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| K      | 32 bytes `0f 0e 0d ... 00`                                                                                                                                         |
-| N      | 12 bytes `00 01 02 ... 0b`                                                                                                                                         |
-| AD     | 10 11 12 ... 1b                                                                                                                                                    |
-| M len  | 48 (`00 01 02 ... mod 256`)                                                                                                                                        |
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `0f 0e 0d ... 00` |
+| N | 12 bytes `00 01 02 ... 0b` |
+| AD | 10 11 12 ... 1b |
+| M len | 48 (`00 01 02 ... mod 256`) |
 | ct‖tag | `9e1b2d6fd419fb7a548c9a7ef468162f0bccedc9ca14433e71c41ed8b7ba73b2f04d1b9bcb94c78e827f1723d34aea41f9a6a7dff365fec7fefe1727ab9c5f46a328c71e9d6c596f43a6959bf4ec1f9e` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
@@ -815,12 +852,12 @@ validate the original `ct‖tag`.
 
 #### 9.7.6 Empty AD vs One-Byte AD 00
 
-| Field  | Value                                                                                                                              |
-|--------|------------------------------------------------------------------------------------------------------------------------------------|
-| K      | 32 bytes `88 99 aa ... ff`                                                                                                         |
-| N      | 12 bytes `0c 0d 0e ... 17`                                                                                                         |
-| AD     | (empty)                                                                                                                            |
-| M len  | 32 (`00 01 02 ... 1f`)                                                                                                             |
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `88 99 aa ... ff` |
+| N | 12 bytes `0c 0d 0e ... 17` |
+| AD | (empty) |
+| M len | 32 (`00 01 02 ... 1f`) |
 | ct‖tag | `3bb057de1cbbd42d6941f1e3ccd15d1814be5b030400af4c921a7196a0c8ca0c4049f9c968a78fc2edc8f9fb234325462260e4dc066a342a0ed0c90e1c5ee798` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
@@ -829,12 +866,12 @@ Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖
 
 #### 9.7.7 Long AD (128 Bytes)
 
-| Field  | Value                                                                                                |
-|--------|------------------------------------------------------------------------------------------------------|
-| K      | 32 bytes `10 21 32 ... ff`                                                                           |
-| N      | 12 bytes `ab ab ac ad ae af b0 b1 b2 b3 b4 b5`                                                       |
-| AD     | ab ab ab ... ab                                                                                      |
-| M len  | 17 (`00 01 02 ... 10`)                                                                               |
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `10 21 32 ... ff` |
+| N | 12 bytes `ab ab ac ad ae af b0 b1 b2 b3 b4 b5` |
+| AD | ab ab ab ... ab |
+| M len | 17 (`00 01 02 ... 10`) |
 | ct‖tag | `b00ed273058b5e5f22a44343c0d67362fda6620cf0fee302c74ce22a3fff5f89d2203a38db880837a0d035775e22938452` |
 
 `treewrap_aead_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
@@ -860,9 +897,9 @@ where:
   block permutations and the final squeeze — at least 1 even for empty chunks). For a full $B = 8192$-byte chunk:
   $1 + \lceil 8192 / 167 \rceil = 1 + 50 = 51$.
 - **Tag accumulation term.** Present only
-  when $n > 1$. $|\mathit{final\_input}| = 8 + nC + |\mathrm{length\_encode}(n)| + 2$ bytes.
-  For $n = 2$: $|final\_input| = 8 + 64 + 2 + 2 = 76$ bytes, giving
-  $\lfloor 76 / 168 \rfloor + 1 = 1$.
+  when $n > 1$. $|\mathit{final\_input}| = nC + |\mathrm{length\_encode}(n)| + 2$ bytes.
+  For $n = 2$: $|\mathit{final\_input}| = 64 + 2 + 2 = 68$ bytes, giving
+  $\lfloor 68 / 168 \rfloor + 1 = 1$.
 
 ## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
 

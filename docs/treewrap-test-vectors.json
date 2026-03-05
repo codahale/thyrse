@@ -59,9 +59,9 @@
           "flip_first_bit": true
         },
         "expected": {
-          "tag_hex": "334010388fc60b70a51e9e0f2e83222549e3231153575e27fce16227ea197bb1",
+          "tag_hex": "f09415d1d6ff856183f846834abba98f8069cf4ff83dafa4feb6ee333d64ea7e",
           "ct_prefix32_hex": "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163",
-          "flip_tag_hex": "76398352ca9c7594808135f297f085bda06bb1ccd0f328246e22cedc7ecfdf65"
+          "flip_tag_hex": "7b8bf21669d034a434f3b6ac2c62eb55b9305bedb236092d886383425facdf83"
         }
       },
       {
@@ -76,10 +76,10 @@
           "swap_chunk_0_1": true
         },
         "expected": {
-          "tag_hex": "0329acf4bfa2cf77a2c8ca4318efe18cece2a0ed4ce61950c03059ea146244b0",
+          "tag_hex": "6e5ec10b445ae5ff86f3bc21917e6f7e02fc1c7a04238e9edecc611a1662ae84",
           "ct_prefix32_hex": "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163",
-          "flip_tag_hex": "579b5003e457831607da1ac382aea6cda97b0dcd2fd8fbbbe0c5124b0ce36260",
-          "swap_tag_hex": "e1d0c423874fec642ad161b2700209c74a74b41451cc70f8cc1c6b894cd0aa98"
+          "flip_tag_hex": "cf096b01b4ec8c8e0525d09dbe62dcb416af2850680d39d329730aa81c2e5698",
+          "swap_tag_hex": "d25ee1e118395795c41d83aa991f64f820cea9779baef39065edb9aa2a1b2b14"
         }
       }
     ]
@@ -141,7 +141,7 @@
         },
         "expected": {
           "ct_prefix32_hex": "f5774bff15f14fd3b08bc8e48c63cad9d84b348b1c3097551db20dce21b0b36d",
-          "tag_hex": "ab269d885fea7d1e55e7872103fc4d876237c24c98a45d338473ca60324fc04f"
+          "tag_hex": "a5371e4a8a3ec6cce1354035667cf4be0678486c5184a3a9b8af6ff056bd8ad2"
         }
       },
       {
