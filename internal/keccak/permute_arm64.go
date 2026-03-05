@@ -35,5 +35,5 @@ func permute12x8Arch(s *State8) bool {
 }
 
 func init() {
-	AvailableLanes = 2
+	AvailableLanes = 4
 }
