@@ -12,7 +12,7 @@
 #include "keccak_amd64_avx512.h"
 
 
-// func p1600(a *[200]byte)
+// func p1600(a *State1)
 TEXT ·p1600(SB), $200-8
 	MOVQ a+0(FP), DI
 
@@ -116,10 +116,11 @@ DATA	round_consts_2x+0x178(SB)/8, $0x8000000080008008
 GLOBL	round_consts_2x(SB), NOPTR|RODATA, $384
 
 
-// func p1600x8AVX512State(state *[1600]byte)
+// func p1600x8AVX512State(a *State8)
+//
 // state is interleaved as 25 zmm lanes, each containing 8 uint64 words.
 TEXT ·p1600x8AVX512State(SB), $320-8
-	MOVQ	state+0(FP), AX
+	MOVQ	a+0(FP), AX
 	LEAQ	round_consts_2x+192(SB), R11
 	VMOVDQU64	0*64(AX), Z0
 	VMOVDQU64	1*64(AX), Z1
@@ -180,6 +181,7 @@ TEXT ·p1600x8AVX512State(SB), $320-8
 	RET
 
 
+// func p1600x4Lane(a *State4)
 TEXT ·p1600x4Lane(SB), $1600-8
 	MOVQ	a+0(FP), DI
 

@@ -7,7 +7,7 @@
 #include "textflag.h"
 #include "keccak_arm64.h"
 
-// func p1600(a *[200]byte)
+// func p1600(a *State1)
 TEXT ·p1600(SB), $200-8
 	MOVD	a+0(FP), R0
 	MOVD	$round_consts(SB), R1
