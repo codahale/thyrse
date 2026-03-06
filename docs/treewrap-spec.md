@@ -882,7 +882,7 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 | IND-CPA-like confidentiality | Ensure key uniqueness per `EncryptAndMAC` invocation.                                         |
 | INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.                                  |
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
-| CMT-4                        | Provide external key derivation with collision resistance over injectively encoded AEAD contexts. |
+| CMT-4                        | Ensure derived keys are independent across distinct AEAD contexts.                                |
 
 ### 7.2 Chunk Reordering, Length Changes, and Empty Input
 
