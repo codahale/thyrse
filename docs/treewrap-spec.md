@@ -933,8 +933,10 @@ to $2^{64}$, using the same counter model.
 Security interpretation remains the Section 6 bound family evaluated at observed counters, with adversary offline budget
 parameter $t$ treated as an analysis parameter (not an operationally measurable quantity).
 
-For deployments spanning multiple master keys/users in one reporting window, estimate total risk by summing per-key
-epoch bound values over that window (union bound).
+**Multi-user security.** For deployments spanning $U$ independent master keys, the total advantage is at most $U$ times
+the per-key bound (union bound). The per-key bounds in Section 6 already account for the adversary's offline budget $t$,
+which is shared across all keys. Concretely, a deployment with $U$ keys achieves at most $U \cdot \varepsilon$ total
+advantage, where $\varepsilon$ is the single-key bound evaluated at the per-key workload counters.
 
 Non-normative sensitivity profiles for reviewers:
 
