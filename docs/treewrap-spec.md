@@ -607,50 +607,48 @@ one key.
 By Lemma 3 (fixed-key bijection), distinct plaintexts produce distinct ciphertexts under a fixed key, so the tag can be
 viewed equivalently as a function of plaintext or ciphertext. Tag pseudorandomness is established separately in Section 6.6.
 
-### 6.4 Tag Security
+### 6.6 Tag Security
 
 This section establishes that the tag output is pseudorandom and collision-resistant under a uniformly random key.
-Section 6.4.1 establishes tag PRF security; Section 6.4.2 establishes tag collision resistance. The
+Section 6.6.1 establishes tag PRF security; Section 6.6.2 establishes tag collision resistance. The
 $n = 1$ and $n > 1$ paths are structurally parallel: both are keyed sponge instances with distinct indices
 (Section 5). They are analyzed separately below, but the bound is the same in both cases.
 
-#### 6.4.1 Tag PRF Security
+#### 6.6.1 Tag PRF Security
 
 **Case $n = 1$.** The tag is `single_node_tag()`: a direct squeeze from the leaf's overwrite-mode keyed sponge (index 1)
-with domain byte 0x27 (see Section 5 for the construction). By Lemma 1 (applied with preconditions: the leaf is an
-overwrite-mode keyed sponge initialized with a uniformly random key, operating in the ideal-permutation model), this
-output is pseudorandom up to $\varepsilon_{\mathrm{indiff}}$.
+with domain byte 0x27 (see Section 5 for the construction). By Lemma 1, this output is pseudorandom up to
+$\varepsilon_{\mathrm{ks}}(1, l_1, l_1, t)$, where $l_1$ is the number of input blocks for the single leaf.
 
 **Case $n > 1$.** The final node is a keyed sponge: it is a TurboSHAKE128 call whose input begins with
 $K_{tw} \| \mathrm{LEU64}(0)$ (see Section 5, final-node computation). Leaves use indices 1 through $n$; the final
 node uses index 0. All init inputs are therefore distinct.
 
-By Lemma 1 (generalized to XOR-absorb mode), the final node's rate outputs are pseudorandom up to
-$\varepsilon_{\mathrm{indiff}}$. Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, every $\pi$-call (across all $n$ leaves
-and the final node) has a unique capacity input. The final node only needs its own capacity states to be fresh, which
-is guaranteed by $\neg\mathsf{Bad}_{\mathrm{perm}}$.
-
-The tag is a squeeze from this keyed sponge — pseudorandom by Lemma 1. No additional $\varepsilon_{\mathrm{indiff}}$
-charge is incurred beyond the global charge in Section 6.2, because $\sigma + t$ already counts the final-node
-permutation calls.
+By Lemma 1 (generalized to XOR-absorb mode), the final node's rate outputs are pseudorandom. By the Domain Separation
+Lemma (Section 6.3), the final-node domain byte 0x37 (Sakura frame bit $S=1$) is distinct from all leaf domain bytes
+($S=0$). Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the final node's $\pi$-calls are disjoint from all leaf
+$\pi$-calls. The tag is a squeeze from this keyed sponge — pseudorandom by Lemma 1.
 
 Combining both cases:
 
 $$
-\varepsilon_{\mathrm{prf}} \le \varepsilon_{\mathrm{indiff}}.
+\varepsilon_{\mathrm{prf}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{tag}}, \ell_{\mathrm{tag}}, \mu_{\mathrm{tag}}, t),
 $$
 
-#### 6.4.2 Tag Collision Resistance
+where $q_{\mathrm{tag}}$, $\ell_{\mathrm{tag}}$, and $\mu_{\mathrm{tag}}$ are the number of keyed-sponge evaluations,
+maximum input blocks per evaluation, and total input blocks for the tag computation, respectively.
+
+#### 6.6.2 Tag Collision Resistance
 
 For $Q$ AEAD outputs (each a ciphertext-tag pair, as defined in Section 6.1) under one fixed secret key:
 
 $$
-\varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}}.
+\varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{tag}}, \ell_{\mathrm{tag}}, \mu_{\mathrm{tag}}, t) + \frac{Q^2}{2^{8\tau+1}}.
 $$
 
-The $\varepsilon_{\mathrm{indiff}}$ term accounts for the event $\mathsf{Bad}_{\mathrm{perm}}$ (which is conditioned
+The $\varepsilon_{\mathrm{cap}}$ term accounts for the event $\mathsf{Bad}_{\mathrm{perm}}$ (which is conditioned
 away in the $Q^2/2^{8\tau+1}$ term); combining these via a union bound gives the unconditional bound.
-Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$, tags are pseudorandom $\tau$-byte outputs (Section 6.4.1). The
+Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$, tags are pseudorandom $\tau$-byte outputs (Section 6.6.1). The
 second term is the birthday bound on collisions among $Q$ approximately independent, uniformly random $8\tau$-bit
 strings.
 
@@ -664,12 +662,10 @@ independent uniform outputs.
 Across different derived keys: distinct keys produce different init absorptions, hence different capacity states after
 the first permutation call. With no capacity collision between any pair of $\pi$-calls
 ($\neg\mathsf{Bad}_{\mathrm{perm}}$), the two tag computations query $\pi$ at disjoint inputs, producing approximately
-independent uniform outputs (the PRP/PRF switching distance $\leq \sigma^2/2^{1601}$ is negligible compared to
-$\varepsilon_{\mathrm{indiff}}$; see the Remark before Section 6.4).
+independent uniform outputs (see the PRP/PRF convention in Section 6.1).
 
 Combining both cases: for any pair of distinct AEAD outputs $(i, j)$ (whether within-key or cross-key),
-$\Pr[T_i = T_j] \leq 2^{-8\tau} + \delta_{\mathrm{pair}}$ where
-$\delta_{\mathrm{pair}} \leq \sigma^2/2^{1601}$ (PRP/PRF switching, absorbed by $\varepsilon_{\mathrm{indiff}}$).
+$\Pr[T_i = T_j] \leq 2^{-8\tau}$.
 The birthday bound over all $\binom{Q}{2}$ pairs then gives the $Q^2/2^{8\tau+1}$ term.
 
 ### 6.5 IND-CPA (Nonce-Respecting)
