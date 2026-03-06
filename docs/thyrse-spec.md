@@ -757,14 +757,18 @@ plaintext or ⊥ ← Open("message", ciphertext, tag)
 
 ## 15. References
 
-- Backendal, M., Clermont, S., Fischlin, M., and Günther, F. "Key Derivation Functions Without a Grain of Salt." IACR
-  ePrint 2025/657. Defines the RO-KDF construction requiring recoverable encoding.
-- RFC 9861: TurboSHAKE and KangarooTwelve.
+- Backendal, M., Clermont, S., Fischlin, M., and Günther, F. "Key Derivation Functions Without a Grain
+  of Salt." IACR ePrint 2025/657. Defines the RO-KDF construction requiring recoverable encoding.
+- RFC 9861: KangarooTwelve and TurboSHAKE.
 - NIST SP 800-185: SHA-3 Derived Functions (`left_encode`, `right_encode`).
-- TreeWrap specification. Defines the tree-parallel stream cipher and MAC used by Mask and Seal.
-- Daemen, J., Hoffert, S., Mella, S., Van Assche, G., and Van Keer, R. "Shaking up authenticated encryption." IACR
-  ePrint 2024/1618.
-- Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines CMT-4.
+- TreeWrap128 specification. Defines the tree-parallel authenticated encryption scheme used by Mask and
+  Seal. Provides IND-CPA, INT-CTXT, CMT-4, and tag PRF security claims referenced in §13.1.
+- Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop,
+  2008. Establishes sponge indifferentiability from a random oracle.
+- Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the
+  Generic Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2.
+- Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT
+  2022. Defines the CMT-4 committing security notion.
 
 ## 16. Test Vectors
 
