@@ -86,11 +86,11 @@ Each TurboSHAKE128 evaluation uses a domain separation byte that identifies the 
 | 0x22 | Mask key derivation            | Mask / Unmask       |
 | 0x23 | Seal key derivation            | Seal / Open         |
 | 0x24 | Ratchet chain derivation       | Ratchet             |
-| 0x60 | TreeWrap init (key absorption) | TreeWrap (internal) |
-| 0x61 | TreeWrap single block          | TreeWrap (internal) |
-| 0x62 | TreeWrap intermediate block    | TreeWrap (internal) |
-| 0x63 | TreeWrap final block           | TreeWrap (internal) |
-| 0x64 | TreeWrap tag accumulation      | TreeWrap (internal) |
+| 0x27 | TreeWrap single-node tag       | TreeWrap (internal) |
+| 0x2B | TreeWrap chain value           | TreeWrap (internal) |
+| 0x33 | TreeWrap init (key absorption) | TreeWrap (internal) |
+| 0x37 | TreeWrap tag accumulation      | TreeWrap (internal) |
+| 0x3B | TreeWrap key derivation        | TreeWrap (internal) |
 
 All domain bytes are in the range 0x01–0x7F as required by TurboSHAKE128.
 
@@ -560,7 +560,7 @@ Callers MUST ensure clone values are distinct from each other.
 ### 13.7 Domain Byte and Operation Code Separation
 
 All operation codes are in the range `0x10` – `0x18`. All TurboSHAKE128 domain bytes used by this framework are in the
-range `0x20` – `0x24` (protocol operations) and `0x60` – `0x64` (TreeWrap). KT128 uses domain byte `0x07`. These ranges
+range `0x20` – `0x24` (protocol operations) and `0x27` – `0x3B` (TreeWrap). KT128 uses domain byte `0x07`. These ranges
 are disjoint, eliminating any possibility of confusion between operation codes and domain bytes.
 
 This provides a robust defense-in-depth layer against cross-operation state confusion. For example, in `Mask` and
@@ -598,7 +598,7 @@ bounded by:
 $$\varepsilon_{\mathrm{indiff}} \leq \frac{(\sigma + t)^2}{2^{c+1}} = \frac{(\sigma + t)^2}{2^{257}}$$
 
 This replacement covers all TurboSHAKE128 evaluations in the protocol: backbone finalizations (domain bytes `0x20` –
-`0x24`), TreeWrap leaf ciphers (`0x60` – `0x63`), TreeWrap tag accumulation (`0x64`), and KT128 pre-hashing (`0x07`,
+`0x24`), TreeWrap leaf ciphers (`0x33`, `0x2B`, `0x27`), TreeWrap tag accumulation (`0x37`), TreeWrap key derivation (`0x3B`), and KT128 pre-hashing (`0x07`,
 which uses TurboSHAKE128 internally). After this step, each `(message, domain_byte)` pair maps to an independent
 uniformly random output.
 
@@ -653,11 +653,11 @@ requirement. This gives $q^2 / 2^{513}$.
 **Step 4: TreeWrap under derived keys.** After Steps 2–3, each TreeWrap key is indistinguishable from a uniform
 random $C$-byte string. TreeWrap's security under a random key reduces to the sponge claim via:
 
-- **Confidentiality (IND-CPA):** Each TreeWrap leaf cipher uses domain bytes `0x60` – `0x63`, which are PRFs under the
+- **Confidentiality (IND-CPA):** Each TreeWrap leaf cipher uses domain bytes `0x33`, `0x2B`, `0x27`, which are PRFs under the
   sponge indifferentiability established in Step 2. The IND-CPA advantage is absorbed
   into $\varepsilon_{\mathrm{indiff}}$ via the data complexity $\sigma$.
 
-- **Tag PRF security:** The TreeWrap tag accumulation uses TurboSHAKE128 with domain byte `0x64`. Under the random
+- **Tag PRF security:** The TreeWrap tag accumulation uses TurboSHAKE128 with domain byte `0x37`. Under the random
   oracle model, the tag is a pseudorandom function of the key and ciphertext. The PRF advantage is absorbed
   into $\varepsilon_{\mathrm{indiff}}$.
 
