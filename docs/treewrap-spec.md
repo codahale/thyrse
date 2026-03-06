@@ -398,7 +398,7 @@ $\Pr[\mathsf{Bad}_{\mathrm{perm}}] \leq \binom{\sigma+t}{2} \cdot 2^{-c} \leq \v
 Let $\varepsilon_{\mathrm{ks}}(q, \ell, \mu, N)$ denote the MRV15 PRF advantage bound for $q$ keyed-sponge or
 keyed-duplex evaluations of at most $\ell$ input blocks (or duplexing calls) each, $\mu$ total blocks across all
 evaluations ($\mu \leq q\ell$), and $N$ adversary offline $\pi$-queries. MRV15 Theorems 1 (FKS) and 2 (FKD) yield
-the same bound expression; see Section 6.2.
+bounds of the same three-term structure but with different capacity terms; see Section 6.2.
 
 **PRP/PRF switching.** The ideal permutation samples without replacement. Throughout Section 6, "uniform" and
 "independent" outputs from $\pi$ on distinct inputs are understood modulo the PRP/PRF switching distance
@@ -424,46 +424,70 @@ Unless stated otherwise, these symbols are scoped to one fixed master key (one k
 TreeWrap128 leaf ciphers are keyed duplexes: after initialization, each leaf
 interleaves absorb and squeeze operations (absorb plaintext block → permute →
 squeeze keystream/tag). This matches MRV15's Full Keyed Duplex (FKD) model
-rather than the single-evaluation Full Keyed Sponge (FKS). Both theorems appear
-in the same paper and yield bounds of the same form.
+rather than the single-evaluation Full Keyed Sponge (FKS). The two theorems
+yield bounds of different form in the capacity term.
 
-**Theorem (MRV15, Theorem 2).** Let $\mathrm{FKD}^{\pi}_K$ be the full-state
-keyed duplex instantiated with an ideal permutation $\pi$ on $b$ bits, capacity
-$c$, and key length $k$. For an adversary making $q$ duplex evaluations, each
-consisting of at most $\ell$ duplexing calls, $\mu \leq q\ell$ total duplexing
-calls across all evaluations, and $N$ offline $\pi$-queries:
+**Theorem (MRV15, Theorem 2 — FKD).** Let $\mathrm{FKD}^{\pi}_K$ be the
+full-state keyed duplex instantiated with an ideal permutation $\pi$ on $b$
+bits, capacity $c$, and key length $k$. For an adversary making $q$ duplex
+evaluations, each consisting of at most $\ell$ duplexing calls, $\mu \leq q\ell$
+total duplexing calls across all evaluations, and $N$ offline $\pi$-queries:
 
 $$
 \mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKD}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
+  \;\leq\;
+  \frac{(q\ell)^2}{2^b}
+  \;+\; \frac{(q\ell)^2}{2^c}
+  \;+\; \frac{\mu N}{2^k}.
+$$
+
+**Theorem (MRV15, Theorem 1 — FKS).** Let $\mathrm{FKS}^{\pi}_K$ be the
+full-state keyed sponge with the same parameters. For an adversary making $q$
+sponge evaluations of at most $\ell$ input blocks each, $\mu \leq q\ell$ total
+blocks, and $N$ offline $\pi$-queries:
+
+$$
+\mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKS}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
   \;\leq\;
   \frac{2(q\ell)^2}{2^b}
   \;+\; \frac{2q^2\ell}{2^c}
   \;+\; \frac{\mu N}{2^k}.
 $$
 
-This is due to Mennink, Reyhanitabar, and Vizár (Asiacrypt 2015). For
-TreeWrap128 the parameters are $b = 1600$, $c = 256$, $k = c = 256$. Each leaf
-is a single duplex evaluation ($q = 1$), so at the per-leaf level
+Both theorems are due to Mennink, Reyhanitabar, and Vizár (Asiacrypt 2015).
+The structural difference is in the capacity term: FKD has $(q\ell)^2 / 2^c$
+(scaling with $q^2\ell^2$), while FKS has $2q^2\ell / 2^c$ (scaling with
+$q^2\ell$). FKS thus provides a tighter capacity bound per query when $\ell$ is
+large.
+
+For TreeWrap128 the parameters are $b = 1600$, $c = 256$, $k = c = 256$. Each
+leaf is a single duplex evaluation ($q = 1$), so at the per-leaf level the FKD
+bound simplifies to $\ell^2/2^b + \ell^2/2^c + \mu N/2^k$, and
 $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$ captures the advantage for leaf $i$
-with $l_i$ duplexing calls. The KDF sponge (Section 6.4) is a single-evaluation
-keyed sponge covered by MRV15 Theorem 1 (FKS), which has the same bound form.
+with $l_i$ duplexing calls. With $q = 1$ the capacity terms of FKD and FKS
+coincide up to a factor of 2 ($\ell^2/2^c$ vs.\ $2\ell/2^c$; for $\ell \geq 2$
+FKD is actually looser). The KDF sponge (Section 6.4) is a single-evaluation
+keyed sponge covered by MRV15 Theorem 1 (FKS).
 
-**Term analysis for TreeWrap128.** The three terms have different magnitudes:
+**Term analysis for TreeWrap128.** The FKD bound has three terms:
 
-1. **Full-state birthday** $\frac{2(q\ell)^2}{2^{1600}}$: negligible at
+1. **Full-state birthday** $\frac{(q\ell)^2}{2^{1600}}$: negligible at
    $b = 1600$. Even for $q\ell = 2^{128}$ this term is below $2^{-1344}$.
 
-2. **Online-vs-online capacity term** $\frac{2q^2\ell}{2^{256}}$: scales with
-   $q^2\ell$, not $q^2\ell^2$ as a naïve birthday bound would suggest. For
-   TreeWrap128 leaf evaluations with $\ell \approx 49$ blocks per full
-   8192-byte chunk ($\lfloor 8192/168 \rfloor + 1$), this is approximately
-   $\ell/4 \approx 12\times$ tighter than the birthday bound
-   $q^2\ell^2 / 2^{c+1}$ (ratio: $2q^2\ell/2^c$ vs.\ $q^2\ell^2/2^{c+1}$).
+2. **Online-vs-online capacity term** $\frac{(q\ell)^2}{2^{256}}$: scales with
+   $q^2\ell^2$. For TreeWrap128 *leaves* with $q = 1$, this simplifies to
+   $\ell^2/2^{256}$. With $\ell \approx 49$ blocks per full 8192-byte chunk
+   ($\lfloor 8192/168 \rfloor + 1$), the per-leaf capacity term is
+   $49^2 / 2^{256} \approx 2^{-244.8}$, which is negligible. For the *KDF*
+   sponge (FKS, Theorem 1), the capacity term is instead $2q^2\ell / 2^c$,
+   which scales with $q^2\ell$ rather than $q^2\ell^2$ — an $\ell$-factor
+   improvement over the FKD form — and is the dominant online-online term in
+   the multi-query KDF setting.
 
 3. **Online-vs-offline term** $\frac{\mu N}{2^{256}}$: dominant when the
    adversary's offline computation budget $N$ (denoted $t$ elsewhere in this
    document) is significant. This term is linear in the total absorbed block
-   count $\mu$ rather than quadratic.
+   count $\mu$ rather than quadratic. It is identical in FKS and FKD.
 
 **Key-loading: outer-keyed sponge.** MRV15's FKD initialises with the key placed
 in the capacity portion of the state: $S \gets 0^{b-k} \| K$. TreeWrap128
@@ -500,12 +524,15 @@ duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
 
 > [!NOTE]
 > BDPVA07 sponge indifferentiability gives
-> $(\sigma + t)^2 / 2^{c+1}$ for the unkeyed sponge setting. MRV15 provides a
-> tighter bound for the keyed setting that TreeWrap128 exclusively uses.
-> BDPVA07 remains valid as a fallback analysis but is superseded here. The
-> principal improvement is that the online-vs-online term scales with
-> $q^2\ell$ rather than $q^2\ell^2$, eliminating a factor of $\ell$ from the
-> dominant birthday-like term.
+> $(\sigma + t)^2 / 2^{c+1}$ for the unkeyed sponge setting. MRV15 provides
+> tighter bounds for the keyed setting that TreeWrap128 exclusively uses.
+> BDPVA07 remains valid as a fallback analysis but is superseded here. For the
+> KDF (FKS, Theorem 1), the principal improvement is that the online-vs-online
+> term scales with $q^2\ell$ rather than $q^2\ell^2$, eliminating a factor of
+> $\ell$ from the dominant birthday-like term. For leaves (FKD, Theorem 2),
+> the capacity term is $(q\ell)^2/2^c$, which has the same $q^2\ell^2$ scaling
+> as the birthday bound but with $q = 1$ per leaf the term reduces to
+> $\ell^2/2^c$, still well below the global BDPVA07 bound.
 
 ### 6.3 Domain Separation Lemma
 
@@ -1059,9 +1086,10 @@ $\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), $\ell \approx 49$ m
 evaluation, and per-key accounting (single key / key epoch). Figures are conditional on the Section 6 model assumptions
 for Keccak-p[1600,12] and the selected offline-work profile.
 
-Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term is $2q^2\ell / 2^c$. For a
-conservative estimate, set $q$ to the number of TreeWrap128 encryptions and $\ell = 49$ (worst-case blocks absorbed per
-message, which overstates the per-evaluation input length and is therefore safe). With $c = 256$ and target
+Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term across the construction is
+the KDF's FKS capacity term $2q^2\ell / 2^c$ (Theorem 1). Per-leaf FKD capacity terms (Theorem 2) are negligible since
+each leaf has $q = 1$. For a conservative estimate, set $q$ to the number of TreeWrap128 encryptions and $\ell = 49$
+(worst-case blocks absorbed per message, which overstates the per-evaluation input length and is therefore safe). With $c = 256$ and target
 $p = 2^{-50}$: $q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}$, so $q \lesssim 2^{99.5}$ messages. At 1500
 bytes/message the proof-bound volume is approximately $2^{80}$ GiB per key epoch. This is an analytical upper bound,
 not the practical deployment limit when random nonces are used.
