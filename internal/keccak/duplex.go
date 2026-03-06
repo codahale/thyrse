@@ -235,10 +235,9 @@ func (d *Duplex) PadPermute(ds byte) {
 // permutes both in parallel via State2, and leaves both at pos=0 ready to
 // squeeze.
 func (a *Duplex) Chain(b *Duplex, dsA, dsB byte) {
-	*b = *a
 	var s2 State2
 	for i := range Lanes {
-		s2.a[i] = [2]uint64{a.s.a[i], b.s.a[i]}
+		s2.a[i] = [2]uint64{a.s.a[i], a.s.a[i]}
 	}
 	xorByteInWord(&s2.a[a.pos>>3][0], a.pos, dsA)
 	xorByteInWord(&s2.a[a.pos>>3][1], a.pos, dsB)
