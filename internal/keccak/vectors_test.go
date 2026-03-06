@@ -192,6 +192,41 @@ func TestPermuteVectorsState4(t *testing.T) {
 	}
 }
 
+func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
+	for _, size := range []int{0, 1, 7, 8, 100, 167, 168, 169, 336, 1000} {
+		pt := make([]byte, size)
+		for i := range pt {
+			pt[i] = byte(i)
+		}
+
+		// Encrypt.
+		var enc Duplex
+		enc.Absorb([]byte("test-key"))
+		enc.PadPermute(0x08)
+		ct := make([]byte, size)
+		enc.Encrypt(ct, pt)
+		encPos := enc.pos
+
+		// Decrypt with same init.
+		var dec Duplex
+		dec.Absorb([]byte("test-key"))
+		dec.PadPermute(0x08)
+		recovered := make([]byte, size)
+		dec.Decrypt(recovered, ct)
+		decPos := dec.pos
+
+		if string(recovered) != string(pt) {
+			t.Fatalf("size=%d: plaintext mismatch", size)
+		}
+		if encPos != decPos {
+			t.Fatalf("size=%d: pos mismatch enc=%d dec=%d", size, encPos, decPos)
+		}
+		if size > 0 && string(ct) == string(pt) {
+			t.Fatalf("size=%d: ciphertext equals plaintext", size)
+		}
+	}
+}
+
 func TestPermuteVectorsState8(t *testing.T) {
 	vectors := loadVectors(t)
 	for i, tc := range vectors.Permute8 {

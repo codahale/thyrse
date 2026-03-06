@@ -66,6 +66,66 @@ func (d *Duplex) Absorb(data []byte) {
 	}
 }
 
+// Encrypt XOR-encrypts plaintext from src into dst, permuting at rate
+// boundaries. The caller must ensure len(dst) >= len(src).
+func (d *Duplex) Encrypt(dst, src []byte) {
+	// Finish any partial block at current position.
+	if d.pos > 0 && len(src) > 0 {
+		n := min(Rate-d.pos, len(src))
+		d.s.EncryptBytesAt(d.pos, src[:n], dst[:n])
+		d.pos += n
+		src = src[n:]
+		dst = dst[n:]
+		if d.pos == Rate {
+			d.s.Permute12()
+			d.pos = 0
+		}
+	}
+
+	// Encrypt full blocks via FastLoopEncrypt168.
+	if d.pos == 0 && len(src) >= Rate {
+		done := d.s.FastLoopEncrypt168(src, dst)
+		src = src[done:]
+		dst = dst[done:]
+	}
+
+	// Encrypt remaining partial block.
+	if len(src) > 0 {
+		d.s.EncryptBytesAt(d.pos, src, dst)
+		d.pos += len(src)
+	}
+}
+
+// Decrypt XOR-decrypts ciphertext from src into dst, permuting at rate
+// boundaries. The caller must ensure len(dst) >= len(src).
+func (d *Duplex) Decrypt(dst, src []byte) {
+	// Finish any partial block at current position.
+	if d.pos > 0 && len(src) > 0 {
+		n := min(Rate-d.pos, len(src))
+		d.s.DecryptBytesAt(d.pos, src[:n], dst[:n])
+		d.pos += n
+		src = src[n:]
+		dst = dst[n:]
+		if d.pos == Rate {
+			d.s.Permute12()
+			d.pos = 0
+		}
+	}
+
+	// Decrypt full blocks via FastLoopDecrypt168.
+	if d.pos == 0 && len(src) >= Rate {
+		done := d.s.FastLoopDecrypt168(src, dst)
+		src = src[done:]
+		dst = dst[done:]
+	}
+
+	// Decrypt remaining partial block.
+	if len(src) > 0 {
+		d.s.DecryptBytesAt(d.pos, src, dst)
+		d.pos += len(src)
+	}
+}
+
 // PadPermute applies pad10*1 padding at the current position with domain
 // separation byte ds, then permutes. Resets pos to 0.
 func (d *Duplex) PadPermute(ds byte) {
