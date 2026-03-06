@@ -361,6 +361,15 @@ is not repeated in individual theorem statements.
 Throughout this section, "capacity state," "capacity output," and "capacity projection" all refer to the 256-bit
 low-order portion of the 1600-bit Keccak-p state.
 
+**Exact uniformity under $\neg\mathsf{Bad}_{\mathrm{perm}}$.** In the ideal-permutation model, conditioned on
+$\neg\mathsf{Bad}_{\mathrm{perm}}$, every $\pi$-call on a fresh (never-before-seen) 1600-bit input produces a truly
+uniform 1600-bit output — not merely computationally pseudorandom. Since $\neg\mathsf{Bad}_{\mathrm{perm}}$ ensures all
+capacity outputs are pairwise distinct, and the Domain Separation Lemma (Section 6.3) ensures rate contents are distinct
+across roles, each construction $\pi$-call has a fresh input. Outputs are therefore exactly uniform. This principle is
+the engine for all bare-bound analyses in Sections 6.7–6.10: once $\neg\mathsf{Bad}_{\mathrm{perm}}$ is conditioned
+away (at cost $\varepsilon_{\mathrm{cap}}$), the remaining advantage reduces to structural collision and forgery
+probabilities over truly uniform values.
+
 Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
 
 ### 6.2 Keyed-Sponge PRF Framework (MRV15)
