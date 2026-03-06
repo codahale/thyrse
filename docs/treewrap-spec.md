@@ -37,18 +37,18 @@ single rate block). $\max(\tau, C) < R$ (tag and chain value outputs fit in a si
 **`TurboSHAKE128(M, D, l)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D` (0x01 - 0x7F),
 and an output length `l` in bytes.
 
-## 4. Leaf Cipher
+## 4. Duplex
 
-A leaf cipher operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
+A Duplex operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
 TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap128:
 
-| Byte   | Usage                        | Procedure(s)                     | Node type |
-|--------|------------------------------|----------------------------------|-----------|
-| `0x08` | Init (key/index absorption)  | `init`                           | inner     |
-| `0x0A` | Final block (chain value)    | `chain_value`                    | inner     |
-| `0x09` | AEAD key derivation          | `TreeWrap128`                    | inner     |
-| `0x0C` | Single-node tag squeeze      | `single_node_tag`                | final     |
-| `0x0E` | Tag accumulation             | `EncryptAndMAC`, `DecryptAndMAC` | final     |
+| Byte   | Usage                           | Procedure(s)                     | Node type |
+|--------|---------------------------------|----------------------------------|-----------|
+| `0x08` | Init (key/index absorption)     | `init`                           | inner     |
+| `0x0B` | Leaf chain value (K12 inner)    | `chain_value`                    | inner     |
+| `0x09` | AEAD key derivation             | `TreeWrap128`                    | inner     |
+| `0x07` | Tag, n=1 (K12 single final)     | `EncryptAndMAC`, `DecryptAndMAC` | final     |
+| `0x06` | Tag, n>1 (K12 chaining final)   | `EncryptAndMAC`, `DecryptAndMAC` | final     |
 
 > [!NOTE]
 > **Operational budgeting guidance.** For deployment-level guidance on budgeting Keccak-p calls across multiple
@@ -57,17 +57,17 @@ TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap128:
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
 into the rate rather than XORing plaintext into it. This is the Overwrite-mode style analyzed in Bertoni et al.
 (Section 6.2, Algorithm 5; Theorem 2) and used in Section 6. Intermediate (non-final) encrypt/decrypt blocks fill the
-full R = 168 byte rate and permute without padding; only terminal operations (`init`, `single_node_tag`,
-`chain_value`) apply TurboSHAKE-style padding via `pad_permute`. For full-rate blocks, a write-only state update is
-also faster than read-XOR-write on most architectures.
+full R = 168 byte rate and permute without padding; only terminal operations (`init`, `chain_value`, and the tag
+`pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply TurboSHAKE-style padding via `pad_permute`. For full-rate
+blocks, a write-only state update is also faster than read-XOR-write on most architectures.
 
 > **Rate distinction.** The `init` operation absorbs at effective rate R-1 = 167 bytes: padding (domain byte at `pos`,
 > `0x80` at position R-1) requires one byte reserved for the domain/padding frame, so `pad_permute` triggers when `pos`
 > reaches R-1. Intermediate encrypt/decrypt blocks use the full R = 168 byte rate with no padding overhead, permuting
-> via raw `keccak_p1600` when `pos` reaches R. Terminal operations (`single_node_tag`, `chain_value`) call
+> via raw `keccak_p1600` when `pos` reaches R. Terminal operations (`chain_value` and the tag `pad_permute`) call
 > `pad_permute` at whatever `pos` the final partial block leaves, accommodating both full and partial final blocks.
 
-The leaf cipher is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
+The Duplex is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
 Appendix B.
 
 ```python
@@ -133,11 +133,12 @@ class Duplex:
 
 > [!NOTE]
 > `pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $R-1$). `init` uses domain byte
-> `0x08`; `chain_value` uses `0x0B`. Intermediate encrypt/decrypt blocks use the full $R = 168$ byte rate and permute
-> without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb for non-final blocks. Both
-> `encrypt` and `decrypt` overwrite the rate with ciphertext, so state evolution is identical regardless of direction.
-> `absorb` XOR-absorbs data into the rate without padding, permuting via raw `keccak_p1600` when the rate is full.
-> `chain_value` calls `pad_permute` to mix all data before squeezing; the output fits in a single squeeze block since
+> `0x08`; `chain_value` uses `0x0B`; the tag `pad_permute` in `EncryptAndMAC`/`DecryptAndMAC` uses `0x07` (n=1) or
+> `0x06` (n>1). Intermediate encrypt/decrypt blocks use the full $R = 168$ byte rate and permute without padding
+> (`keccak_p1600` directly), matching standard unpadded sponge absorb for non-final blocks. Both `encrypt` and
+> `decrypt` overwrite the rate with ciphertext, so state evolution is identical regardless of direction. `absorb`
+> XOR-absorbs data into the rate without padding, permuting via raw `keccak_p1600` when the rate is full. `chain_value`
+> calls `pad_permute` to mix all data before squeezing; the output fits in a single squeeze block since
 > $C = 32 \ll R = 168$.
 
 ## 5. TreeWrap128
@@ -152,52 +153,55 @@ The encodings used here (`left_encode`, `encode_string`, `length_encode`) are de
 
 ### Tree Topology
 
-TreeWrap128 uses the Sakura final-node-growing topology (ePrint 2013/231, Section 5.1) without kangaroo hopping. This
-differs from KangarooTwelve, which uses the same Sakura topology but with kangaroo hopping: the first chunk's data is
-absorbed directly into the final node, and only subsequent chunks produce chain values.
+TreeWrap128 uses the Sakura final-node-growing topology with kangaroo hopping, following KangarooTwelve (ePrint
+2016/770, Sections 3.3 and 4.3). The final node (index 0) is a Duplex that encrypts chunk 0 directly (the "message
+hop"). Chunks 1 through $n-1$ are processed by independent leaf Duplexes that produce chain values (the "chaining hop").
 
-Leaves are indexed 1 through $n$ (not 0 through $n-1$); index 0 is reserved for the final node. For $n = 1$, the single
-leaf uses index 1 and produces the tag directly via `single_node_tag()` (no final node). For $n > 1$, every chunk is
-processed by an independent leaf cipher that produces a C-byte chain value. A keyed final node absorbs all chain values
-and produces the tag via a **keyed** TurboSHAKE128 call. The final-node input prepends the key and index 0 to the
-Sakura chaining hop (see Bertoni et al., ePrint 2013/231, §4):
+For $n = 1$, the final node encrypts the entire message and produces the tag via `pad_permute(0x07)`. The Sakura frame
+bits are: message hop `'1'` + final `'1'` = `'11'`, yielding domain byte `0x07` (delimited suffix `'111'`).
 
-$$
-\underbrace{\mathit{key} \;\|\; \mathrm{LEU64}(0)}_{\text{final-node keying}} \;\|\; \underbrace{\mathit{cv}_1 \;\|\; \cdots \;\|\; \mathit{cv}_{n}}_{\text{chain values}} \;\|\; \underbrace{\mathrm{length\_encode}(n)}_{\text{coded nrCVs}} \;\|\; \underbrace{\mathtt{0xFF} \;\|\; \mathtt{0xFF}}_{\text{interleaving block size}}
-$$
+For $n > 1$, the final node is a Duplex that:
 
-where:
+1. Inits with `key || LEU64(0)` via `pad_permute(0x08)`.
+2. Encrypts chunk 0 (the message hop).
+3. Absorbs `HOP_FRAME` (`0x03 || 0x00^7`), the K12 message-hop / chaining-hop framing.
+4. Absorbs chain values $\mathit{cv}_1 \;\|\; \cdots \;\|\; \mathit{cv}_{n-1}$.
+5. Absorbs `length_encode(n-1) || 0xFF || 0xFF`.
+6. Calls `pad_permute(0x06)` and squeezes the $\tau$-byte tag.
 
-- **`key`** (C = 32 bytes): the per-invocation key $K_{tw}$, making the final node a keyed sponge.
-- **`LEU64(0)`** (8 bytes): the final-node index, distinct from all leaf indices (1..$n$).
-- **`cv_i`** (C = 32 bytes each): the chain value squeezed from leaf $i$ (for $i = 1, \ldots, n$).
-- **`length_encode(n)`**: the Sakura coded nrCVs field, encoded per RFC 9861.
+The transition from overwrite-mode encryption (step 2) to XOR-mode absorption (step 3) does not require a permutation:
+the overwrite-mode equivalence (Lemma 2 in Section 6) ensures that the sponge state after encrypting chunk 0 is
+identical to the state that would result from XOR-absorbing the same ciphertext. Both modes resume from the same
+`pos` offset.
+
+The Sakura frame bits at the tag are: chaining hop `'0'` + final `'1'` = `'01'`, yielding domain byte `0x06`
+(delimited suffix `'011'`). The fields above are:
+
+- **`HOP_FRAME`** (8 bytes): the K12 message-hop / chaining-hop frame `'110^{62}'` packed LSB-first as `0x03 || 0x00^7`.
+- **`cv_i`** (C = 32 bytes each): the chain value squeezed from leaf $i$ (for $i = 1, \ldots, n-1$).
+- **`length_encode(n-1)`**: the Sakura coded nrCVs field encoding the number of chain values ($n-1$, since the final
+  node handles chunk 0), encoded per RFC 9861.
 - **`0xFF || 0xFF`**: the Sakura interleaving block size encoding $I = \infty$ (no block interleaving); mantissa and
   exponent both `0xFF`.
 
-The Sakura grammar derivation is: `final node` = `node '1'` = `chaining hop '1'` =
-`nrCVs CV coded_nrCVs interleaving_block_size '0' '1'`. The trailing frame bits -- chaining hop `'0'` and
-final node `'1'` -- are encoded in the TurboSHAKE128 domain byte following the Keccak delimited-suffix encoding used by
-KangarooTwelve. Each domain byte stores a variable-length suffix bit-string LSB-first, with a delimiter `1` bit
-immediately after the last suffix bit. The last suffix bit encodes the Sakura node type: `1` for final nodes, `0` for
-inner/leaf nodes. All five TreeWrap128 domain bytes use 3-bit suffixes (delimiter at bit 3). Final-node separability
-follows directly: the tag-accumulation byte (`0x0E`, suffix `011`) and single-node tag byte (`0x0C`, suffix `001`) have
-last suffix bit `1` (final), while all leaf cipher bytes (`0x08`, `0x0A`) and the KDF byte (`0x09`) have last suffix
-bit `0` (inner).
+Each domain byte stores a variable-length suffix bit-string LSB-first, with a delimiter `1` bit immediately after the
+last suffix bit. The last suffix bit encodes the Sakura node type: `1` for final nodes, `0` for inner/leaf nodes. All
+five TreeWrap128 domain bytes use 3-bit suffixes (delimiter at bit 3). Final-node separability follows directly: the
+chaining-hop tag byte (`0x06`, suffix `'011'`) and single-node tag byte (`0x07`, suffix `'111'`) have last suffix
+bit `1` (final), while the leaf chain-value byte (`0x0B`, suffix `'110'`), init byte (`0x08`, suffix `'000'`), and
+KDF byte (`0x09`, suffix `'100'`) have last suffix bit `0` (inner).
 
 The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (Section 5.1).
 
-**Domain separation.** The key prefix makes the final node a keyed sponge: its TurboSHAKE128 input begins with
-`key || LEU64(0)`, XOR-absorbed into the rate before any chain values. Leaves absorb `key || LEU64(i)` for $i \geq 1$
-via the LeafCipher `init` method (domain byte `0x08`). The final node's first 40 absorbed bytes therefore differ from
-every leaf's (index 0 vs. index $\geq 1$), and domain byte `0x0E` is distinct from leaf domain bytes (`0x08`, `0x0A`),
-providing an additional layer of separation.
+**Domain separation.** The key is in the sponge state via `init` (domain byte `0x08`), not prepended to an input
+string. Both the final node and every leaf call `init(key, index)` with distinct indices: the final node uses index 0,
+while leaves use indices $1, \ldots, n-1$. The final node's tag domain byte (`0x06` or `0x07`) is distinct from all
+leaf domain bytes (`0x08`, `0x0B`), providing an additional layer of separation.
 
-**Encoding injectivity.** The `key(32) || LEU64(0)(8)` prefix is fixed-length (40 bytes), so injectivity of the
-remaining encoding is preserved. The suffix `length_encode(n) || 0xFF || 0xFF` is self-delimiting: `0xFF` cannot be a
-valid `length_encode` byte-count (chain-value counts fit in at most 8 bytes), so the interleaving block size bytes are
-unambiguously terminal, and the byte immediately preceding them gives the byte-count of $n$. Given $n$, the chain values
-are parsed as $n$ consecutive $C$-byte blocks starting at offset 40.
+**Encoding injectivity.** The chaining-hop suffix `length_encode(n-1) || 0xFF || 0xFF` is self-delimiting: `0xFF`
+cannot be a valid `length_encode` byte-count (chain-value counts fit in at most 8 bytes), so the interleaving block
+size bytes are unambiguously terminal, and the byte immediately preceding them gives the byte-count of $n-1$. Given
+$n-1$, the chain values are parsed as $n-1$ consecutive $C$-byte blocks following the `HOP_FRAME`.
 
 ### 5.1 Internal Functions: EncryptAndMAC / DecryptAndMAC
 
@@ -301,8 +305,8 @@ tw_key <- TurboSHAKE128(encode_string(K) || encode_string(N) || encode_string(AD
 
 The `encode_string` encoding (NIST SP 800-185) makes the concatenation injective: each field is prefixed with its
 `left_encode`d bit-length (`left_encode(8*len(x))`), so no `(K, N, AD)` triple can produce the same TurboSHAKE128 input
-as a different triple. Domain byte `0x09` separates key derivation from all other TreeWrap128 uses of TurboSHAKE128
-(`0x08`, `0x0A`, `0x0C`, `0x0E`).
+as a different triple. Domain byte `0x09` separates key derivation from all other TreeWrap128 domain bytes
+(`0x08`, `0x0B`, `0x07`, `0x06`).
 
 ```python
 import hmac
