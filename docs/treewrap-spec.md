@@ -1144,7 +1144,7 @@ proof-bound figure alone.
 - Coron, J.-S., Dodis, Y., Malinaud, C., and Puniya, P. "Merkle-Damgård Revisited: How to Construct a Hash Function."
   CRYPTO 2005. Applies the MRH indifferentiability composition theorem to hash function constructions; referenced in the
   non-normative note in Section 6.4.
-- Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
+- Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT 2022. Defines the CMT-4 committing
   security notion.
 - Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the Generic
   Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2; used in Section 6.9.
