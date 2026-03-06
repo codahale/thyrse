@@ -439,137 +439,169 @@ to dead memory, implementations MUST use platform-specific secure-zeroing primit
 
 ## 13. Security Considerations
 
-### 13.1 Security Model
+### 13.1 Assumptions
 
-The security argument proceeds in two parts: per-instance security via the RO-KDF construction, and sequential
-composition across chain boundaries.
+The security analysis relies on the following properties of Thyrse's underlying primitives. Each is
+conditional on Keccak-p[1600,12] behaving as an ideal permutation at the claimed workloads.
 
-**Per-instance security.** Each transcript instance — from its initial CHAIN frame (or INIT, for Instance 0) through
-finalization — is a single TurboSHAKE128 evaluation on a recoverably-encoded input. This matches the RO-KDF construction
-of Backendal, Clermont, Fischlin, and Günther (Figure 4, Theorems 8 and 9 of ePrint 2025/657). Under TurboSHAKE128's
-indifferentiability from a random oracle, the RO-KDF proof gives: the output of each finalization is indistinguishable
-from random as long as at least one input to the transcript instance is unpredictable. In the notation of Backendal et
-al., the recoverable encoding $\langle\cdot\rangle$ is the frame encoding defined in §§4–5 of this spec, and the source
+**TurboSHAKE128.** Indifferentiable from a random oracle under the ideal permutation model for
+Keccak-p[1600,12] (Bertoni, Daemen, Peeters, Van Assche, 2008). The indifferentiability advantage is
+bounded by $(\sigma + t)^2 / 2^{c+1}$, where $\sigma$ is the total number of online Keccak-p calls, $t$
+is the adversary's offline Keccak-p budget, and $c = 256$ is the capacity in bits. TurboSHAKE128
+evaluations with distinct domain separation bytes are modeled as independent random oracles, justified by
+the domain byte occupying a structurally distinct position in the sponge padding.
+
+**KT128.** Collision resistance of $H$-byte (64-byte) digests: 256-bit collision resistance under the
+Keccak sponge claim, exceeding the 128-bit security target.
+
+**TreeWrap.** Under a uniformly random $C$-byte key, TreeWrap provides:
+
+- **IND-CPA** confidentiality (nonce-free: each key is used once).
+- **INT-CTXT** authenticity, with forgery probability at most $S / 2^{8C}$ for $S$ attempts.
+- **CMT-4** committing security: a ciphertext does not admit two valid openings under one key.
+- **Tag PRF:** the full $C$-byte tag is a pseudorandom function of (key, ciphertext).
+
+TreeWrap does not perform tag verification; the caller (Thyrse) is responsible. See the TreeWrap
+specification for proofs of these properties.
+
+### 13.2 Security Claims
+
+The following table summarizes the security properties provided by each Thyrse operation. All
+confidentiality and pseudorandomness claims require that the transcript contains at least one unpredictable
+input (§9.1).
+
+| Operation   | Property                      | Precondition                                      |
+|-------------|-------------------------------|---------------------------------------------------|
+| Derive      | PRF output                    | Unpredictable input in transcript                 |
+| Ratchet     | Forward secrecy               | Prior sponge state erased (§12.4)                 |
+| Mask/Unmask | IND-CPA confidentiality       | Unpredictable input in transcript                 |
+| Seal/Open   | IND-CCA2 + CMT-4              | Unpredictable input in transcript                 |
+| Fork        | Branch independence           | Distinct clone values                             |
+| MixDigest   | Collision-resistant binding   | —                                                 |
+
+Sections 13.4–13.6 establish these claims. Section 13.7 gives the concrete combined bound.
+
+### 13.3 Domain Separation
+
+All operation codes are in the range `0x10`–`0x18`. All TurboSHAKE128 domain bytes used by the Thyrse
+backbone are in the range `0x20`–`0x24`. KT128 pre-hashing uses domain byte `0x07`. These three ranges
+are pairwise disjoint.
+
+Operation codes and domain bytes serve structurally distinct roles: operation codes appear in the
+transcript encoding (the message to TurboSHAKE128), while domain bytes appear in the sponge padding (the
+finalization parameter of TurboSHAKE128). No confusion between the two is possible regardless of byte
+values.
+
+The recoverable encoding (§11) ensures that distinct operation sequences produce distinct transcripts.
+Combined with the domain byte separation above, each TurboSHAKE128 evaluation in the protocol receives a
+unique (message, domain byte) pair, which maps to an independent random oracle output.
+
+TreeWrap's internal domain bytes are specified in the TreeWrap specification and covered by its own domain
+separation analysis. They do not appear in the Thyrse transcript and are not relevant to the Thyrse-level
+security argument.
+
+### 13.4 Per-Instance Security
+
+Each transcript instance — from its initial `CHAIN` frame (or `INIT`, for Instance 0) through
+finalization — is a single TurboSHAKE128 evaluation on a recoverably-encoded input. This matches the
+RO-KDF construction of Backendal, Clermont, Fischlin, and Günther (Theorems 8 and 9 of ePrint 2025/657).
+
+Under TurboSHAKE128's indifferentiability from a random oracle (§13.1), the RO-KDF proof gives: the
+output of each finalization is indistinguishable from random as long as at least one input to the
+transcript instance is unpredictable. In the notation of Backendal et al., the recoverable encoding
+$\langle\cdot\rangle$ is the frame encoding defined in §§4–5 of this specification, and the source
 collection corresponds to the key material, nonces, and chain values absorbed into the instance.
 
-Two finalizations of the same transcript with different domain bytes (e.g., chain value with `0x20` and derived output
-with `0x21`) produce independent outputs. This follows from modeling TurboSHAKE128 with distinct domain bytes as
-independent random oracles, which is justified by TurboSHAKE128's domain separation mechanism: the domain byte is
-absorbed into the sponge state at a position that is unambiguously separated from the message,
-making $\mathrm{TurboSHAKE128}(M, D_1, \ell)$ and $\mathrm{TurboSHAKE128}(M, D_2, \ell)$ independent functions
-when $D_1 \neq D_2$.
+Two finalizations of the same transcript with different domain bytes (e.g., chain value with `0x20` and
+derived output with `0x21`) produce independent outputs. This follows from modeling TurboSHAKE128 with
+distinct domain bytes as independent random oracles (§13.1).
 
-**Sequential composition across chain boundaries.** The RO-KDF proof covers a single hash evaluation, not a chain of
-evaluations where one output feeds into the next instance's input. The composition argument is as follows.
+### 13.5 Composition Across Chain Boundaries
 
-Consider Instance $k$, which finalizes with domain bytes `0x20` (chain) and some output domain byte $D$ (derive/key).
-Let $\mathit{cv}_k$ denote the chain value and $\mathit{out}_k$ denote the derived output or key. Since these come from
-independent random oracles on the same transcript, $\mathit{cv}_k$ and $\mathit{out}_k$ are independent. In particular,
-an adversary who observes $\mathit{out}_k$ (or ciphertext encrypted under a key derived from $\mathit{out}_k$) gains no
-information about $\mathit{cv}_k$.
+The RO-KDF proof (§13.4) covers a single TurboSHAKE128 evaluation. This section extends the argument
+across chain boundaries, where one instance's chain value feeds into the next instance's transcript.
 
-Instance $k{+}1$ begins by absorbing the CHAIN frame containing $\mathit{cv}_k$. If Instance $k{+}1$ also absorbs
-additional key material or other unpredictable data via Mix operations, the RO-KDF proof applies directly to
-Instance $k{+}1$ with multiple unpredictable inputs.
+Consider Instance $k$, which finalizes with domain bytes `0x20` (chain) and some output domain byte $D$
+(derive/key). Let $\mathit{cv}_k$ denote the chain value and $\mathit{out}_k$ denote the derived output
+or key.
 
-If Instance $k{+}1$ absorbs no new key material — only the CHAIN frame and protocol metadata — then $\mathit{cv}_k$ is
-the sole source of unpredictability. In the random oracle model, $\mathit{cv}_k$ is uniformly random (it is the output
-of an RO on a transcript that the adversary has not queried, because doing so would require predicting the unpredictable
-inputs to Instance $k$). Therefore $\mathit{cv}_k$ satisfies the unpredictability requirement of Theorem 8 in Backendal
-et al., and the RO-KDF proof applies to Instance $k{+}1$.
+**Independence of chain value and output.** Since $\mathit{cv}_k$ and $\mathit{out}_k$ come from
+independent random oracles on the same transcript (§13.4), they are independent. An adversary who observes
+$\mathit{out}_k$ (or ciphertext encrypted under a key derived from $\mathit{out}_k$) gains no information
+about $\mathit{cv}_k$.
 
-By induction, this argument extends to any number of chain boundaries. The security of Instance $k{+}1$ reduces to the
-security of Instance $k$ (via the pseudorandomness of $\mathit{cv}_k$), which ultimately reduces to the unpredictability
-of the original key material in Instance 0.
+**Chain value as unpredictable source.** Instance $k{+}1$ begins by absorbing the `CHAIN` frame
+containing $\mathit{cv}_k$. In the random oracle model, $\mathit{cv}_k$ is uniformly random — it is the
+output of an RO on a transcript that the adversary has not queried, because doing so would require
+predicting the unpredictable inputs to Instance $k$. Therefore $\mathit{cv}_k$ satisfies the
+unpredictability requirement of Theorem 8 in Backendal et al., and the RO-KDF proof applies to
+Instance $k{+}1$.
 
-**Computational bound.** In the computational model, each chain boundary incurs TurboSHAKE128's indifferentiability
-advantage. For a protocol with $q$ finalizations and an adversary making $t$ offline queries, the total advantage is
-bounded by $q$ times the per-instance RO-KDF bound plus $q$ times the TurboSHAKE128 indifferentiability term. The
-concrete bound is given in §13.8.
+**Tag absorption in `Mask`/`Seal` instances.** For `Mask` and `Seal` instances, the `CHAIN` frame also
+absorbs the TreeWrap tag. The tag is a PRF of the TreeWrap key and the ciphertext (§13.1). Since the
+TreeWrap key is derived from a different domain byte than the chain value (e.g., `0x22` or `0x23` vs.
+`0x20`), the key and chain value are independent. Therefore the tag — being a deterministic function of
+the independent key and the public ciphertext — reveals no information about $\mathit{cv}_k$. The
+composition argument is preserved.
 
-### 13.2 Chain Value Properties
+**Induction.** By induction, the security of Instance $k{+}1$ reduces to the security of Instance $k$
+(via the pseudorandomness of $\mathit{cv}_k$), which ultimately reduces to the unpredictability of the
+original key material in Instance 0.
 
-Each chain value is $H = 64$ bytes (512 bits). The birthday bound for chain value collisions across instances
-is $2^{256}$, far exceeding the 128-bit security target.
+**Chain value collisions.** Each chain value is $H = 64$ bytes (512 bits). The birthday bound for chain
+value collisions across $q$ instances is $q^2 / 2^{8H+1} = q^2 / 2^{513}$. A collision would cause two
+instances to share identical subsequent transcripts. For $q \leq 2^{48}$, this probability
+is $2^{-417}$, far below the 128-bit security target.
 
-Forward secrecy is achieved by `Ratchet`: after `Ratchet`, the transcript is reset to contain only the chain value. An
-adversary who compromises the post-`Ratchet` state learns the chain value but cannot invert TurboSHAKE128 to recover the
-prior transcript, and therefore cannot recover keys or outputs derived from earlier instances. Note that forward secrecy
-requires the prior transcript's sponge state to be erased from memory; this is an implementation obligation (see §12.4).
+### 13.6 Operation-Specific Arguments
 
-### 13.3 Pre-Hash Collision Resistance
+**Derive.** Direct application of §13.4. The output is produced by TurboSHAKE128 with domain byte `0x21`
+on the current transcript. Under the RO-KDF argument, this output is indistinguishable from random given
+an unpredictable input in the transcript.
 
-`MixDigest` absorbs a KT128 digest rather than the raw data. The $H = 64$ byte digest provides 256-bit collision
-resistance under the Keccak sponge claim, exceeding the 128-bit security target. The `Init` label is used as the KT128
-customization string, ensuring that `MixDigest` digests are protocol-specific: two different protocols produce different
-digests for the same data.
+**Ratchet.** The chain value (domain byte `0x24`) is the sole output. The pre-ratchet transcript is
+unrecoverable from the chain value by TurboSHAKE128 preimage resistance. Forward secrecy holds provided
+the implementation erases the pre-ratchet sponge state from memory (§12.4). Without erasure, an adversary
+who compromises the post-ratchet state and retains access to the pre-ratchet sponge state can recover
+prior keys.
 
-### 13.4 Mask / Unmask Security
+**Mask / Unmask.** The TreeWrap key is derived via TurboSHAKE128 with domain byte `0x22` on the current
+transcript. Under the RO-KDF argument (§13.4), this key is indistinguishable from a uniformly random
+$C$-byte string as long as the transcript contains an unpredictable input. By the TreeWrap IND-CPA
+assumption (§13.1), `Mask` provides IND-CPA confidentiality.
 
-`Mask` provides confidentiality but not authentication. The security argument relies on two properties of TreeWrap:
+The tag absorbed into the `CHAIN` frame is independent of the chain value, preserving composition
+(§13.5). If the ciphertext is tampered with, the sender and receiver compute different tags, causing their
+transcripts to diverge and all subsequent operations to produce different results. However, `Mask` alone
+does not provide integrity guarantees. Applications requiring integrity should use `Seal` or authenticate
+the ciphertext externally (e.g., via a signature over a subsequent `Derive` output).
 
-**IND-CPA from key pseudorandomness.** The TreeWrap key is derived from TurboSHAKE128 with domain byte `0x22` on the
-current transcript. Under the per-instance RO-KDF argument (§13.1), this key is indistinguishable from random as long as
-the transcript contains at least one unpredictable input. TreeWrap's confidentiality under a random key follows from the
-leaf cipher's PRF security under the Keccak sponge claim (see TreeWrap specification §6.3). Therefore, `Mask` provides
-IND-CPA confidentiality.
+**Seal / Open.** The TreeWrap key is derived via domain byte `0x23`. The same RO-KDF argument gives a key
+indistinguishable from random. By the TreeWrap IND-CPA and INT-CTXT assumptions (§13.1), `Seal` provides
+IND-CCA2 security via generic composition (Bellare and Namprempre, ASIACRYPT 2000): IND-CPA + INT-CTXT
+implies IND-CCA2. CMT-4 committing security follows from TreeWrap's CMT-4 claim (§13.1).
 
-**Tag as PRF output.** The full TreeWrap tag absorbed into the `CHAIN` frame is a deterministic function of the TreeWrap
-key and the ciphertext. For the composition argument in §13.1 to hold, the tag must not leak information about the chain
-value $\mathit{cv}_k$. Since the tag is derived from a TreeWrap key that is independent of $\mathit{cv}_k$ (different
-domain bytes on the same transcript), and the tag is a PRF of the key applied to the ciphertext (see TreeWrap
-specification §6.7), the tag is pseudorandom and independent of $\mathit{cv}_k$. Therefore, absorbing the tag into the
-next instance's `CHAIN` frame does not compromise the chain value's unpredictability.
+`Open` advances the transcript unconditionally with the computed tag. On verification failure, the
+receiver's computed tag differs from the sender's, and the `CHAIN` frame absorbs a different value. This
+permanently desynchronizes the protocol state: all subsequent operations produce different results. After
+a failed `Open`, the protocol instance MUST be discarded.
 
-If the ciphertext is tampered with, the sender and receiver compute different tags. Their transcripts diverge, and all
-subsequent operations produce different results. However, `Mask` alone does not provide integrity guarantees.
-Applications requiring integrity should use `Seal` or authenticate the ciphertext externally.
+**Fork.** `Fork` does not finalize. All $N{+}1$ branches share identical transcript up to the fork point
+and diverge via their ordinals and (for clones) branch-specific values. The ordinal alone ensures the base
+is distinct from all clones. Since the encoding is injective (§11), distinct ordinals or values produce
+distinct transcripts, guaranteeing independent outputs at any subsequent finalization. Callers MUST ensure
+clone values are distinct from each other.
 
-### 13.5 Seal / Open Security
+**MixDigest.** `MixDigest` absorbs a KT128 digest rather than the raw data. The $H = 64$ byte digest
+provides 256-bit collision resistance (§13.1), exceeding the 128-bit security target. The `Init` label is
+used as the KT128 customization string, ensuring that digests are protocol-specific: two different
+protocols produce different digests for the same input data.
 
-`Seal` provides confidentiality and $8C = 256$ bits of authentication. The confidentiality and composition arguments are
-identical to `Mask` (§13.4), with domain byte `0x23` for key derivation instead of `0x22`.
+### 13.7 Concrete Security Bound
 
-**Authentication.** The tag appended to the ciphertext is the full $C$-byte TreeWrap tag. Under a random key, the tag is
-a PRF of the ciphertext (TreeWrap specification §6.7). An adversary making $S$ forgery attempts therefore succeeds with
-probability at most:
-
-$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} + \varepsilon_{\mathrm{prf}}$$
-
-where $\varepsilon_{\mathrm{prf}}$ is the TreeWrap tag PRF advantage (bounded by $(\sigma{+}t)^2 / 2^{257}$ per TreeWrap
-specification §6.7). For $C = 32$ bytes, the forgery bound is $S / 2^{256}$ plus a negligible term.
-
-**Committing security.** The full $C$-byte tag absorbed into the CHAIN frame provides CMT-4 committing security via
-TreeWrap's construction: the tag is a collision-resistant function of (key, ciphertext), and since TreeWrap encryption
-is invertible per-key, this commits to (key, plaintext). See the TreeWrap specification §6.5 for the detailed CMT-4
-argument.
-
-**Failed `Open`.** `Open` advances the transcript unconditionally. On verification failure, the receiver's transcript
-diverges from the sender's (different `full_tag` values in the `CHAIN` frame), permanently desynchronizing the protocol
-state. After a failed `Open`, the protocol instance MUST be discarded.
-
-### 13.6 Fork Security
-
-`Fork` does not finalize. All $N{+}1$ branches share identical transcript up to the fork point and diverge via their
-ordinals and (for clones) branch-specific values. The ordinal alone ensures the base is distinct from all clones.
-Callers MUST ensure clone values are distinct from each other.
-
-### 13.7 Domain Byte and Operation Code Separation
-
-All operation codes are in the range `0x10` – `0x18`. All TurboSHAKE128 domain bytes used by this framework are in the
-range `0x20` – `0x24` (protocol operations) and `0x27` – `0x3B` (TreeWrap). KT128 uses domain byte `0x07`. These ranges
-are disjoint, eliminating any possibility of confusion between operation codes and domain bytes.
-
-This provides a robust defense-in-depth layer against cross-operation state confusion. For example, in `Mask` and
-`Seal`, the operation codes (`0x16` vs `0x17`) force the transcripts to diverge *before* finalization, and the sponge
-finalizations use distinct domain bytes (`0x22` vs `0x23`) to derive the keys, providing redundant cryptographic
-separation.
-
-### 13.8 Concrete Security Reduction
-
-This section gives the full reduction from protocol security to the Keccak sponge claim. The reduction proceeds in four
-steps: replace Keccak-p with an ideal permutation, replace the sponge with independent random oracles, apply the RO-KDF
-argument per instance with inductive composition, and reduce TreeWrap security under derived keys.
+This section gives the combined security bound for the Thyrse framework. The reduction has three layers:
+replace the sponge with a random oracle (indifferentiability), apply the RO-KDF argument per instance with
+inductive composition (§§13.4–13.5), and invoke TreeWrap's security as a black box (§13.1).
 
 **Parameters.**
 
@@ -582,238 +614,86 @@ argument per instance with inductive composition, and reduce TreeWrap security u
 | $c$      | TurboSHAKE128 capacity = 256 bits                                             |
 | $H$      | Chain value length = 512 bits                                                 |
 
-**Step 1: Ideal permutation assumption.** The Keccak sponge claim asserts that Keccak-p[1600,12] is indistinguishable
-from a uniformly random permutation on $\{0,1\}^{1600}$. This is a computational assumption analogous to the assumption
-that AES is a pseudorandom permutation. All subsequent terms are conditional on this assumption. If an adversary
-distinguishes Keccak-p[1600,12] from a random permutation with advantage $\varepsilon_{\mathrm{perm}}$, this term
-propagates additively into the final bound.
+The data complexity $\sigma$ counts all Keccak-p calls made by Thyrse backbone operations (TurboSHAKE128
+finalizations, KT128 pre-hashing) and by TreeWrap encryption/decryption. Although TreeWrap's security is
+analyzed separately, its Keccak-p calls share the same ideal permutation and therefore contribute to the
+global indifferentiability budget.
 
-**Step 2: Sponge indifferentiability.** Under the ideal permutation model, the sponge construction with capacity $c$ is
-indifferentiable from a random oracle (Bertoni, Daemen, Peeters, Van Assche, 2008). The indifferentiability advantage is
-bounded by:
+**Combined bound.**
 
-$$\varepsilon_{\mathrm{indiff}} \leq \frac{(\sigma + t)^2}{2^{c+1}} = \frac{(\sigma + t)^2}{2^{257}}$$
-
-This replacement covers all TurboSHAKE128 evaluations in the protocol: backbone finalizations (domain bytes `0x20` –
-`0x24`), TreeWrap leaf ciphers (`0x33`, `0x2B`, `0x27`), TreeWrap tag accumulation (`0x37`), TreeWrap key derivation (`0x3B`), and KT128 pre-hashing (`0x07`,
-which uses TurboSHAKE128 internally). After this step, each `(message, domain_byte)` pair maps to an independent
-uniformly random output.
-
-TurboSHAKE128 evaluations with distinct domain bytes are modeled as independent random oracles. This follows from the
-domain byte being absorbed at a structurally distinct position (the pad byte in the sponge finalization), which
-makes $\mathrm{TurboSHAKE128}(M, D_1, \ell)$ and $\mathrm{TurboSHAKE128}(M, D_2, \ell)$ evaluations of independent
-sponge instances for $D_1 \neq D_2$. No additional advantage term is incurred.
-
-**Step 3: RO-KDF per instance and composition.** In the random oracle model, each transcript instance is a single
-evaluation of an RO on a recoverably-encoded input. By Theorem 8 of Backendal et al. (ePrint 2025/657), the output of
-each instance is indistinguishable from random as long as at least one input source is unpredictable:
-
-$$\varepsilon_{\mathrm{kdf}}(k) \leq 2 \cdot \mathrm{Adv}^{\mathrm{up}}_{\Sigma}(k)$$
-
-where $\mathrm{Adv}^{\mathrm{up}}_{\Sigma}(k)$ is the unpredictability advantage of the source collection for
-Instance $k$.
-
-For Instance 0, the source collection is the key material and nonces absorbed via
-`Mix`. $\mathrm{Adv}^{\mathrm{up}}_{\Sigma}(0)$ is determined by the caller's key generation and nonce selection.
-
-For Instance $k > 0$, the chain value $\mathit{cv}_{k-1}$ serves as an unpredictable source. In the random oracle
-model, $\mathit{cv}_{k-1} = \mathrm{RO}_{0\mathrm{x}20}(\mathit{transcript}_{k-1})$ is uniformly random and independent
-of the output derived from $\mathit{transcript}_{k-1}$ (which uses a different domain byte). An adversary who has
-observed all derived outputs and ciphertexts from Instances 0 through $k{-}1$ has no information
-about $\mathit{cv}_{k-1}$, because:
-
-- $\mathit{cv}_{k-1}$ is the output of $\mathrm{RO}_{0\mathrm{x}20}$, independent of outputs
-  from $\mathrm{RO}_{0\mathrm{x}21}$, $\mathrm{RO}_{0\mathrm{x}22}$, $\mathrm{RO}_{0\mathrm{x}23}$.
-- To query $\mathrm{RO}_{0\mathrm{x}20}$ on $\mathit{transcript}_{k-1}$, the adversary would need to construct the full
-  transcript, which requires predicting the unpredictable inputs to Instance $k{-}1$.
-
-For `Mask` and `Seal` instances, the `CHAIN` frame also absorbs the TreeWrap tag. The tag is a deterministic function of
-the TreeWrap key (from $\mathrm{RO}_{0\mathrm{x}22}$ or $\mathrm{RO}_{0\mathrm{x}23}$) and the ciphertext. Since the key
-is independent of $\mathit{cv}_{k-1}$ (different domain byte) and the tag is a PRF of the key (see Step 4), the tag
-reveals no information about $\mathit{cv}_{k-1}$. The adversary who observes both the ciphertext and the derived key's
-effects still cannot predict $\mathit{cv}_{k-1}$.
-
-Therefore, $\mathit{cv}_{k-1}$ is unpredictable as a source for Instance $k$, and the RO-KDF bound applies:
-
-$$\varepsilon_{\mathrm{kdf}}(k) \leq 2 \cdot \mathrm{Adv}^{\mathrm{up}}_{\mathit{cv}}$$
-
-where $\mathrm{Adv}^{\mathrm{up}}_{\mathit{cv}} \leq \varepsilon_{\mathrm{kdf}}(k{-}1)$ by induction.
-
-Unrolling the induction across $q$ instances and accounting for chain value collisions:
-
-$$\varepsilon_{\mathrm{compose}} \leq q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{q^2}{2^{8H+1}}$$
-
-The second term bounds the probability of a chain value collision across any two instances (birthday bound on $H = 64$
-bytes = 512 bits), which would cause two instances to produce identical transcripts and violate the freshness
-requirement. This gives $q^2 / 2^{513}$.
-
-**Step 4: TreeWrap under derived keys.** After Steps 2–3, each TreeWrap key is indistinguishable from a uniform
-random $C$-byte string. TreeWrap's security under a random key reduces to the sponge claim via:
-
-- **Confidentiality (IND-CPA):** Each TreeWrap leaf cipher uses domain bytes `0x33`, `0x2B`, `0x27`, which are PRFs under the
-  sponge indifferentiability established in Step 2. The IND-CPA advantage is absorbed
-  into $\varepsilon_{\mathrm{indiff}}$ via the data complexity $\sigma$.
-
-- **Tag PRF security:** The TreeWrap tag accumulation uses TurboSHAKE128 with domain byte `0x37`. Under the random
-  oracle model, the tag is a pseudorandom function of the key and ciphertext. The PRF advantage is absorbed
-  into $\varepsilon_{\mathrm{indiff}}$.
-
-- **Forgery resistance:** An adversary making $S$ forgery attempts against `Seal`/`Open` succeeds with probability at
-  most:
-
-$$\varepsilon_{\mathrm{forge}} \leq \frac{S}{2^{8C}} = \frac{S}{2^{256}}$$
-
-- **Committing security (CMT-4):** Finding $(K_1, P_1) \neq (K_2, P_2)$ that produce the same full tag requires a
-  collision in the tag accumulation function, bounded by the sponge collision resistance term already captured
-  in $\varepsilon_{\mathrm{indiff}}$.
-
-See the TreeWrap specification for the detailed per-primitive bounds.
-
-**Combined bound.** Summing all terms:
-
-$$\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma + t)^2}{2^{257}} + q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{q^2}{2^{513}} + \frac{S}{2^{256}}$$
+$$\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma + t)^2}{2^{c+1}} + q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{q^2}{2^{8H+1}} + \varepsilon_{\mathrm{tw}}$$
 
 where:
 
-- $\varepsilon_{\mathrm{perm}}$ is the advantage of distinguishing Keccak-p[1600,12] from a random permutation
-  (conjectured negligible).
-- $(\sigma + t)^2 / 2^{257}$ is the sponge indifferentiability term, covering all TurboSHAKE128 evaluations globally
-  (backbone, TreeWrap leaves, TreeWrap tags, KT128 pre-hashing).
-- $q \cdot \varepsilon_{\mathrm{kdf}}(0)$ is $q$ times the per-instance RO-KDF bound, which depends on the
-  unpredictability of the caller's key material.
-- $q^2 / 2^{513}$ bounds chain value collisions.
-- $S / 2^{256}$ bounds Seal forgery.
+- $\varepsilon_{\mathrm{perm}}$ is the advantage of distinguishing Keccak-p[1600,12] from a random
+  permutation (conjectured negligible).
+- $(\sigma + t)^2 / 2^{c+1} = (\sigma + t)^2 / 2^{257}$ is the sponge indifferentiability term, covering
+  all Keccak-p evaluations globally (Thyrse backbone and TreeWrap internals).
+- $q \cdot \varepsilon_{\mathrm{kdf}}(0)$ is $q$ times the per-instance RO-KDF bound, which depends on
+  the unpredictability of the caller's key material. For key material with $\kappa$ bits of min-entropy,
+  $\varepsilon_{\mathrm{kdf}}(0) \leq 2 \cdot t / 2^{\kappa}$.
+- $q^2 / 2^{8H+1} = q^2 / 2^{513}$ bounds chain value collisions (§13.5).
+- $\varepsilon_{\mathrm{tw}}$ is TreeWrap's per-invocation security advantage, treated as a black-box
+  term. See the TreeWrap specification (§6.11) for the concrete bound; the dominant term is
+  $S / 2^{8C} = S / 2^{256}$ for forgery resistance.
 
-For typical parameters — $q \leq 2^{48}$ finalizations, $\sigma + t \leq 2^{64}$ total permutation queries (representing
-exabytes of data and computation), and $S \leq 2^{48}$ forgery attempts — the individual terms evaluate to:
+**Numerical evaluation.** For typical parameters — $q \leq 2^{48}$ finalizations,
+$\sigma + t \leq 2^{64}$ total Keccak-p calls, $S \leq 2^{48}$ forgery attempts, and 256-bit key
+material ($\kappa = 256$):
 
 - Indifferentiability: $(2^{64})^2 / 2^{257} = 2^{-129}$
+- RO-KDF: $2^{48} \cdot 2 \cdot 2^{64} / 2^{256} = 2^{-143}$
 - Chain collisions: $(2^{48})^2 / 2^{513} = 2^{-417}$
-- Forgery: $2^{48} / 2^{256} = 2^{-208}$
+- TreeWrap forgery: $2^{48} / 2^{256} = 2^{-208}$
 
-The indifferentiability term dominates. The 128-bit security target is met as long as the caller
-ensures $\varepsilon_{\mathrm{kdf}}(0) \leq 2^{-128}$ (i.e., the original key material has at least 128 bits of
-unpredictability) and the total data complexity satisfies $\sigma + t \leq 2^{64}$.
+The indifferentiability term dominates. The 128-bit security target is met as long as the caller ensures
+$\varepsilon_{\mathrm{kdf}}(0) \leq 2^{-128}$ (i.e., the original key material has at least 128 bits of
+min-entropy) and the total data complexity satisfies $\sigma + t \leq 2^{64}$.
 
-### 13.9 Multi-User Security
+### 13.8 Multi-User Security
 
-The bound in §13.8 covers a single protocol session. In a multi-user setting with $U$ independent sessions (each with an
-independent key), the adversary's advantage increases because it can target any session.
+The bound in §13.7 covers a single protocol session. In a multi-user setting with $U$ independent sessions
+(each with an independent key), the adversary's advantage increases because it can target any session.
 
-**Multi-user sponge bound.** The sponge indifferentiability term becomes a global resource shared across all sessions.
-If the adversary makes $t$ offline Keccak-p queries and the $U$ sessions collectively process $\sigma_{\mathrm{total}}$
-sponge blocks, the indifferentiability term is:
+**Multi-user indifferentiability.** The sponge indifferentiability term is a global resource shared across
+all sessions. If the adversary makes $t$ offline Keccak-p queries and the $U$ sessions collectively
+process $\sigma_{\mathrm{total}}$ Keccak-p calls, the indifferentiability term is:
 
 $$\varepsilon_{\mathrm{indiff}} \leq \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}}$$
 
-This is unchanged in form — $\sigma_{\mathrm{total}}$ simply sums the data complexity across all sessions. The adversary
-does not gain a per-user multiplier on the indifferentiability term because the sponge claim is a global property of the
+The adversary does not gain a per-user multiplier because indifferentiability is a global property of the
 permutation.
 
-**Multi-user key recovery.** The adversary can attempt to recover any of the $U$ session keys. Under the RO-KDF
-argument, each session key is derived from a TurboSHAKE128 evaluation on a transcript containing unpredictable key
-material. The adversary can query the random oracle on candidate inputs and check whether any of the $U$ sessions
-matches. This gives a multi-target advantage of:
+**Multi-user key recovery.** The adversary can attempt to recover any of the $U$ session keys. Under the
+RO-KDF argument, each session key is derived from a TurboSHAKE128 evaluation on a transcript containing
+unpredictable key material. This gives a multi-target advantage of:
 
 $$\varepsilon_{\mathrm{mu\text{-}key}} \leq U \cdot \varepsilon_{\mathrm{kdf}}(0)$$
 
-For 128-bit keys, $\varepsilon_{\mathrm{kdf}}(0) \approx t / 2^{128}$,
-so $\varepsilon_{\mathrm{mu\text{-}key}} \approx U \cdot t / 2^{128}$. To maintain 128-bit security against an adversary
-with budget $t = 2^{64}$ across $U = 2^{32}$ users, the per-key unpredictability must be at least $128 + 32 = 160$
-bits — which is satisfied by the 256-bit key material typical of Diffie-Hellman or KEM-based key exchange.
+For 256-bit key material and an adversary with budget $t = 2^{64}$ across $U = 2^{32}$ users:
+$\varepsilon_{\mathrm{mu\text{-}key}} \approx 2^{32} \cdot 2^{64} / 2^{256} = 2^{-160}$.
 
-**Multi-user forgery.** The adversary can attempt forgeries against any of the $U$ sessions. If each session processes
-at most $q$ Seal operations, the total forgery advantage is:
-
-$$\varepsilon_{\mathrm{mu\text{-}forge}} \leq \frac{S}{2^{256}}$$
-
-where $S$ is the total number of forgery attempts across all sessions.
-
-**Multi-user chain collisions.** If two sessions happen to reach the same chain value at any point, their subsequent
-outputs are correlated. The probability of a cross-session chain collision is:
+**Multi-user chain collisions.** The probability of a cross-session chain collision is:
 
 $$\varepsilon_{\mathrm{mu\text{-}chain}} \leq \frac{(U \cdot q)^2}{2^{513}}$$
 
-where $q$ is the maximum number of finalizations per session. For $U = 2^{32}$ sessions with $q = 2^{32}$ finalizations
-each, this is $(2^{64})^2 / 2^{513} = 2^{-385}$.
+For $U = 2^{32}$ sessions with $q = 2^{32}$ finalizations each:
+$(2^{64})^2 / 2^{513} = 2^{-385}$.
+
+**Multi-user forgery.** The total forgery advantage across all sessions is $S / 2^{256}$, where $S$ is the
+total number of forgery attempts.
 
 **Combined multi-user bound:**
 
 $$\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + U \cdot q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{(U \cdot q)^2}{2^{513}} + \frac{S}{2^{256}}$$
 
-**Ratcheting as mitigation.** The multi-user key recovery term $U \cdot \varepsilon_{\mathrm{kdf}}(0)$ reflects the
-adversary's ability to correlate offline computation with any of $U$ sessions over the session's entire lifetime.
-Ratcheting limits this exposure. After a `Ratchet` operation, the session state contains only a chain value — a 512-bit
-pseudorandom string with no algebraic structure that could be exploited in a multi-target search. An adversary who
-targets the pre-`Ratchet` key material must do so before the `Ratchet` occurs (or within the window of operations
-between
-`Ratchet`s).
-
-If a session Ratchets every $W$ finalizing operations, the effective multi-target window is reduced: the adversary must
-target a specific epoch of $W$ operations rather than the full session lifetime. The key recovery term becomes:
-
-$$\varepsilon_{\mathrm{mu\text{-}key\text{-}ratcheted}} \approx \frac{U \cdot t}{2^{128}}$$
-
-per epoch, but the adversary must choose which epoch to target. With $q/W$ epochs per session, the adversary's best
-strategy is to target the epoch with the weakest key material, which is typically the initial key establishment.
-Ratcheting does not improve the initial key recovery bound, but it ensures that compromising any single epoch does not
-compromise the full session — this is the forward secrecy property (§13.2).
-
-For long-lived sessions (messaging protocols, persistent tunnels), periodic ratcheting every few hundred operations is
-strongly recommended.
-
-### 13.10 Practical Data Limits
-
-The theoretical bounds in §§13.8–13.9 are expressed in terms of sponge blocks (168-byte rate for TurboSHAKE128). This
-section converts them to practical data volumes.
-
-**Sponge blocks per operation.** Each Keccak-p[1600,12] invocation processes one sponge block of $R = 168$ bytes. The
-data complexity $\sigma$ counts the total number of Keccak-p invocations across all protocol and TreeWrap operations:
-
-- A `Mix` operation absorbing $d$ bytes of data costs $\lceil(\text{frame overhead} + d) / 168\rceil$ blocks, but since
-  non-finalizing operations pack into the running sponge state, the cost is amortized. A typical AEAD header (`Init` +
-  `Mix(key)` + `Mix(nonce)` + `Mix(ad)`) costs 0 permutation calls if the total frame size fits in one rate block
-  ($\leq 168$ bytes).
-
-- A finalizing operation (`Derive`, `Ratchet`, `Mask`, `Seal`) forces at least 2 Keccak-p calls (one per TurboSHAKE128
-  evaluation for the two domain-byte clones), plus however many calls are needed to squeeze the output.
-
-- TreeWrap encryption of $m$ bytes costs $\lceil m / 167 \rceil$ Keccak-p calls per leaf (167 data bytes per block, with
-  position 167 reserved for the duplex pad), plus one call per leaf for `init`, plus one call per leaf for
-  `chain_value`, plus the tag accumulation TurboSHAKE128. For a single leaf processing $B = 8192$
-  bytes: $\lceil 8192/167 \rceil + 2 = 51$ calls, plus a share of the tag computation.
-
-**Data volume limits.** The indifferentiability term $(\sigma + t)^2 / 2^{257}$ must remain negligible. Setting a target
-of $\varepsilon_{\mathrm{indiff}} \leq 2^{-128}$ gives:
-
-$$(\sigma + t)^2 \leq 2^{129} \quad\Longrightarrow\quad \sigma + t \leq 2^{64.5}$$
-
-This is the total budget shared between the protocol's data processing ($\sigma$) and the adversary's offline
-computation ($t$). Assuming a generous offline budget of $t = 2^{64}$ for the adversary, the protocol's data budget is:
-
-$$\sigma \leq 2^{64.5} - 2^{64} \approx 2^{64} \text{ sponge blocks}$$
-
-At 168 bytes per block, this is approximately $2^{64} \times 168 \approx 2^{71.4}$ bytes $\approx 2.8$ exabytes. This is
-the total data that can be processed across all operations in a single session (or globally, in the multi-user setting)
-while maintaining 128-bit security against an adversary with $2^{64}$ offline computation.
-
-In practice, this limit is unreachable. For reference:
-
-- 1 TB of encrypted data $\approx 2^{40}$ bytes $\approx 2^{33}$ sponge blocks
-- 1 PB of encrypted data $\approx 2^{50}$ bytes $\approx 2^{43}$ sponge blocks
-- The entire internet's daily traffic $\approx 2^{53}$ bytes $\approx 2^{46}$ sponge blocks
-
-**Per-session recommendations.** Although the global data limit is enormous, implementations should enforce per-session
-limits as defense in depth:
-
-- **Maximum message size per `Seal`/`Mask`:** No inherent limit beyond available memory, but implementations MAY enforce
-  a limit of $2^{38}$ bytes (256 GB) per operation to bound per-invocation TreeWrap leaf count.
-
-- **Maximum finalizations per session:** No inherent limit, but `Ratchet` at least every $2^{32}$ finalizations to limit
-  the chain collision term and provide forward secrecy.
-
-- **Session rekeying:** For sessions processing more than $2^{48}$ bytes cumulatively, rekey by establishing a new
-  session with fresh key material. This is a conservative recommendation — the theoretical limit is far higher.
+**Ratcheting as mitigation.** After a `Ratchet` operation, the session state contains only a chain
+value — a 512-bit pseudorandom string with no algebraic structure exploitable in a multi-target search.
+An adversary targeting pre-ratchet key material must do so before the ratchet occurs. If a session
+ratchets every $W$ finalizing operations, the adversary must target a specific epoch rather than the full
+session lifetime. Ratcheting does not improve the initial key recovery bound, but it ensures that
+compromising any single epoch does not compromise the full session (forward secrecy, §13.2). For
+long-lived sessions, periodic ratcheting every few hundred operations is recommended.
 
 ## 14. Typical Usage: AEAD
 
