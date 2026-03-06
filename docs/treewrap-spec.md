@@ -1151,7 +1151,7 @@ proof-bound figure alone.
 - Namprempre, C., Rogaway, P., and Shrimpton, T. "Reconsidering Generic Composition." EUROCRYPT 2014. Extends the
   BN00 composition theorem to the nonce-based setting; used in Section 6.9.
 - Ristenpart, T., Shacham, H., and Shrimpton, T. "Careful with Composition: Limitations of the Indifferentiability
-  Framework." Eurocrypt 2011 (ePrint 2011/339 as "Limitations of Indifferentiability and Universal Composability").
+  Framework." Eurocrypt 2011 (ePrint 2011/339 as "Careful with Composition: Limitations of Indifferentiability and Universal Composability").
   Highlights multi-stage composition caveats; motivates explicit game-hop arguments in composed proofs.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
   and Other Applications." SAC 2011. IACR ePrint 2011/499. Proves that duplex outputs are pseudorandom under the sponge
