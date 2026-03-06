@@ -846,27 +846,25 @@ Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
   different messages opening the same $C^\star$ under the same key and chunking contradict Lemma 3 (fixed-key
   bijection), so this case is impossible.
 - **Case 2: different contexts** $(N,AD)\neq(N',AD')$. Distinct contexts map to independent random keys in
-  $\mathsf{G}_1$. Tag computations under different keys produce approximately independent uniform $\tau$-byte values
-  (Section 6.6.1, tag PRF security). The adversary wins only if a tag collision exists among the $Q$ outputs.
+  $\mathsf{G}_1$. A dual valid opening requires the adversary to produce a single $C^\star$ whose embedded tag is valid
+  under both derived keys simultaneously.
 
-  **Adversary strategy and birthday bound.** The adversary's optimal strategy is to find a tag collision among the $Q$
-  AEAD outputs (encryption-oracle responses plus the two openings in $C^\star$). A dual valid opening under different
-  contexts requires $T = T'$ where $T$ and $T'$ are the tags computed under two independent derived keys. The adversary
-  wins only if such a collision exists among some pair of the $Q$ outputs. By the birthday bound,
-  $\Pr[\exists\ \text{collision}] \leq Q^2/2^{8\tau+1}$.
+  **Adversary strategy.** The adversary fixes $C^\star = \mathit{ct}^\star \| T^\star$. One valid opening (say under
+  context $(N,AD)$) fixes $T^\star$ to the unique correct tag for $\mathit{ct}^\star$ under that context's derived key.
+  The second opening requires that $\mathrm{DecryptAndMAC}$ under the independently random key for $(N',AD')$ also
+  produces tag $T^\star$ on $\mathit{ct}^\star$. By tag PRF security (Section 6.6.1), this second tag is approximately
+  uniform over $\{0,1\}^{8\tau}$ and independent of the first, so the match probability is at most $2^{-8\tau}$ per
+  candidate context. Over at most $Q$ candidate contexts (encryption-oracle queries plus the two openings), the union
+  bound gives $\Pr[\text{match}] \leq Q / 2^{8\tau}$.
 
 Therefore:
 
 $$
-\varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{Q^2}{2^{8\tau+1}}.
+\varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{Q}{2^{8\tau}}.
 $$
 
-Here $Q$ (as defined in Section 6.1) counts all AEAD outputs in the experiment: encryption-oracle responses plus the two
-openings in $C^\star$. The adversary can choose $C^\star$ to exploit a cross-context tag collision among any pair of
-these $Q$ outputs, so the birthday bound $Q^2/2^{8\tau+1}$ applies rather than a single targeted-forgery bound of
-$1/2^{8\tau}$.
-
-For $\tau = C = 32$, both birthday denominators are $2^{257}$.
+Here $Q$ (as defined in Section 6.1) counts all AEAD outputs in the experiment. For $\tau = 32$, the denominator is
+$2^{256}$.
 
 ### 6.11 Bare Usage (EncryptAndMAC / DecryptAndMAC)
 
