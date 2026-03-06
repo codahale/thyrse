@@ -1,6 +1,6 @@
 // Package thyrse implements a transcript-based cryptographic protocol framework.
 //
-// At each finalizing operation, a Keccak duplex is evaluated over the transcript to derive keys, chain values, and
+// At each finalizing operation, a Keccak sponge is evaluated over the transcript to derive keys, chain values, and
 // pseudorandom output. The transcript encoding is recoverable, providing random-oracle-indifferentiable key derivation
 // via the RO-KDF construction.
 //
@@ -29,7 +29,7 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 // Protocol is a transcript-based cryptographic protocol instance.
 //
 // Operations append frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal) evaluate
-// the duplex over the transcript, derive outputs, and reset the transcript with a chain value.
+// the sponge over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
 	h         keccak.Duplex
 	initLabel string
@@ -39,7 +39,7 @@ type Protocol struct {
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
 	var p Protocol
-	// Duplex zero value is ready to use, ds is passed to PadPermute/Chain
+	// Zero value is ready to use; ds is passed to PadPermute/Chain.
 	p.initLabel = label
 	p.writeOpLabel(opInit, label)
 	return &p
@@ -364,7 +364,7 @@ func (p *Protocol) Clear() {
 	p.initLabel = ""
 }
 
-// finalize performs the dual Duplex finalization using [keccak.Duplex.Chain].
+// finalize performs the dual sponge finalization using [keccak.Duplex.Chain].
 //
 // For Derive, Mask, and Seal: p.h (padded with dsChain=0x20) produces the
 // chain value, and the clone (padded with outputDS) produces the output

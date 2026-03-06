@@ -26,7 +26,7 @@ func leafPadBuf(key *[KeySize]byte, index uint64) [KeySize + 8]byte {
 	return buf
 }
 
-// initDuplex initializes a Duplex sponge (absorb key||index, pad, permute).
+// initDuplex initializes a duplex (absorb key||index, pad, permute).
 func initDuplex(d *keccak.Duplex, key *[KeySize]byte, index uint64) {
 	d.Reset()
 	buf := leafPadBuf(key, index)
@@ -371,7 +371,7 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 	return ret, d.Finalize()
 }
 
-// finalPos returns the sponge position after encrypting/decrypting chunkLen bytes.
+// finalPos returns the duplex position after encrypting/decrypting chunkLen bytes.
 func finalPos(chunkLen int) int {
 	if chunkLen == 0 {
 		return 0

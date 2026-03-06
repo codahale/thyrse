@@ -23,7 +23,7 @@ const (
 type Hasher struct {
 	suffix    []byte        // C || lengthEncode(|C|), precomputed at construction, immutable
 	buf       []byte        // buffered message/leaf data
-	ts        keccak.Duplex // final-node duplex sponge state
+	ts        keccak.Duplex // final-node sponge state
 	leafCount int           // total leaf CVs written to ts so far
 	ds        byte          // domain separator for finalization (0x07 single-node, 0x06 tree-mode)
 	treeMode  bool          // true once S_0 has been flushed to ts

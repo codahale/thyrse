@@ -2,13 +2,13 @@ package keccak
 
 import "encoding/binary"
 
-// Duplex is a TurboSHAKE128 duplex sponge extended with encrypt and decrypt
-// operations. It uses Keccak-p[1600,12] with rate R=168 and pad10*1 padding.
+// Duplex is a Keccak-based duplex construction using Keccak-p[1600,12] with
+// rate R=168 and pad10*1 padding (i.e. TurboSHAKE128 parameters). It supports
+// sponge operations (absorb, squeeze) and duplex operations (encrypt, decrypt).
 //
 // All operations automatically track the byte position within the rate and
-// permute at rate boundaries. The caller sequences operations (absorb, encrypt,
-// decrypt, pad-permute, squeeze) and passes the domain separation byte to
-// PadPermute.
+// permute at rate boundaries. The caller sequences operations and passes the
+// domain separation byte to PadPermute.
 type Duplex struct {
 	s   State1
 	pos int
