@@ -153,7 +153,7 @@ The encodings used here (`left_encode`, `encode_string`, `length_encode`) are de
 ### Tree Topology
 
 TreeWrap128 uses the Sakura final-node-growing topology with kangaroo hopping, following KangarooTwelve (ePrint
-2016/770, Sections 3.3 and 4.3). The final node (index 0) is a Duplex that encrypts chunk 0 directly (the "message
+2016/770, Sections 1 and 3.3). The final node (index 0) is a Duplex that encrypts chunk 0 directly (the "message
 hop"). Chunks 1 through $n-1$ are processed by independent leaf Duplexes that produce chain values (the "chaining hop").
 
 For $n = 1$, the final node encrypts the entire message and produces the tag via `pad_permute(0x07)`. The Sakura frame
@@ -1134,7 +1134,7 @@ proof-bound figure alone.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
 - Bertoni, G., Daemen, J., Hoffert, S., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B. "TurboSHAKE." IACR ePrint 2023/342.
   Primary specification and design rationale for TurboSHAKE.
-- Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., and Van Keer, R. "KangarooTwelve: fast hashing based on
+- Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B. "KangarooTwelve: fast hashing based on
   Keccak-p." IACR ePrint 2016/770. Security and design context for the Sakura-based tree structure.
 - Keccak Team. "Third-party cryptanalysis." https://keccak.team/third_party.html. Curated summary table of published
   cryptanalysis results and round counts across Keccak-family modes and raw permutations.
