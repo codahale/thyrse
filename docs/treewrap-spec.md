@@ -997,7 +997,7 @@ for Keccak-p[1600,12] and the selected offline-work profile.
 
 Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term is $2q^2\ell / 2^c$. Setting
 this to $\le 2^{-50}$ with $\ell = 49$ and $c = 256$ gives $q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}$, so
-$q \lesssim 2^{99.5}$ messages. At 1500 bytes/message the proof-bound volume is approximately $2^{110}$ GiB per key
+$q \lesssim 2^{99.5}$ messages. At 1500 bytes/message the proof-bound volume is approximately $2^{80}$ GiB per key
 epoch. This is an analytical upper bound, not the practical deployment limit when random nonces are used.
 
 For deployment planning, use:
@@ -1022,7 +1022,7 @@ Example planning table (collision target $p = 2^{-50}$, record size = 1500 bytes
 |------------|-------------|------------------|----------------------------------|
 | 128-bit    | 1500 B      | nonce collisions | $\approx 2^{20.1}$ GiB           |
 | 192-bit    | 1500 B      | nonce collisions | $\approx 2^{52.1}$ GiB           |
-| 256-bit    | 1500 B      | proof bound      | $\approx 2^{110}$ GiB            |
+| 256-bit    | 1500 B      | proof bound      | $\approx 2^{80}$ GiB             |
 
 For a different record size, scale the nonce-collision-limited rows linearly with bytes/record and then apply the same
 minimum rule against the proof-bound volume.
