@@ -557,23 +557,28 @@ is per experiment/per key epoch.
 > and the Ristenpart-Shacham-Shrimpton (RSS11) multi-stage caveat does not arise.
 
 **Summary.** All AEAD goals below (Sections 6.7–6.10) are analyzed in $\mathsf{G}_1$, conditioned on
+$\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. Section 6.5 defines the bare-game framework and the
+total-advantage decomposition used by all subsequent sections.
+
+### 6.5 Bare-Game Framework
+
+All analyses in Sections 6.6–6.10 work in $\mathsf{G}_1$ (Section 6.4) conditioned on
 $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. The costs of these events
-($\varepsilon_{\mathrm{cap}}$ and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge hop and
-do not recur. Each theorem decomposes as:
+($\varepsilon_{\mathrm{cap}}$ and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge theorem
+and do not recur.
+
+Define the **bare advantage** $\mathrm{Adv}_{\Pi}^{\mathrm{bare}}$ as the adversary's advantage against the internal
+functions under independent uniformly random per-context keys, conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$. Each
+AEAD property's total advantage decomposes as:
 
 $$
-\mathrm{Adv}_{\Pi} \le \underbrace{\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}}_{\text{bridge hop}} + \underbrace{\varepsilon_{\mathrm{ctx\text{-}coll}}}_{\text{key collision}} + \underbrace{\mathrm{Adv}_{\Pi}^{\mathrm{bare}}}_{\text{random-key game}},
+\mathrm{Adv}_{\Pi} \le \underbrace{\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)}_{\text{bridge hop (Section 6.4)}} + \underbrace{\varepsilon_{\mathrm{ctx\text{-}coll}}}_{\text{key collision}} + \underbrace{\mathrm{Adv}_{\Pi}^{\mathrm{bare}}}_{\text{Sections 6.7–6.10}}.
 $$
 
-where $\mathrm{Adv}_{\Pi}^{\mathrm{bare}}$ is the advantage against the internal functions under independent uniformly
-random keys.
+Under the exact uniformity principle (Section 6.1), all bare-bound analyses reduce to structural collision and forgery
+probabilities over truly uniform values.
 
-### 6.5 Leaf Security Lemmas
-
-> **Conditioning scope.** All analyses in Sections 6.5–6.10 work in $\mathsf{G}_1$ conditioned on
-> $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. The costs of these events ($\varepsilon_{\mathrm{cap}}$
-> and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge theorem (Section 6.4) and do not recur in
-> subsequent sections.
+### 6.6 Leaf Security Lemmas
 
 Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 
