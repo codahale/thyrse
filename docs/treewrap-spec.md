@@ -15,6 +15,10 @@ enables SIMD acceleration (NEON, AVX2, AVX-512) on large inputs. Each leaf encry
 sponge state and writing the ciphertext back into the rate, and leaf chain values are accumulated into a single MAC tag
 via a keyed TurboSHAKE128 final node.
 
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED",
+"NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in
+[BCP 14](https://www.rfc-editor.org/info/bcp14) (RFC 2119, RFC 8174) when, and only when, they appear in all capitals.
+
 ## 2. Parameters
 
 | Symbol | Value             | Description                                           |
@@ -282,11 +286,15 @@ as a different triple. Domain byte `0x09` separates key derivation from all othe
 import hmac
 
 def treewrap128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+    assert len(K) == C, "K must be exactly 32 bytes"
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
     ct, tag = encrypt_and_mac(tw_key, M)
     return ct + tag
 
 def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+    assert len(K) == C, "K must be exactly 32 bytes"
+    if len(ct_tag) < TAU:
+        return None
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
     ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
     pt, tag = decrypt_and_mac(tw_key, ct)
@@ -980,7 +988,10 @@ The following implementation decisions are performance-critical and align with h
 - **Preserve empty/single-chunk fast paths.** Keep dedicated empty-input and `n = 1` paths to avoid
   unnecessary tree-accumulation overhead on latency-sensitive inputs.
 - **Use incremental stateful processing.** Maintain chunk-local state across partial writes/reads so callers can stream
-  large messages without extra buffering copies.
+  large messages without extra buffering copies. Note that the first chunk cannot be finalized until the implementation
+  knows whether a second chunk will follow: `n = 1` finalizes with `single_node_tag` (`0x0C`) while `n > 1` finalizes
+  with `chain_value` (`0x0A`). A streaming implementation must therefore buffer one byte past the chunk boundary (`B + 1`)
+  or wait for EOF before finalizing the first chunk.
 - **Reuse one scheduling pipeline for both directions.** Encrypt and decrypt should share the same chunk scheduling,
   index binding, and chain-value accumulation pipeline.
 - **Keep domain bytes and index mapping exact.** `0x08`, `0x0A`, `0x09`, `0x0C`, `0x0E` constants and `key || LEU64(index)` binding (index 0
