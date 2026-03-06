@@ -1167,54 +1167,54 @@ Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. 
 |-------|-------|
 | len | 0 |
 | ct | (empty) |
-| tag | `6b5e7bc9c360fb508d49d442807e9a911794dec5697168116c71a643a2c130cb` |
+| tag | `4a06dd2e8c2280eb2a4cb54ff4bbcd16e26809d6e1d10ae9b03ddd81dba1f70c` |
 
 #### 10.1.2 One-Byte Plaintext (n = 1)
 
 | Field | Value |
 |-------|-------|
 | len | 1 |
-| ct | `21` |
-| tag | `12fbbc47cad53d97edc63f2b2ccdcca46425784bea42611a8773111f7edd9e33` |
+| ct | `b9` |
+| tag | `636744e19511873009bbee34794c6d013b71834fc3ed46e0c758c8bc1655164d` |
 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
-`44c08fe165b2b6d3675731b94095d5b2ba1c9b07a2c34e9e4af513b05281c1f3`.
+`3ec75c7e58e68df6fa8b50e538fd365e8fde86ee533b569dbec6fa259d3f8546`.
 
 #### 10.1.3 B-Byte Plaintext (exactly one chunk, n = 1)
 
 | Field | Value |
 |-------|-------|
 | len | 8192 |
-| ct[:32] | `21d4aa2fcd5c1318503dc048f0bc7f9e3443034e37d33f83ee252a909b138049` |
-| tag | `1df01cbdaabb104021ab1038c518200e00044f355943eeae5a3b83e10ee89033` |
+| ct[:32] | `b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707` |
+| tag | `fc2ea76078fe107a4c0a29a1bcb7670ba59ff8477a93388c12405c0f45e6ee23` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`aa203a8464b240edb02f82cc4fdb459959aa368e3dd4335c484962aba104d461`.
+`4a781a4ec6ada1db7bea9e4968f5634073e18df476f52d0c62ee9e0aa816d142`.
 
 #### 10.1.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
 
 | Field | Value |
 |-------|-------|
 | len | 8193 |
-| ct[:32] | `21d4aa2fcd5c1318503dc048f0bc7f9e3443034e37d33f83ee252a909b138049` |
-| tag | `6f04dcea1d2d17828c70d6dce078d33097ba565ae076ee396d668a6314fa244a` |
+| ct[:32] | `b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707` |
+| tag | `0e14c22b6f47418cde0bf107f875f9e19fe73c533d6871c5f89fb9fda1dfa852` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`46818c37915ff41d797c1bbf783117a5b887e877d9f3ad517457d0be6b632955`.
+`b0702f781638349e5cc1fd81b60b1b2ae813b8bfba7ddfddbe330659d3ae1c96`.
 
 #### 10.1.5 4B-Byte Plaintext (four full chunks, n = 4)
 
 | Field | Value |
 |-------|-------|
 | len | 32768 |
-| ct[:32] | `21d4aa2fcd5c1318503dc048f0bc7f9e3443034e37d33f83ee252a909b138049` |
-| tag | `f61e3d9a360271df0c29de47f589ff5db6d76610594f6dae7539697ea035daea` |
+| ct[:32] | `b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707` |
+| tag | `b1034d073f7106ec836388823827a050bbbe2cfbccb29a79d704b4d37a0fbc75` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`10d5020616f325689f4b136d785e2078dc2e38bcf08dda283d2b16d667e2cd9b`.
+`684dbca2392dc17928b19943a368d630075d56fb754c15457d85d413abbca22a`.
 
 Swapping chunks 1 and 2 (bytes 0–8,191 and 8,192–16,383) yields tag
-`dbd26ca0213facb9f86b859d9b224da80ca4191ac8b3f2b1ce61a98e48f95eb7`.
+`39032e2280f25c78fe72143f9c94bc5f8694834b8d8528aae0e07d035a8aba7c`.
 
 #### 10.1.6 Round-Trip Consistency
 
@@ -1234,7 +1234,7 @@ These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including 
 | N | 12 bytes `00 01 02 ... 0b` |
 | AD | (empty) |
 | M len | 0 |
-| ct‖tag | `4e9dd104094714954cc3c7473c4e092c8eda832312bd2baa2ab7e75b24181191` |
+| ct‖tag | `1b581c73ae9475f3fe9a3695cbcb97d5fa6bf4fe50d5077c05307ee93333f585` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1247,7 +1247,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `a0 a1 a2 ... ab` |
 | AD | 10 11 12 ... 14 |
 | M len | 33 (`00 01 02 ... mod 256`) |
-| ct‖tag | `692f59fc0e477458ec9b9b6e31e493efc771a004593d4a998dea4e0895f8d64cdb39eed7e78d159222a2edc7d8fe11cbe2230083cbf435064e1effd33c5720ee04` |
+| ct‖tag | `ad06981fb8996d3a370fdff698dde70799641537c999562e9da3cc315998790f90079f24283c57e81120e7d5c3cc5c122b32c96b41769a24c1b4bffbff76f7b92d` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1260,8 +1260,8 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `c0 c1 c2 ... cb` |
 | AD | 00 01 02 ... 10 |
 | M len | 8193 (`00 01 02 ... mod 256`) |
-| ct[:32] | `82de7a53a883c79d476ecb2872672f936733eb990a63354569213721d43a3010` |
-| tag | `4deacbb8913d67c152e1872b977d7f9f905c02b772dbaf167d1eb2db064acb7e` |
+| ct[:32] | `c865e59fbaee05479be69b2e5d321fb917c03358e7ea3ab4f5a83157ebfc0ace` |
+| tag | `be9035c011815da2706dc38f548a019165ebec1987c574913e4e4f18255c7b7f` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1274,7 +1274,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `ff ee dd cc bb aa 99 88 77 66 55 44` |
 | AD | a1 a2 a3 ... a4 |
 | M len | 64 (`00 01 02 ... mod 256`) |
-| ct‖tag | `2ba1d25784079140f63afd324eb15b32bac41bdb49ea8df07a1d1ca3eaa5ad0fe02444f7d360ef90c511f0a6a0497b9cfd7070c264a636f531c9723f2da5a1b0b940cea214442ae19ba3218c8b02d6c200d8b6f3531c0d055d5755cf940fe814` |
+| ct‖tag | `5105314ef74b22ad003d53ee853ad28d8eeaf3cc0e20244911d96597cf4bb37ca74cffa7ea574705198f81c0e80c3766aea6e0ef2ba1dfc92009606ac220af91b5e9fdad578dd16ab44e58fd5e8f7e58ea586dbd7a7382fe09d715e7c22eb14e` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1291,7 +1291,7 @@ Nonce reuse is out of scope for Section 6 nonce-respecting claims.
 | N | 12 bytes `00 01 02 ... 0b` |
 | AD | 10 11 12 ... 1b |
 | M len | 48 (`00 01 02 ... mod 256`) |
-| ct‖tag | `1ef8c15476f571c4e9fd2e8ddaf9430f73b9007d43701e46b2180b0e43db56a70e01affdade84d9da19d16bcd8bf0f7f19616b4d735db7c4aa3e50382dab645493e25b8bef0595ef2cbec67b2d5c82f1` |
+| ct‖tag | `d6c8e417669baeb1b6acb530dfef004efe1c7422c7e09821d03e9bf7e44a6d9808fb2d2c8c3466de4dc973c7c70a7692650495153855f4627b136e9da82ab591bc9762113b9b3a66f5fd507168950081` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1306,7 +1306,7 @@ validate the original `ct‖tag`.
 | N | 12 bytes `0c 0d 0e ... 17` |
 | AD | (empty) |
 | M len | 32 (`00 01 02 ... 1f`) |
-| ct‖tag | `348d9dc83475b83cb27fb325946f5df22ee98d4beb2852e2b31be39657359946de5762dffa3c929fe9b681bc7cd971e6a3058b4ec97faa19a7fa394e87e9a1b5` |
+| ct‖tag | `6c6842b44331dca922bce7f3073f51b350a00676b4dba240d32f04ab8df28b20a6b4e5dfe5917f4ea5d55f469ea5f9c796658dd1015025fb2e73f3d02936506a` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1320,7 +1320,7 @@ Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖
 | N | 12 bytes `ab ab ac ad ae af b0 b1 b2 b3 b4 b5` |
 | AD | ab ab ab ... ab |
 | M len | 17 (`00 01 02 ... 10`) |
-| ct‖tag | `2a6b551afd2298fb6e0d5166519cc6746f3107e7a320d94f96b2c7d813ccba3a12e410b06b82d9b6a966f907ad201b877d` |
+| ct‖tag | `2a590aaa049945f3306c6a4fce20538e1c2100b200d4f6009400efb3b5495a5fe9f7decb3aa27c597db789e8f280405604` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1333,8 +1333,8 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `d0 d1 d2 ... db` |
 | AD | 20 21 22 |
 | M len | 167 (`00 01 02 ... mod 256`) |
-| ct[:32] | `f07eea9793b14516c350467b8a510e4c1b1ec36886ca6d2c7bd140006ccbfe1c` |
-| tag | `9ecef144bb0fbfc273d2ba2382546877a4ca44df5f486b37a05f32a4d41a917e` |
+| ct[:32] | `35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84` |
+| tag | `32a0a6438ebd3b9bdcc76da34f9bc63fd2196b133cf6a3bef683b4b8c28dd43f` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1347,8 +1347,8 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `d0 d1 d2 ... db` |
 | AD | 20 21 22 |
 | M len | 168 (`00 01 02 ... mod 256`) |
-| ct[:32] | `f07eea9793b14516c350467b8a510e4c1b1ec36886ca6d2c7bd140006ccbfe1c` |
-| tag | `41f4efa33dfae3634d9a2afe55bc99efeb1a413fa3d62f2690bf0edfb1eb484c` |
+| ct[:32] | `35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84` |
+| tag | `54d3ebf2d79bacb8ca1217643a4bb71dc90bd5b5241b78f3a2e2491133047099` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1361,7 +1361,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 32 bytes `e0 e1 e2 ... ff` |
 | AD | 20 21 22 |
 | M len | 48 (`00 01 02 ... mod 256`) |
-| ct‖tag | `a01962fe929930e39075e7fcd1c5a1bbdba6cce465f40378331a2c26fb95b4afa40da53f5e3b9b3931ba75c78f2d9352a04bc3efaaeaec8e04b87e9f183c89b126ee16e81a7aaff9b4e81b002898e9b0` |
+| ct‖tag | `77431d80e360764438411dca0d9d76598d097b9fbfecb7e4e805532c5f4fff46bb3834e3df28209cb07413f531d104ed6b0d2f132c775cfd6a556b1f75f4769555751936ccab6d1a0f5cddfd3f608f0f` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
