@@ -297,10 +297,10 @@ This section gives a complete reduction from TreeWrap128 AEAD security to the id
 Keccak-p[1600,12]. The argument has two layers:
 
 - **Layer A (Section 6.4).** A single game hop replaces the TurboSHAKE128 KDF with a lazy random function, using the
-  MRV15 keyed-sponge PRF security framework (Section 6.2) to bound the distinguishing advantage.
+  MRV15 keyed-sponge PRF framework (FKS, Section 6.2) to bound the distinguishing advantage.
 - **Layer B (Sections 6.6–6.10).** Under random keys, each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) decomposes
-  into keyed-sponge PRF properties of the internal functions: pseudorandomness of rate outputs, structural state
-  equivalence, and fixed-key bijection.
+  into keyed-duplex PRF properties of the leaf ciphers (FKD, Section 6.2): pseudorandomness of rate outputs,
+  structural state equivalence, and fixed-key bijection.
 
 All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $c = 256$ bits and $\tau = 32$ tag
 bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
@@ -349,9 +349,10 @@ adversary offline calls). A *capacity-part collision* occurs when two distinct K
 256-bit capacity outputs (the low $c$ bits of the 1600-bit state). By the birthday bound,
 $\Pr[\mathsf{Bad}_{\mathrm{perm}}] \leq \binom{\sigma+t}{2} \cdot 2^{-c} \leq \varepsilon_{\mathrm{cap}}$.
 
-Let $\varepsilon_{\mathrm{ks}}(q, \ell, \mu, N)$ denote the MRV15 keyed-sponge PRF advantage bound for $q$ keyed-sponge
-evaluations of at most $\ell$ input blocks each, $\mu$ total input blocks across all evaluations ($\mu \leq q\ell$),
-and $N$ adversary offline $\pi$-queries. The precise expression is given in Section 6.2.
+Let $\varepsilon_{\mathrm{ks}}(q, \ell, \mu, N)$ denote the MRV15 PRF advantage bound for $q$ keyed-sponge or
+keyed-duplex evaluations of at most $\ell$ input blocks (or duplexing calls) each, $\mu$ total blocks across all
+evaluations ($\mu \leq q\ell$), and $N$ adversary offline $\pi$-queries. MRV15 Theorems 1 (FKS) and 2 (FKD) yield
+the same bound expression; see Section 6.2.
 
 **PRP/PRF switching.** The ideal permutation samples without replacement. Throughout Section 6, "uniform" and
 "independent" outputs from $\pi$ on distinct inputs are understood modulo the PRP/PRF switching distance
@@ -372,24 +373,34 @@ probabilities over truly uniform values.
 
 Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
 
-### 6.2 Keyed-Sponge PRF Framework (MRV15)
+### 6.2 Keyed-Duplex PRF Framework (MRV15)
 
-**Theorem (MRV15, Theorem 1).** Let $\mathrm{FKS}^{\pi}_K$ be the full keyed sponge
-instantiated with an ideal permutation $\pi$ on $b$ bits, capacity $c$, and key
-length $k$. For an adversary making $q$ keyed-sponge evaluations of at most
-$\ell$ input blocks each, $\mu \leq q\ell$ total input blocks across all
-evaluations, and $N$ offline $\pi$-queries:
+TreeWrap128 leaf ciphers are keyed duplexes: after initialization, each leaf
+interleaves absorb and squeeze operations (absorb plaintext block → permute →
+squeeze keystream/tag). This matches MRV15's Full Keyed Duplex (FKD) model
+rather than the single-evaluation Full Keyed Sponge (FKS). Both theorems appear
+in the same paper and yield bounds of the same form.
+
+**Theorem (MRV15, Theorem 2).** Let $\mathrm{FKD}^{\pi}_K$ be the full-state
+keyed duplex instantiated with an ideal permutation $\pi$ on $b$ bits, capacity
+$c$, and key length $k$. For an adversary making $q$ duplex evaluations, each
+consisting of at most $\ell$ duplexing calls, $\mu \leq q\ell$ total duplexing
+calls across all evaluations, and $N$ offline $\pi$-queries:
 
 $$
-\mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKS}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
+\mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKD}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
   \;\leq\;
   \frac{2(q\ell)^2}{2^b}
   \;+\; \frac{2q^2\ell}{2^c}
   \;+\; \frac{\mu N}{2^k}.
 $$
 
-This is due to Mennink, Reyhanitabar, and Vizár (Eurocrypt 2015). For
-TreeWrap128 the parameters are $b = 1600$, $c = 256$, $k = c = 256$.
+This is due to Mennink, Reyhanitabar, and Vizár (Asiacrypt 2015). For
+TreeWrap128 the parameters are $b = 1600$, $c = 256$, $k = c = 256$. Each leaf
+is a single duplex evaluation ($q = 1$), so at the per-leaf level
+$\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$ captures the advantage for leaf $i$
+with $l_i$ duplexing calls. The KDF sponge (Section 6.4) is a single-evaluation
+keyed sponge covered by MRV15 Theorem 1 (FKS), which has the same bound form.
 
 **Term analysis for TreeWrap128.** The three terms have different magnitudes:
 
@@ -408,34 +419,38 @@ TreeWrap128 the parameters are $b = 1600$, $c = 256$, $k = c = 256$.
    document) is significant. This term is linear in the total absorbed block
    count $\mu$ rather than quadratic.
 
-**Key-loading equivalence.** MRV15's FKS (Algorithm 1) initialises with the key
-placed in the capacity portion of the state: $t \gets 0^{b-k} \| K$. TreeWrap128
+**Key-loading: outer-keyed sponge.** MRV15's FKD initialises with the key placed
+in the capacity portion of the state: $S \gets 0^{b-k} \| K$. TreeWrap128
 instead absorbs the key into the rate via standard sponge absorption: the
 byte-string $K \| \mathrm{LEU64}(\mathit{index})$ is XOR'd into rate positions,
-followed by pad-and-permute with domain byte $\mathtt{0x33}$. After one
-ideal-permutation call, both strategies produce an equivalently unpredictable
-full state. Concretely, TreeWrap128's post-init state is
+followed by pad-and-permute with domain byte $\mathtt{0x33}$. This is the
+*outer-keyed sponge* construction $\mathrm{Sponge}(K \| M)$. Andreeva, Daemen,
+Mennink, and Van Assche (ADMV15, FSE 2015) prove PRF security of both inner-
+and outer-keyed sponges using a modular proof approach, obtaining bounds of the
+same form as MRV15. After the init permutation call, the full state is
 $\pi(K \| \mathit{index} \| \mathtt{0x33}\text{-pad} \| 0^c)$; since $K$ is
-secret and uniform, the full $\pi$-input is unique with overwhelming
-probability. An ideal permutation on a unique input produces a uniformly random
-output. MRV15's analysis therefore applies to the post-init sponge from this
-point forward.
+secret and uniform, this $\pi$-input is unique with overwhelming probability,
+and the resulting state is uniformly random over the adversary's view. The
+subsequent duplex operation proceeds from this uniform state, which is exactly
+the precondition for MRV15's internal proof. The init call is accounted for in
+$\mu$ (total absorbed blocks).
 
-**Overwrite-mode coverage.** MRV15 structurally assumes XOR-absorb (FKS
-Algorithm 1, line 4: $s \gets t \oplus M^i$). TreeWrap128's encrypt operation
-produces identical state evolution: $\mathit{ct}[j] = \mathit{pt}[j] \oplus
-S[\mathit{pos}]$ followed by $S[\mathit{pos}] \gets \mathit{ct}[j]$ yields the
-same state byte as $S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]$, since
+**Overwrite-mode coverage.** MRV15 structurally assumes XOR-absorb. TreeWrap128's
+encrypt operation produces identical state evolution:
+$\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]$ followed by
+$S[\mathit{pos}] \gets \mathit{ct}[j]$ yields the same state byte as
+$S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]$, since
 $\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]$ in both paths.
 Overwrite mode is therefore algebraically identical to XOR-absorb for state
-evolution. BDPVA11 (Section 6.2, Algorithm 5, Theorem 2) provides independent
-confirmation of this equivalence.
+evolution. The ciphertext bytes the adversary observes are precisely the rate
+outputs (post-overwrite state bytes), which is the information MRV15 models as
+observable duplex output; no additional leakage occurs. BDPVA11 (Algorithm 5,
+Theorem 2) provides independent confirmation of overwrite-mode security.
 
-**Squeeze-phase coverage.** MRV15's FKS includes an explicit multi-block squeeze
-phase (Algorithm 1, lines 6–10) with arbitrary output length $z$. TreeWrap128's
-tags ($\tau = 32$ bytes) and chain values ($C = 32$ bytes) are single-block
-squeezes well within one rate block ($R = 168$ bytes). These outputs are
-directly covered by Theorem 1 with $z = 1$.
+**Squeeze-phase coverage.** MRV15's FKD includes explicit squeeze output at each
+duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
+($C = 32$ bytes) are single-block squeezes well within one rate block
+($R = 168$ bytes). These outputs are directly covered by Theorem 2.
 
 > [!NOTE]
 > BDPVA07 sponge indifferentiability gives
@@ -526,9 +541,10 @@ hop replaces only the KDF; all oracles and winning conditions are otherwise iden
    $\mathcal{K}$, domain byte `0x3B`) are on inputs disjoint from all other components' $\pi$-calls. The KDF sponge
    evaluation is therefore functionally independent of the leaf ciphers and final-node sponge.
 
-2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a keyed sponge with uniformly random master key $K$. By the
-   key-loading equivalence (Section 6.2), after the init permutation the state is uniformly random. Theorem 1 applies:
-   the KDF's output on distinct context strings $X$ is indistinguishable from a PRF with advantage at most
+2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a single-evaluation keyed sponge (absorb context, squeeze
+   once) with uniformly random master key $K$. By the outer-keyed sponge result (ADMV15, Section 6.2), after the
+   init permutation the state is uniformly random. MRV15 Theorem 1 (FKS) applies: the KDF's output on distinct
+   context strings $X$ is indistinguishable from a PRF with advantage at most
    $\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$, where
    $q_{\mathrm{ctx}}$ is the number of distinct contexts, $\ell_{\mathrm{kdf}}$ is the maximum number of input blocks
    per KDF call, and $\mu_{\mathrm{kdf}}$ is the total KDF input blocks.
@@ -582,18 +598,18 @@ probabilities over truly uniform values.
 
 Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 
-**Lemma 1 (Keyed-sponge pseudorandomness).**
-For any keyed sponge initialized with `K_tw || LEU64(i)` (where $K_{tw}$ is a uniformly random secret key and $i$ is a
+**Lemma 1 (Keyed-duplex pseudorandomness).**
+For any keyed duplex initialized with `K_tw || LEU64(i)` (where $K_{tw}$ is a uniformly random secret key and $i$ is a
 public index), in the ideal-permutation model, the PRF advantage distinguishing the rate outputs (keystream bytes and
 terminal squeeze bytes) from uniformly random is at most $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$ is the
-number of input blocks for leaf $i$ and $t$ is the number of output blocks. This holds for both overwrite-mode absorption
-(used by leaves) and standard XOR-mode absorption (used by TurboSHAKE128, including the final node).
+number of duplexing calls for leaf $i$ and $t$ is the number of output blocks. This holds for both overwrite-mode
+absorption (used by leaves) and standard XOR-mode absorption (used by TurboSHAKE128, including the final node).
 
-*Proof.* Each leaf is a keyed sponge with uniformly random key $K_{tw}$ (from $\mathsf{G}_1$). By the Domain Separation
+*Proof.* Each leaf is a keyed duplex with uniformly random key $K_{tw}$ (from $\mathsf{G}_1$). By the Domain Separation
 Lemma (Section 6.3), under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the leaf's $\pi$-calls are disjoint from all other
-roles. Applying the MRV15 framework (Section 6.2) — including the key-loading equivalence and overwrite-mode coverage
-established there — the PRF advantage for leaf $i$ is at most $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$
-is the number of input blocks for leaf $i$.
+roles. Applying MRV15 Theorem 2 (FKD, Section 6.2) — including the outer-keyed initialization (ADMV15) and
+overwrite-mode coverage established there — the PRF advantage for leaf $i$ is at most
+$\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$ is the number of duplexing calls for leaf $i$.
 
 **Lemma 2 (State-direction equivalence).**
 For fixed $(K_{tw}, i)$ and any plaintext-ciphertext pair of equal length, `encrypt` and `decrypt` induce identical
@@ -833,7 +849,7 @@ $$
 
 Where $\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}$,
 $\varepsilon_{\mathrm{ks}} = \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$
-is the MRV15 keyed-sponge PRF bound (Section 6.2), and
+is the MRV15 PRF bound (Section 6.2), and
 $\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}$ is the PRF-RF switching cost.
 Parameters are defined in Section 6.1.
 
@@ -1033,12 +1049,17 @@ proof-bound figure alone.
   Highlights multi-stage composition caveats; motivates explicit game-hop arguments in composed proofs.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
   and Other Applications." SAC 2011. IACR ePrint 2011/499. Proves that duplex outputs are pseudorandom under the sponge
-  indifferentiability assumption (Theorem 1) and gives overwrite-mode security (Section 6.2, Algorithm 5, Theorem 2:
+  indifferentiability assumption (Theorem 1) and gives overwrite-mode security (BDPVA11 §6.2, Algorithm 5, Theorem 2:
   Overwrite is as secure as Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are
   covered by the duplex security bound.
-- Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Beyond the Birthday
-  Bound." Eurocrypt 2015. Primary security framework for TreeWrap128. Proves beyond-birthday-bound security for the
-  keyed sponge/duplex in the ideal-permutation model (Theorem 1). Used throughout Section 6.
+- Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Applications to
+  Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Primary security framework for TreeWrap128. Proves
+  beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state keyed duplex
+  (Theorem 2, FKD) in the ideal-permutation model. Theorem 2 (FKD) is used for leaf ciphers; Theorem 1 (FKS) is used
+  for the KDF sponge. Used throughout Section 6.
+- Andreeva, E., Daemen, J., Mennink, B., and Van Assche, G. "Security of Keyed Sponge Constructions Using a Modular
+  Proof Approach." FSE 2015. Proves PRF security of both inner-keyed and outer-keyed sponge variants. The outer-keyed
+  result covers TreeWrap128's rate-absorbed key initialization (Section 6.2).
 - Dinur, I., Dunkelman, O., and Shamir, A. "Improved practical attacks on round-reduced Keccak." Journal of
   Cryptology 27(2), 2014. Reports practical 4-round collisions and 5-round near-collision results in standard
   Keccak-224/256 settings.
