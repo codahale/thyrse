@@ -227,6 +227,29 @@ func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDuplexAbsorbCV(t *testing.T) {
+	// Build a State1 with known lane values.
+	var leaf State1
+	leaf.a[0] = 0x0102030405060708
+	leaf.a[1] = 0x090a0b0c0d0e0f10
+	leaf.a[2] = 0x1112131415161718
+	leaf.a[3] = 0x191a1b1c1d1e1f20
+
+	// Absorb via AbsorbCV.
+	var d1 Duplex
+	d1.AbsorbCV(&leaf)
+
+	// Absorb via manual byte extraction + Absorb.
+	var cv [32]byte
+	leaf.ExtractBytes(cv[:])
+	var d2 Duplex
+	d2.Absorb(cv[:])
+
+	if d1.s != d2.s || d1.pos != d2.pos {
+		t.Fatal("AbsorbCV and Absorb(cv[:]) diverged")
+	}
+}
+
 func TestPermuteVectorsState8(t *testing.T) {
 	vectors := loadVectors(t)
 	for i, tc := range vectors.Permute8 {

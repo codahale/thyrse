@@ -66,6 +66,64 @@ func (d *Duplex) Absorb(data []byte) {
 	}
 }
 
+// AbsorbCV absorbs a 32-byte chain value from s by reading its first 4 lanes.
+// The duplex position must be lane-aligned (multiple of 8).
+func (d *Duplex) AbsorbCV(s *State1) {
+	d.absorbCVWords(s.a[0], s.a[1], s.a[2], s.a[3])
+}
+
+// AbsorbCVx2 absorbs 2 chain values (32 bytes each) from s in instance order.
+func (d *Duplex) AbsorbCVx2(s *State2) {
+	for inst := range 2 {
+		d.absorbCVWords(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+	}
+}
+
+// AbsorbCVx4 absorbs 4 chain values (32 bytes each) from s in instance order.
+func (d *Duplex) AbsorbCVx4(s *State4) {
+	for inst := range 4 {
+		d.absorbCVWords(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+	}
+}
+
+// AbsorbCVx8 absorbs 8 chain values (32 bytes each) from s in instance order.
+func (d *Duplex) AbsorbCVx8(s *State8) {
+	for inst := range 8 {
+		d.absorbCVWords(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+	}
+}
+
+func (d *Duplex) absorbCVWords(w0, w1, w2, w3 uint64) {
+	if d.pos&7 != 0 {
+		panic("keccak: AbsorbCV on non-lane-aligned state")
+	}
+	if d.pos+32 > Rate {
+		remaining := (Rate - d.pos) >> 3
+		words := [4]uint64{w0, w1, w2, w3}
+		for i := range remaining {
+			d.s.a[d.pos>>3] ^= words[i]
+			d.pos += 8
+		}
+		d.s.Permute12()
+		d.pos = 0
+		for i := remaining; i < 4; i++ {
+			d.s.a[d.pos>>3] ^= words[i]
+			d.pos += 8
+		}
+		return
+	}
+	lane := d.pos >> 3
+	d.s.a[lane] ^= w0
+	d.s.a[lane+1] ^= w1
+	d.s.a[lane+2] ^= w2
+	d.s.a[lane+3] ^= w3
+	d.pos += 32
+	if d.pos == Rate {
+		d.s.Permute12()
+		d.pos = 0
+	}
+}
+
 // Encrypt XOR-encrypts plaintext from src into dst, permuting at rate
 // boundaries. The caller must ensure len(dst) >= len(src).
 func (d *Duplex) Encrypt(dst, src []byte) {
