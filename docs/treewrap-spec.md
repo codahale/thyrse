@@ -364,6 +364,80 @@ low-order portion of the 1600-bit Keccak-p state.
 
 Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
 
+### 6.2 Keyed-Sponge PRF Framework (MRV15)
+
+**Theorem (MRV15, Theorem 1).** Let $\mathrm{FKS}^{\pi}_K$ be the full keyed sponge
+instantiated with an ideal permutation $\pi$ on $b$ bits, capacity $c$, and key
+length $k$. For an adversary making $q$ keyed-sponge evaluations of at most
+$\ell$ input blocks each, $\mu \leq q\ell$ total input blocks across all
+evaluations, and $N$ offline $\pi$-queries:
+
+$$
+\mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKS}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
+  \;\leq\;
+  \frac{2(q\ell)^2}{2^b}
+  \;+\; \frac{2q^2\ell}{2^c}
+  \;+\; \frac{\mu N}{2^k}.
+$$
+
+This is due to Mennink, Reyhanitabar, and Vizár (Eurocrypt 2015). For
+TreeWrap128 the parameters are $b = 1600$, $c = 256$, $k = c = 256$.
+
+**Term analysis for TreeWrap128.** The three terms have different magnitudes:
+
+1. **Full-state birthday** $\frac{2(q\ell)^2}{2^{1600}}$: negligible at
+   $b = 1600$. Even for $q\ell = 2^{128}$ this term is below $2^{-1344}$.
+
+2. **Online-vs-online capacity term** $\frac{2q^2\ell}{2^{256}}$: scales with
+   $q^2\ell$, not $q^2\ell^2$ as a naïve birthday bound would suggest. For
+   TreeWrap128 leaf evaluations with $\ell \approx 49$ blocks per full
+   8192-byte chunk ($\lfloor 8192/168 \rfloor + 1$), this is approximately
+   $\ell/4 \approx 12\times$ tighter than the birthday bound
+   $q^2\ell^2 / 2^{c+1}$ (ratio: $2q^2\ell/2^c$ vs.\ $q^2\ell^2/2^{c+1}$).
+
+3. **Online-vs-offline term** $\frac{\mu N}{2^{256}}$: dominant when the
+   adversary's offline computation budget $N$ (denoted $t$ elsewhere in this
+   document) is significant. This term is linear in the total absorbed block
+   count $\mu$ rather than quadratic.
+
+**Key-loading equivalence.** MRV15's FKS (Algorithm 1) initialises with the key
+placed in the capacity portion of the state: $t \gets 0^{b-k} \| K$. TreeWrap128
+instead absorbs the key into the rate via standard sponge absorption: the
+byte-string $K \| \mathrm{LEU64}(\mathit{index})$ is XOR'd into rate positions,
+followed by pad-and-permute with domain byte $\mathtt{0x33}$. After one
+ideal-permutation call, both strategies produce an equivalently unpredictable
+full state. Concretely, TreeWrap128's post-init state is
+$\pi(K \| \mathit{index} \| \mathtt{0x33}\text{-pad} \| 0^c)$; since $K$ is
+secret and uniform, the full $\pi$-input is unique with overwhelming
+probability. An ideal permutation on a unique input produces a uniformly random
+output. MRV15's analysis therefore applies to the post-init sponge from this
+point forward.
+
+**Overwrite-mode coverage.** MRV15 structurally assumes XOR-absorb (FKS
+Algorithm 1, line 4: $s \gets t \oplus M^i$). TreeWrap128's encrypt operation
+produces identical state evolution: $\mathit{ct}[j] = \mathit{pt}[j] \oplus
+S[\mathit{pos}]$ followed by $S[\mathit{pos}] \gets \mathit{ct}[j]$ yields the
+same state byte as $S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]$, since
+$\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]$ in both paths.
+Overwrite mode is therefore algebraically identical to XOR-absorb for state
+evolution. BDPVA11 (Section 6.2, Algorithm 5, Theorem 2) provides independent
+confirmation of this equivalence.
+
+**Squeeze-phase coverage.** MRV15's FKS includes an explicit multi-block squeeze
+phase (Algorithm 1, lines 6–10) with arbitrary output length $z$. TreeWrap128's
+tags ($\tau = 32$ bytes) and chain values ($C = 32$ bytes) are single-block
+squeezes well within one rate block ($R = 168$ bytes). These outputs are
+directly covered by Theorem 1 with $z = 1$.
+
+> [!NOTE]
+> BDPVA07 sponge indifferentiability gives
+> $(\sigma + t)^2 / 2^{c+1}$ for the unkeyed sponge setting. MRV15 provides a
+> tighter bound for the keyed setting that TreeWrap128 exclusively uses.
+> BDPVA07 remains valid as a fallback analysis but is superseded here. The
+> principal improvement is that the online-vs-online term scales with
+> $q^2\ell$ rather than $q^2\ell^2$, eliminating a factor of $\ell$ from the
+> dominant birthday-like term.
+
 ### 6.2 Bridge Theorem: KDF to Random Key
 
 This section executes the single game hop that replaces the TurboSHAKE128 KDF with a lazy random function. The
