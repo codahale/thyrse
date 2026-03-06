@@ -975,6 +975,10 @@ The following implementation decisions are performance-critical and align with h
   for the final node, indices 1..$n$ for leaves) are structural for interoperability and security analysis.
 - **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
   patterns when constructing final-node inputs.
+- **No misuse resistance (MRAE).** TreeWrap128 is not an MRAE/SIV-style scheme: nonce reuse leaks
+  plaintext XOR (see Section 6 CAUTION). Applications requiring nonce-misuse resistance should use a
+  dedicated MRAE construction (e.g., SIV or a commit-then-encrypt wrapper). TreeWrap128's design
+  prioritizes single-pass streaming and parallelism over misuse tolerance.
 
 ## 8. Comparison with Traditional AEAD
 
