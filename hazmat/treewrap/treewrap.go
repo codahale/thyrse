@@ -197,6 +197,13 @@ func (e *Encryptor) encryptPartial(dst, src []byte) {
 func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
+	for idx+8 <= nFlush {
+		off := idx * ChunkSize
+		encryptX8(&e.key, uint64(e.idx+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &e.h)
+		e.idx += 8
+		idx += 8
+	}
+
 	for idx+4 <= nFlush {
 		off := idx * ChunkSize
 		encryptX4(&e.key, uint64(e.idx+1), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], &e.h)
@@ -315,6 +322,13 @@ func (d *Decryptor) decryptPartial(dst, src []byte) {
 // decryptComplete processes nFlush complete chunks via the SIMD cascade.
 func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
+
+	for idx+8 <= nFlush {
+		off := idx * ChunkSize
+		decryptX8(&d.key, uint64(d.idx+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &d.h)
+		d.idx += 8
+		idx += 8
+	}
 
 	for idx+4 <= nFlush {
 		off := idx * ChunkSize
@@ -450,6 +464,25 @@ func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, h *keccak.Tu
 	h.WriteCVx4(&s)
 }
 
+func encryptX8(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, h *keccak.TurboSHAKE128) {
+	var s keccak.State8
+	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
+	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
+	b4, b5 := leafPadBuf(key, baseIndex+4), leafPadBuf(key, baseIndex+5)
+	b6, b7 := leafPadBuf(key, baseIndex+6), leafPadBuf(key, baseIndex+7)
+	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], b4[:], b5[:], b6[:], b7[:], initDS)
+	s.Permute12()
+
+	done := s.FastLoopEncrypt168(pt, ct, ChunkSize)
+	tail := ChunkSize - done
+	for inst := range 8 {
+		s.EncryptBytes(inst, pt[inst*ChunkSize+done:inst*ChunkSize+done+tail], ct[inst*ChunkSize+done:inst*ChunkSize+done+tail])
+	}
+
+	s.PadPermute(finalPos(ChunkSize), chainValueDS)
+	h.WriteCVx8(&s)
+}
+
 func decryptX1(key *[KeySize]byte, index uint64, ct, pt []byte, h *keccak.TurboSHAKE128) {
 	var s keccak.State1
 	initBuf := leafPadBuf(key, index)
@@ -494,4 +527,23 @@ func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, h *keccak.Tu
 
 	s.PadPermute(finalPos(ChunkSize), chainValueDS)
 	h.WriteCVx4(&s)
+}
+
+func decryptX8(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, h *keccak.TurboSHAKE128) {
+	var s keccak.State8
+	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
+	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
+	b4, b5 := leafPadBuf(key, baseIndex+4), leafPadBuf(key, baseIndex+5)
+	b6, b7 := leafPadBuf(key, baseIndex+6), leafPadBuf(key, baseIndex+7)
+	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], b4[:], b5[:], b6[:], b7[:], initDS)
+	s.Permute12()
+
+	done := s.FastLoopDecrypt168(ct, pt, ChunkSize)
+	tail := ChunkSize - done
+	for inst := range 8 {
+		s.DecryptBytes(inst, ct[inst*ChunkSize+done:inst*ChunkSize+done+tail], pt[inst*ChunkSize+done:inst*ChunkSize+done+tail])
+	}
+
+	s.PadPermute(finalPos(ChunkSize), chainValueDS)
+	h.WriteCVx8(&s)
 }

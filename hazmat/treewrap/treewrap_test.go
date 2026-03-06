@@ -42,6 +42,9 @@ func TestRoundTrip(t *testing.T) {
 		{"five chunks", 5 * ChunkSize},
 		{"four chunks plus one", 4*ChunkSize + 1},
 		{"six chunks plus 100", 6*ChunkSize + 100},
+		{"eight chunks", 8 * ChunkSize},
+		{"nine chunks", 9 * ChunkSize},
+		{"eight chunks plus one", 8*ChunkSize + 1},
 	}
 
 	for _, tt := range sizes {
@@ -287,6 +290,9 @@ func TestEncryptorDecryptorRoundTrip(t *testing.T) {
 		{"five chunks", 5 * ChunkSize},
 		{"four chunks plus one", 4*ChunkSize + 1},
 		{"six chunks plus 100", 6*ChunkSize + 100},
+		{"eight chunks", 8 * ChunkSize},
+		{"nine chunks", 9 * ChunkSize},
+		{"eight chunks plus one", 8*ChunkSize + 1},
 	}
 
 	for _, tt := range sizes {
@@ -334,6 +340,9 @@ func TestEncryptorEquivalence(t *testing.T) {
 		{"four chunks", 4 * ChunkSize},
 		{"five chunks", 5 * ChunkSize},
 		{"six chunks plus 100", 6*ChunkSize + 100},
+		{"eight chunks", 8 * ChunkSize},
+		{"nine chunks", 9 * ChunkSize},
+		{"eight chunks plus one", 8*ChunkSize + 1},
 	}
 
 	for _, tt := range sizes {
@@ -378,6 +387,9 @@ func TestDecryptorEquivalence(t *testing.T) {
 		{"four chunks", 4 * ChunkSize},
 		{"five chunks", 5 * ChunkSize},
 		{"six chunks plus 100", 6*ChunkSize + 100},
+		{"eight chunks", 8 * ChunkSize},
+		{"nine chunks", 9 * ChunkSize},
+		{"eight chunks plus one", 8*ChunkSize + 1},
 	}
 
 	for _, tt := range sizes {
