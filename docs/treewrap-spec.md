@@ -38,13 +38,13 @@ and an output length `l` in bytes.
 A leaf cipher operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
 TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap128:
 
-| Byte   | Usage                        | Procedure(s)                     | Sakura | Role |
-|--------|------------------------------|----------------------------------|--------|------|
-| `0x33` | Init (key/index absorption)  | `init`                           | inner  | 01   |
-| `0x2B` | Final block (chain value)    | `chain_value`                    | inner  | 10   |
-| `0x3B` | AEAD key derivation          | `TreeWrap128`                    | inner  | 11   |
-| `0x27` | Single-node tag squeeze      | `single_node_tag`                | final  | 00   |
-| `0x37` | Tag accumulation             | `EncryptAndMAC`, `DecryptAndMAC` | final  | 01   |
+| Byte   | Usage                        | Procedure(s)                     | Node type |
+|--------|------------------------------|----------------------------------|-----------|
+| `0x08` | Init (key/index absorption)  | `init`                           | inner     |
+| `0x0A` | Final block (chain value)    | `chain_value`                    | inner     |
+| `0x09` | AEAD key derivation          | `TreeWrap128`                    | inner     |
+| `0x0C` | Single-node tag squeeze      | `single_node_tag`                | final     |
+| `0x0E` | Tag accumulation             | `EncryptAndMAC`, `DecryptAndMAC` | final     |
 
 > [!NOTE]
 > **Operational budgeting guidance.** For deployment-level guidance on budgeting Keccak-p calls across multiple
@@ -88,8 +88,8 @@ class LeafCipher:
             self.S[self.pos] ^= b
             self.pos += 1
             if self.pos == R - 1:
-                self.pad_permute(0x33)
-        self.pad_permute(0x33)
+                self.pad_permute(0x08)
+        self.pad_permute(0x08)
 
     def encrypt(self, plaintext: bytes) -> bytes:
         ct = bytearray()
@@ -114,17 +114,17 @@ class LeafCipher:
         return bytes(pt)
 
     def single_node_tag(self) -> bytes:
-        self.pad_permute(0x27)
+        self.pad_permute(0x0C)
         return bytes(self.S[:TAU])
 
     def chain_value(self) -> bytes:
-        self.pad_permute(0x2B)
+        self.pad_permute(0x0A)
         return bytes(self.S[:C])
 ```
 
 > [!NOTE]
 > `pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $R-1$). `init` uses domain byte
-> `0x33`; `chain_value` uses `0x2B`; `single_node_tag` uses `0x27`. Intermediate encrypt/decrypt blocks use the full
+> `0x08`; `chain_value` uses `0x0A`; `single_node_tag` uses `0x0C`. Intermediate encrypt/decrypt blocks use the full
 > $R = 168$ byte rate and permute without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb
 > for non-final blocks. Both `encrypt` and `decrypt` overwrite the rate with ciphertext, so state evolution is
 > identical regardless of direction. `single_node_tag` and `chain_value` begin with `pad_permute` to mix all data
@@ -167,18 +167,20 @@ where:
 
 The Sakura grammar derivation is: `final node` = `node '1'` = `chaining hop '1'` =
 `nrCVs CV coded_nrCVs interleaving_block_size '0' '1'`. The trailing frame bits -- chaining hop `'0'` and
-final node `'1'` -- are encoded in the TurboSHAKE128 domain byte following the Sakura suffix-extension pattern used by
-KangarooTwelve. Each domain byte has the structure `11 || S || R₁R₀ || 1` (6-bit suffix, LSB-first in byte), where bit 2
-is the Sakura frame bit (`S = 1` for final node, `S = 0` for inner/leaf). Final-node separability (Sakura Lemma 4) follows
-directly: the tag-accumulation domain byte `0x37` has `S = 1`, while all leaf cipher domain bytes (`0x33`, `0x2B`) and
-the KDF domain byte (`0x3B`) have `S = 0`.
+final node `'1'` -- are encoded in the TurboSHAKE128 domain byte following the Keccak delimited-suffix encoding used by
+KangarooTwelve. Each domain byte stores a variable-length suffix bit-string LSB-first, with a delimiter `1` bit
+immediately after the last suffix bit. The last suffix bit encodes the Sakura node type: `1` for final nodes, `0` for
+inner/leaf nodes. All five TreeWrap128 domain bytes use 3-bit suffixes (delimiter at bit 3). Final-node separability
+follows directly: the tag-accumulation byte (`0x0E`, suffix `011`) and single-node tag byte (`0x0C`, suffix `001`) have
+last suffix bit `1` (final), while all leaf cipher bytes (`0x08`, `0x0A`) and the KDF byte (`0x09`) have last suffix
+bit `0` (inner).
 
 The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (Section 5.1).
 
 **Domain separation.** The key prefix makes the final node a keyed sponge: its TurboSHAKE128 input begins with
 `key || LEU64(0)`, XOR-absorbed into the rate before any chain values. Leaves absorb `key || LEU64(i)` for $i \geq 1$
-via the LeafCipher `init` method (domain byte `0x33`). The final node's first 40 absorbed bytes therefore differ from
-every leaf's (index 0 vs. index $\geq 1$), and domain byte `0x37` is distinct from leaf domain bytes (`0x33`, `0x2B`),
+via the LeafCipher `init` method (domain byte `0x08`). The final node's first 40 absorbed bytes therefore differ from
+every leaf's (index 0 vs. index $\geq 1$), and domain byte `0x0E` is distinct from leaf domain bytes (`0x08`, `0x0A`),
 providing an additional layer of separation.
 
 **Encoding injectivity.** The `key(32) || LEU64(0)(8)` prefix is fixed-length (40 bytes), so injectivity of the
@@ -237,7 +239,7 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
         final_input += cv
     final_input += length_encode(n)
     final_input += SAKURA_SUFFIX
-    tag = turboshake128(final_input, 0x37, TAU)
+    tag = turboshake128(final_input, 0x0E, TAU)
     return b"".join(out_parts), tag
 
 def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
@@ -268,24 +270,24 @@ TreeWrap128 derives a per-invocation key from `(K, N, AD)` using TurboSHAKE128, 
 **Key derivation:**
 
 ```
-tw_key <- TurboSHAKE128(encode_string(K) || encode_string(N) || encode_string(AD), 0x3B, C)
+tw_key <- TurboSHAKE128(encode_string(K) || encode_string(N) || encode_string(AD), 0x09, C)
 ```
 
 The `encode_string` encoding (NIST SP 800-185) makes the concatenation injective: each field is prefixed with its
 `left_encode`d bit-length (`left_encode(8*len(x))`), so no `(K, N, AD)` triple can produce the same TurboSHAKE128 input
-as a different triple. Domain byte `0x3B` separates key derivation from all other TreeWrap128 uses of TurboSHAKE128
-(`0x33`, `0x2B`, `0x27`, `0x37`).
+as a different triple. Domain byte `0x09` separates key derivation from all other TreeWrap128 uses of TurboSHAKE128
+(`0x08`, `0x0A`, `0x0C`, `0x0E`).
 
 ```python
 import hmac
 
 def treewrap128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
-    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x3B, C)
+    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
     ct, tag = encrypt_and_mac(tw_key, M)
     return ct + tag
 
 def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
-    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x3B, C)
+    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
     ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
     pt, tag = decrypt_and_mac(tw_key, ct)
     return pt if hmac.compare_digest(tag, tag_expected) else None
@@ -434,12 +436,12 @@ keyed sponge covered by MRV15 Theorem 1 (FKS), which has the same bound form.
 in the capacity portion of the state: $S \gets 0^{b-k} \| K$. TreeWrap128
 instead absorbs the key into the rate via standard sponge absorption: the
 byte-string $K \| \mathrm{LEU64}(\mathit{index})$ is XOR'd into rate positions,
-followed by pad-and-permute with domain byte $\mathtt{0x33}$. This is the
+followed by pad-and-permute with domain byte $\mathtt{0x08}$. This is the
 *outer-keyed sponge* construction $\mathrm{Sponge}(K \| M)$. Andreeva, Daemen,
 Mennink, and Van Assche (ADMV15, FSE 2015) prove PRF security of both inner-
 and outer-keyed sponges using a modular proof approach, obtaining bounds of the
 same form as MRV15. After the init permutation call, the full state is
-$\pi(K \| \mathit{index} \| \mathtt{0x33}\text{-pad} \| 0^c)$; since $K$ is
+$\pi(K \| \mathit{index} \| \mathtt{0x08}\text{-pad} \| 0^c)$; since $K$ is
 secret and uniform, this $\pi$-input is unique with overwhelming probability,
 and the resulting state is uniformly random over the adversary's view. The
 subsequent duplex operation proceeds from this uniform state, which is exactly
@@ -478,11 +480,11 @@ duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
 
 | Set | Role | Domain byte | Distinguishing mechanism |
 |-----|------|-------------|--------------------------|
-| $\mathcal{K}$ | KDF | `0x3B` | Padded, domain byte `0x3B` |
-| $\mathcal{I}$ | Leaf init | `0x33` | Padded, domain byte `0x33` |
-| $\mathcal{C}$ | Chain value | `0x2B` | Padded, domain byte `0x2B` |
-| $\mathcal{T}_s$ | Single-node tag | `0x27` | Padded, domain byte `0x27` |
-| $\mathcal{T}_f$ | Tag accumulation | `0x37` | Padded, domain byte `0x37` |
+| $\mathcal{K}$ | KDF | `0x09` | Padded, domain byte `0x09` |
+| $\mathcal{I}$ | Leaf init | `0x08` | Padded, domain byte `0x08` |
+| $\mathcal{C}$ | Chain value | `0x0A` | Padded, domain byte `0x0A` |
+| $\mathcal{T}_s$ | Single-node tag | `0x0C` | Padded, domain byte `0x0C` |
+| $\mathcal{T}_f$ | Tag accumulation | `0x0E` | Padded, domain byte `0x0E` |
 | $\mathcal{U}$ | Unpadded intermediate | — | Secret capacity from keyed init |
 
 *Proof sketch.* Three cases:
@@ -493,19 +495,19 @@ duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
 
 3. **Within a set.** Calls within the same role are distinguished by either different keys (different rate content at init) or different capacity inputs inherited from prior calls in the chain (guaranteed distinct under $\neg\mathsf{Bad}_{\mathrm{perm}}$).
 
-**Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Sakura suffix (ePrint 2013/231) with the structure `11 || S || R_1 R_0 || 1` (6-bit suffix, LSB-first in byte), where bit 2 is the Sakura frame bit ($S = 1$ for final-node roles, $S = 0$ for inner/leaf roles):
+**Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Keccak delimited suffix (ePrint 2013/231) using the standard encoding: a variable-length suffix bit-string is stored LSB-first in the byte, with a delimiter `1` bit immediately after the last suffix bit. All five TreeWrap128 bytes use 3-bit suffixes (delimiter at bit 3). The last suffix bit encodes the Sakura node type: `0` for inner/leaf, `1` for final.
 
-| Domain byte | Hex | Binary (LSB-first suffix) | Frame bit $S$ | Role type |
-|-------------|-----|--------------------------|---------------|-----------|
-| `0x33` | 0011 0011 | 11 **0** 01 1 | 0 | inner (leaf init) |
-| `0x2B` | 0010 1011 | 11 **0** 10 1 | 0 | inner (chain value) |
-| `0x3B` | 0011 1011 | 11 **0** 11 1 | 0 | inner (KDF) |
-| `0x27` | 0010 0111 | 11 **0** 00 1 | 0 | final (single-node tag, $n=1$ only) |
-| `0x37` | 0011 0111 | 11 **1** 01 1 | 1 | final (tag accumulation) |
+| Domain byte | Binary | Suffix (LSB-first) | Last bit | Node type |
+|-------------|--------|-------------------|----------|-----------|
+| `0x08` | 0000 1**000** | `000` | 0 | inner (leaf init) |
+| `0x0A` | 0000 1**010** | `010` | 0 | inner (chain value) |
+| `0x09` | 0000 1**001** | `100` | 0 | inner (KDF) |
+| `0x0C` | 0000 1**100** | `001` | 1 | final (single-node tag) |
+| `0x0E` | 0000 1**110** | `011` | 1 | final (tag accumulation) |
 
-Inner/final node separability follows directly from Sakura Lemma 4: the tag-accumulation domain byte (`0x37`, $S = 1$) is distinguishable from all leaf domain bytes (`0x33`, `0x2B`, $S = 0$) and the KDF byte (`0x3B`, $S = 0$) by the frame bit alone. The single-node tag byte (`0x27`) is a dedicated single-node terminal domain byte with $S = 0$; its role separation comes from its distinct domain byte value (unique among all five bytes), not from the Sakura frame bit. It appears only in the $n = 1$ path where no final node exists, so no inner/final ambiguity arises.
+Inner/final node separability follows directly from Sakura Lemma 4: the final-node bytes (`0x0C`, `0x0E`) have last suffix bit `1`, while all inner/leaf bytes (`0x08`, `0x0A`, `0x09`) have last suffix bit `0`. These byte values were generated by `docs/generate-domain-bytes.py`, which encodes the Keccak delimited-suffix convention and verifies all constraints (TurboSHAKE range, node-type correctness, no collision with K12/SHAKE reserved bytes, pairwise distinctness).
 
-**Design constraint.** Future modifications to domain byte assignments MUST preserve Sakura suffix encoding compliance and the frame-bit partition between inner and final roles.
+**Design constraint.** Future modifications to domain byte assignments MUST preserve Sakura delimited-suffix encoding compliance and the node-type partition between inner and final roles.
 
 **Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation) and Sections 6.6–6.10 (independent leaf, tag, and commitment analysis).
 
@@ -523,7 +525,7 @@ $$
 and the derived-key map:
 
 $$
-F(X) = \mathrm{TurboSHAKE128}(X,\;\mathtt{0x3B},\;C).
+F(X) = \mathrm{TurboSHAKE128}(X,\;\mathtt{0x09},\;C).
 $$
 
 **Games.**
@@ -537,7 +539,7 @@ Game G0(A):                          Game G1(A):
 
 Enc/Dec use:                         Enc/Dec use:
   X <- ES(K)||ES(N)||ES(AD)           X <- ES(K)||ES(N)||ES(AD)
-  tw_key <- TS128(X, 0x3B, C)         tw_key <- R(X)
+  tw_key <- TS128(X, 0x09, C)         tw_key <- R(X)
   [proceed with tw_key]               [proceed with tw_key]
 ```
 
@@ -549,7 +551,7 @@ hop replaces only the KDF; all oracles and winning conditions are otherwise iden
 **Hop justification.**
 
 1. **Domain separation (Section 6.3).** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the KDF's $\pi$-calls (set
-   $\mathcal{K}$, domain byte `0x3B`) are on inputs disjoint from all other components' $\pi$-calls. The KDF sponge
+   $\mathcal{K}$, domain byte `0x09`) are on inputs disjoint from all other components' $\pi$-calls. The KDF sponge
    evaluation is therefore functionally independent of the leaf ciphers and final-node sponge.
 
 2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a single-evaluation keyed sponge (absorb context, squeeze
@@ -971,7 +973,7 @@ The following implementation decisions are performance-critical and align with h
   large messages without extra buffering copies.
 - **Reuse one scheduling pipeline for both directions.** Encrypt and decrypt should share the same chunk scheduling,
   index binding, and chain-value accumulation pipeline.
-- **Keep domain bytes and index mapping exact.** `0x33`, `0x2B`, `0x3B`, `0x27`, `0x37` constants and `key || LEU64(index)` binding (index 0
+- **Keep domain bytes and index mapping exact.** `0x08`, `0x0A`, `0x09`, `0x0C`, `0x0E` constants and `key || LEU64(index)` binding (index 0
   for the final node, indices 1..$n$ for leaves) are structural for interoperability and security analysis.
 - **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
   patterns when constructing final-node inputs.
@@ -1105,54 +1107,54 @@ Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. 
 |-------|-------|
 | len | 0 |
 | ct | (empty) |
-| tag | `75c535a63e00491b6a63871da0e3c430bb42688ceb8ba05543e96386d55564b4` |
+| tag | `6b5e7bc9c360fb508d49d442807e9a911794dec5697168116c71a643a2c130cb` |
 
 #### 10.1.2 One-Byte Plaintext (n = 1)
 
 | Field | Value |
 |-------|-------|
 | len | 1 |
-| ct | `fe` |
-| tag | `a4fd753dd0787e772b08db6f1c9b0a6cc4864ed390784d5d65f037a4f708346c` |
+| ct | `21` |
+| tag | `12fbbc47cad53d97edc63f2b2ccdcca46425784bea42611a8773111f7edd9e33` |
 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
-`c5b46e7da8de3ceb1801b4b3f800ee52b06419e224de77967a11994166c66954`.
+`44c08fe165b2b6d3675731b94095d5b2ba1c9b07a2c34e9e4af513b05281c1f3`.
 
 #### 10.1.3 B-Byte Plaintext (exactly one chunk, n = 1)
 
 | Field | Value |
 |-------|-------|
 | len | 8192 |
-| ct[:32] | `fe0aebeee41a66a6e3284247150dad651507b60cde3a23448df00abe9b47f029` |
-| tag | `d44d8a31f0c566c370dbd49d45de196265a809d68ee3cb54e1df3db8b42ba81a` |
+| ct[:32] | `21d4aa2fcd5c1318503dc048f0bc7f9e3443034e37d33f83ee252a909b138049` |
+| tag | `1df01cbdaabb104021ab1038c518200e00044f355943eeae5a3b83e10ee89033` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`c38c6774775e4ddb5d338ac439bcf1654f40b4916901043a992f51c5bb0c5d91`.
+`aa203a8464b240edb02f82cc4fdb459959aa368e3dd4335c484962aba104d461`.
 
 #### 10.1.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
 
 | Field | Value |
 |-------|-------|
 | len | 8193 |
-| ct[:32] | `fe0aebeee41a66a6e3284247150dad651507b60cde3a23448df00abe9b47f029` |
-| tag | `3f0314010ba842961c0f300702bf3b5eac18dba67ba4214654c7e2db72e0c30b` |
+| ct[:32] | `21d4aa2fcd5c1318503dc048f0bc7f9e3443034e37d33f83ee252a909b138049` |
+| tag | `6f04dcea1d2d17828c70d6dce078d33097ba565ae076ee396d668a6314fa244a` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`434be033d300ea9ac7a4881d509e21d20db7a2e437b159e152c776d16a5fe8c4`.
+`46818c37915ff41d797c1bbf783117a5b887e877d9f3ad517457d0be6b632955`.
 
 #### 10.1.5 4B-Byte Plaintext (four full chunks, n = 4)
 
 | Field | Value |
 |-------|-------|
 | len | 32768 |
-| ct[:32] | `fe0aebeee41a66a6e3284247150dad651507b60cde3a23448df00abe9b47f029` |
-| tag | `1018618a8e8f25e39f347db71f01e582803e802dce9afaef70f90be32d8b497c` |
+| ct[:32] | `21d4aa2fcd5c1318503dc048f0bc7f9e3443034e37d33f83ee252a909b138049` |
+| tag | `f61e3d9a360271df0c29de47f589ff5db6d76610594f6dae7539697ea035daea` |
 
 Flipping bit 0 of `ct[0]` yields tag
-`f2d1991095c7fe59cc5ff5d53f0bf9f0b76b0ae78202d4827e662688f8862798`.
+`10d5020616f325689f4b136d785e2078dc2e38bcf08dda283d2b16d667e2cd9b`.
 
 Swapping chunks 0 and 1 (bytes 0-8,191 and 8,192-16,383) yields tag
-`704270ad357c5a68a9f59b0f087f759d87a134b0f67f1cfcfe63f46a7f8ab985`.
+`dbd26ca0213facb9f86b859d9b224da80ca4191ac8b3f2b1ce61a98e48f95eb7`.
 
 #### 10.1.6 Round-Trip Consistency
 
@@ -1172,7 +1174,7 @@ These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including 
 | N | 12 bytes `00 01 02 ... 0b` |
 | AD | (empty) |
 | M len | 0 |
-| ct‖tag | `acdce0015a3ffe523fe241c4b0616a1744c9df604b36b812d769692cf3c8116f` |
+| ct‖tag | `4e9dd104094714954cc3c7473c4e092c8eda832312bd2baa2ab7e75b24181191` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1185,7 +1187,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `a0 a1 a2 ... ab` |
 | AD | 10 11 12 ... 14 |
 | M len | 33 (`00 01 02 ... mod 256`) |
-| ct‖tag | `0f7ef046cf60a9a7b457d4306d4f27cf3dafe0c1ce3de5a573e916fda2f523a6b4533abe4d32c9cab83c2e05cc9d0648a43a47a373ba9b73a6ce173590037c3822` |
+| ct‖tag | `692f59fc0e477458ec9b9b6e31e493efc771a004593d4a998dea4e0895f8d64cdb39eed7e78d159222a2edc7d8fe11cbe2230083cbf435064e1effd33c5720ee04` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1198,8 +1200,8 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `c0 c1 c2 ... cb` |
 | AD | 00 01 02 ... 10 |
 | M len | 8193 (`00 01 02 ... mod 256`) |
-| ct[:32] | `26b8fcc6d51833746cdb315036e8ffe2d45b34b5fde25a429f8c2856975cdbbd` |
-| tag | `0ab96f8f19ba6527916c1ddd8913b8c2d62723d51dbc6406694b8b37408604c1` |
+| ct[:32] | `82de7a53a883c79d476ecb2872672f936733eb990a63354569213721d43a3010` |
+| tag | `4deacbb8913d67c152e1872b977d7f9f905c02b772dbaf167d1eb2db064acb7e` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1212,7 +1214,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `ff ee dd cc bb aa 99 88 77 66 55 44` |
 | AD | a1 a2 a3 ... a4 |
 | M len | 64 (`00 01 02 ... mod 256`) |
-| ct‖tag | `12ecaa6ac37cecdb235a56f0f47d41f66c11bcd718d446bf66dfb89afbf716f7ba7b744570778c82cfcbd1b5753ed4798b8199891b361aca990dc0acd4dbf3c38d8604ceac0f6ee97aa94e9326aa8310251aec6e67cc22986cf298b6b17c70d0` |
+| ct‖tag | `2ba1d25784079140f63afd324eb15b32bac41bdb49ea8df07a1d1ca3eaa5ad0fe02444f7d360ef90c511f0a6a0497b9cfd7070c264a636f531c9723f2da5a1b0b940cea214442ae19ba3218c8b02d6c200d8b6f3531c0d055d5755cf940fe814` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1228,7 +1230,7 @@ Nonce reuse is out of scope for Section 6 nonce-respecting claims.
 | N | 12 bytes `00 01 02 ... 0b` |
 | AD | 10 11 12 ... 1b |
 | M len | 48 (`00 01 02 ... mod 256`) |
-| ct‖tag | `b01289d7720b07a06a3c2fd4022bb4b17b8dd6446889499bb3a7dbefd6ea2199ed89f592727685ad34d0a3a0f2e809939d991655392bd353a8b48c999b6c1056d22b5a1ce2c436069f6d82cb9faaca7a` |
+| ct‖tag | `1ef8c15476f571c4e9fd2e8ddaf9430f73b9007d43701e46b2180b0e43db56a70e01affdade84d9da19d16bcd8bf0f7f19616b4d735db7c4aa3e50382dab645493e25b8bef0595ef2cbec67b2d5c82f1` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1243,7 +1245,7 @@ validate the original `ct‖tag`.
 | N | 12 bytes `0c 0d 0e ... 17` |
 | AD | (empty) |
 | M len | 32 (`00 01 02 ... 1f`) |
-| ct‖tag | `75c8ffb697d1118550c83650032d1094c8f89ee84311f981735d1960f050eac2afed5c0a18e9d1a0d903479e83bf0b9fc73a499dc7838836df1b1821d190034f` |
+| ct‖tag | `348d9dc83475b83cb27fb325946f5df22ee98d4beb2852e2b31be39657359946de5762dffa3c929fe9b681bc7cd971e6a3058b4ec97faa19a7fa394e87e9a1b5` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1257,7 +1259,7 @@ Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖
 | N | 12 bytes `ab ab ac ad ae af b0 b1 b2 b3 b4 b5` |
 | AD | ab ab ab ... ab |
 | M len | 17 (`00 01 02 ... 10`) |
-| ct‖tag | `0a611a56065902161736588f3f5aee00d4be61895a55c1996550fefb486ad366dc953f7868324e5674a650e4a5b24e2a6b` |
+| ct‖tag | `2a6b551afd2298fb6e0d5166519cc6746f3107e7a320d94f96b2c7d813ccba3a12e410b06b82d9b6a966f907ad201b877d` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1270,8 +1272,8 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `d0 d1 d2 ... db` |
 | AD | 20 21 22 |
 | M len | 167 (`00 01 02 ... mod 256`) |
-| ct[:32] | `732973ac8c2fb9071bdb5892cfaefbc3a7565836528cc9f86b568b548c9a9f73` |
-| tag | `cbb48596c87747402e24e41debd1987b01950bc749409f71161b05ec732d6878` |
+| ct[:32] | `f07eea9793b14516c350467b8a510e4c1b1ec36886ca6d2c7bd140006ccbfe1c` |
+| tag | `9ecef144bb0fbfc273d2ba2382546877a4ca44df5f486b37a05f32a4d41a917e` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1284,8 +1286,8 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `d0 d1 d2 ... db` |
 | AD | 20 21 22 |
 | M len | 168 (`00 01 02 ... mod 256`) |
-| ct[:32] | `732973ac8c2fb9071bdb5892cfaefbc3a7565836528cc9f86b568b548c9a9f73` |
-| tag | `696bdcd1a42d3eacb5a499aa705869274e79732d652eac9877527bed23a89c86` |
+| ct[:32] | `f07eea9793b14516c350467b8a510e4c1b1ec36886ca6d2c7bd140006ccbfe1c` |
+| tag | `41f4efa33dfae3634d9a2afe55bc99efeb1a413fa3d62f2690bf0edfb1eb484c` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1298,7 +1300,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 32 bytes `e0 e1 e2 ... ff` |
 | AD | 20 21 22 |
 | M len | 48 (`00 01 02 ... mod 256`) |
-| ct‖tag | `1066ff2083d4da1e0efe6b42845a9bab31777a611e3691a9a26bf5125e6d6ffb92068f200418a5887e28bc72bd1859ae965e05b8e3bbab95af1aeb24c7b4842f0902a55ae8ab6bd41af30214060cc57f` |
+| ct‖tag | `a01962fe929930e39075e7fcd1c5a1bbdba6cce465f40378331a2c26fb95b4afa40da53f5e3b9b3931ba75c78f2d9352a04bc3efaaeaec8e04b87e9f183c89b126ee16e81a7aaff9b4e81b002898e9b0` |
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
