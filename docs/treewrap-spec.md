@@ -913,9 +913,9 @@ Required baseline profile (MUST):
 - If random nonces are used, additionally enforce
   $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b+1} \le p_{\mathrm{nonce}}$ for nonce bit-length $b$ and chosen nonce-collision target
   $p_{\mathrm{nonce}}$.
-- Define and enforce a failed-verification budget $S_{\mathrm{cap}}$ per key epoch. If $S > S_{\mathrm{cap}}$,
-  implementations MUST stop accepting further decryption attempts for that epoch and rotate to a fresh key epoch before
-  resuming.
+- Define and enforce a failed-verification budget $S_{\mathrm{cap}}$ per key epoch (RECOMMENDED: $S_{\mathrm{cap}} = 2^{32}$).
+  If $S > S_{\mathrm{cap}}$, implementations MUST stop accepting further decryption attempts for that epoch and rotate to
+  a fresh key epoch before resuming.
 - On any cap exceedance (workload, invocation, nonce, or failed-verification policy), implementations MUST rotate to a
   fresh key epoch before any further encryption.
 
