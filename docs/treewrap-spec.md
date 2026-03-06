@@ -312,6 +312,10 @@ adversary.
 > enables full plaintext recovery given one known plaintext. Nonce uniqueness per $(K, AD)$ pair is a
 > hard security requirement (Section 7.4), not a quality-of-implementation concern.
 
+**Length leakage.** TreeWrap128 ciphertexts reveal the exact plaintext length: `|ct| = |M|` (plus the
+fixed $\tau$-byte tag). This is inherent to any stream-cipher-based AEAD and is not mitigated by this
+construction. Applications requiring length hiding must pad plaintexts before encryption.
+
 **Assumption scope.** Concrete bounds in this section are conditional on Keccak-p[1600,12] behaving as an ideal
 permutation at the claimed workloads. This is a modeling assumption, not a proof about reduced-round Keccak-p itself.
 
