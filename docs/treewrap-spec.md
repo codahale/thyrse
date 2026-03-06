@@ -1167,7 +1167,7 @@ proof-bound figure alone.
   Proof Approach." FSE 2015. Proves PRF security of both inner-keyed and outer-keyed sponge variants. The outer-keyed
   result covers TreeWrap128's rate-absorbed key initialization (Section 6.2).
 - Dinur, I., Dunkelman, O., and Shamir, A. "Improved practical attacks on round-reduced Keccak." Journal of
-  Cryptology 27(2), 2014. Reports practical 4-round collisions and 5-round near-collision results in standard
+  Cryptology 27(4), 2014. Reports practical 4-round collisions and 5-round near-collision results in standard
   Keccak-224/256 settings.
 - Keccak Team. "Keccak Crunchy Crypto Collision and Pre-image Contest."
   https://keccak.team/crunchy_contest.html. Public contest record for reduced-round Keccak[c=160] instances, including
