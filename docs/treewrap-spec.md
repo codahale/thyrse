@@ -263,8 +263,7 @@ TreeWrap128 derives a per-invocation key from `(K, N, AD)` using TurboSHAKE128, 
 **`TreeWrap128.Encrypt(K, N, AD, M) -> ct || tag`**\
 **`TreeWrap128.Decrypt(K, N, AD, ct || tag) -> M | None`**
 
-**Master-key requirement.** `K` MUST have at least 128 bits of min-entropy and MUST be at least 16 bytes long. Uniformly
-random 32-byte keys are RECOMMENDED.
+**Master-key requirement.** `K` MUST be a uniformly random 32-byte (256-bit) key.
 
 **Key derivation:**
 
