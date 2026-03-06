@@ -619,68 +619,7 @@ one key.
 
 **Consequence.**
 By Lemma 3 (fixed-key bijection), distinct plaintexts produce distinct ciphertexts under a fixed key, so the tag can be
-viewed equivalently as a function of plaintext or ciphertext. Tag pseudorandomness is established separately in Section 6.6.
-
-### 6.6 Tag Security
-
-This section establishes that the tag output is pseudorandom and collision-resistant under a uniformly random key.
-Section 6.6.1 establishes tag PRF security; Section 6.6.2 establishes tag collision resistance. The
-$n = 1$ and $n > 1$ paths are structurally parallel: both are keyed sponge instances with distinct indices
-(Section 5). They are analyzed separately below, but the bound is the same in both cases.
-
-#### 6.6.1 Tag PRF Security
-
-**Case $n = 1$.** The tag is `single_node_tag()`: a direct squeeze from the leaf's overwrite-mode keyed sponge (index 1)
-with domain byte 0x27 (see Section 5 for the construction). By Lemma 1, this output is pseudorandom up to
-$\varepsilon_{\mathrm{ks}}(1, l_1, l_1, t)$, where $l_1$ is the number of input blocks for the single leaf.
-
-**Case $n > 1$.** The final node is a keyed sponge: it is a TurboSHAKE128 call whose input begins with
-$K_{tw} \| \mathrm{LEU64}(0)$ (see Section 5, final-node computation). Leaves use indices 1 through $n$; the final
-node uses index 0. All init inputs are therefore distinct.
-
-By Lemma 1 (generalized to XOR-absorb mode), the final node's rate outputs are pseudorandom. By the Domain Separation
-Lemma (Section 6.3), the final-node domain byte 0x37 (Sakura frame bit $S=1$) is distinct from all leaf domain bytes
-($S=0$). Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the final node's $\pi$-calls are disjoint from all leaf
-$\pi$-calls. The tag is a squeeze from this keyed sponge — pseudorandom by Lemma 1.
-
-Combining both cases:
-
-$$
-\varepsilon_{\mathrm{prf}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{tag}}, \ell_{\mathrm{tag}}, \mu_{\mathrm{tag}}, t),
-$$
-
-where $q_{\mathrm{tag}}$, $\ell_{\mathrm{tag}}$, and $\mu_{\mathrm{tag}}$ are the number of keyed-sponge evaluations,
-maximum input blocks per evaluation, and total input blocks for the tag computation, respectively.
-
-#### 6.6.2 Tag Collision Resistance
-
-For $Q$ AEAD outputs (each a ciphertext-tag pair, as defined in Section 6.1) under one fixed secret key:
-
-$$
-\varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{tag}}, \ell_{\mathrm{tag}}, \mu_{\mathrm{tag}}, t) + \frac{Q^2}{2^{8\tau+1}}.
-$$
-
-The $\varepsilon_{\mathrm{cap}}$ term accounts for the event $\mathsf{Bad}_{\mathrm{perm}}$ (which is conditioned
-away in the $Q^2/2^{8\tau+1}$ term); combining these via a union bound gives the unconditional bound.
-Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$, tags are pseudorandom $\tau$-byte outputs (Section 6.6.1). The
-second term is the birthday bound on collisions among $Q$ approximately independent, uniformly random $8\tau$-bit
-strings.
-
-Within a single derived key: distinct plaintexts produce distinct ciphertexts (Lemma 3). For $n = 1$, distinct
-ciphertexts produce distinct sponge state evolutions and hence distinct tag-squeeze inputs. For $n > 1$, distinct
-ciphertexts in at least one chunk produce at least one different chain value (Lemma 3 + ideal permutation on distinct
-inputs). The final node absorbs different data; under $\neg\mathsf{Bad}_{\mathrm{perm}}$, its capacity state diverges,
-producing a unique tag-squeeze input. Either way, the ideal permutation on distinct inputs produces approximately
-independent uniform outputs.
-
-Across different derived keys: distinct keys produce different init absorptions, hence different capacity states after
-the first permutation call. With no capacity collision between any pair of $\pi$-calls
-($\neg\mathsf{Bad}_{\mathrm{perm}}$), the two tag computations query $\pi$ at disjoint inputs, producing approximately
-independent uniform outputs (see the PRP/PRF convention in Section 6.1).
-
-Combining both cases: for any pair of distinct AEAD outputs $(i, j)$ (whether within-key or cross-key),
-$\Pr[T_i = T_j] \leq 2^{-8\tau}$.
-The birthday bound over all $\binom{Q}{2}$ pairs then gives the $Q^2/2^{8\tau+1}$ term.
+viewed equivalently as a function of plaintext or ciphertext.
 
 ### 6.7 IND-CPA (Nonce-Respecting)
 
@@ -739,11 +678,8 @@ distance, absorbed by $\varepsilon_{\mathrm{cap}}$ per the Section 6.1 conventio
 
 The adversary therefore receives approximately uniformly random ciphertexts regardless of which plaintext it submits.
 
-Therefore:
-
-$$
-\varepsilon_{\mathrm{ind\text{-}cpa}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}}.
-$$
+The bare IND-CPA advantage is therefore zero (absorbed into $\varepsilon_{\mathrm{cap}}$ via the PRP/PRF switching
+convention of Section 6.1). The total bound follows from the decomposition in Section 6.5.
 
 ### 6.8 INT-CTXT
 
@@ -766,8 +702,8 @@ Oracle Forge(N, AD, C):
 **Claim.** $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.$
 
 *Justification.* In $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$, each
-forgery attempt targets a context with a uniformly random key. The tag is a pseudorandom $\tau$-byte value (by
-Lemma 1, Section 6.5, and Section 6.6). Each forgery attempt — i.e., a (ciphertext, tag) pair not previously output by the
+forgery attempt targets a context with a uniformly random key. By the exact uniformity principle (Section 6.1), the tag-squeeze $\pi$-call has a fresh input
+(distinct capacity state under $\neg\mathsf{Bad}_{\mathrm{perm}}$), so the tag is a truly uniform $\tau$-byte value. Each forgery attempt — i.e., a (ciphertext, tag) pair not previously output by the
 encryption oracle (standard INT-CTXT definition) — must guess the correct $\tau$-byte tag value, succeeding with
 probability at most $2^{-8\tau}$.
 
@@ -783,8 +719,10 @@ computation is independent (different init capacity states, no capacity collisio
 $\neg\mathsf{Bad}_{\mathrm{perm}}$). Across $S$ attempts (union bound):
 
 $$
-\varepsilon_{\mathrm{int\text{-}ctxt}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{S}{2^{8\tau}}.
+\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le \frac{S}{2^{8\tau}}.
 $$
+
+The total bound follows from the decomposition in Section 6.5.
 
 If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$.
 
@@ -814,11 +752,7 @@ $$
 \mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \frac{S}{2^{8\tau}}.
 $$
 
-**Step 3: Lift through bridge theorem.** Applying the decomposition from Section 6.4:
-
-$$
-\varepsilon_{\mathrm{ind\text{-}cca2}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{S}{2^{8\tau}}.
-$$
+**Step 3: Total bound.** The total bound follows from the decomposition in Section 6.5.
 
 > *Note on construction type.* TreeWrap128 is structurally an encrypt-and-MAC scheme (the tag is derived from the
 > same sponge state as the ciphertext), not an Encrypt-then-MAC scheme with independent keys. The BN00 composition
@@ -850,8 +784,7 @@ Oracle Enc(N, AD, M):
   return TreeWrap128.Encrypt(K, N, AD, M)
 ```
 
-As in Section 6.7, move to $\mathsf{G}_1$ where context-to-key derivation is replaced by a lazy random function and pay
-$\varepsilon_{\mathrm{cap}}$ plus $\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$.
+Working in $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$ (Section 6.5):
 
 Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
 
@@ -867,19 +800,19 @@ Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
   **Adversary strategy.** The adversary fixes $C^\star = \mathit{ct}^\star \| T^\star$. One valid opening (say under
   context $(N,AD)$) fixes $T^\star$ to the unique correct tag for $\mathit{ct}^\star$ under that context's derived key.
   The second opening requires that $\mathrm{DecryptAndMAC}$ under the independently random key for $(N',AD')$ also
-  produces tag $T^\star$ on $\mathit{ct}^\star$. By tag PRF security (Section 6.6.1), this second tag is approximately
-  uniform over $\{0,1\}^{8\tau}$ and independent of the first, so the match probability is at most $2^{-8\tau}$ per
+  produces tag $T^\star$ on $\mathit{ct}^\star$. By the exact uniformity principle (Section 6.1), the
+  tag-squeeze $\pi$-call under the second key has a fresh input, so this second tag is truly uniform
+  over $\{0,1\}^{8\tau}$ and independent of the first, so the match probability is at most $2^{-8\tau}$ per
   candidate context. Over at most $Q$ candidate contexts (encryption-oracle queries plus the two openings), the union
   bound gives $\Pr[\text{match}] \leq Q / 2^{8\tau}$.
 
 Therefore:
 
 $$
-\varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{Q}{2^{8\tau}}.
+\mathrm{Adv}_{\mathrm{CMT\text{-}4}}^{\mathrm{bare}} \le \frac{Q}{2^{8\tau}}.
 $$
 
-Here $Q$ (as defined in Section 6.1) counts all AEAD outputs in the experiment. For $\tau = 32$, the denominator is
-$2^{256}$.
+The total bound follows from the decomposition in Section 6.5. For $\tau = 32$, the bare denominator is $2^{256}$.
 
 ## 7. Operational Security
 
