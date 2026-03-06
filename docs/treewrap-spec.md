@@ -297,11 +297,11 @@ def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes |
 This section gives a complete reduction from TreeWrap128 AEAD security to the ideal-permutation assumption on
 Keccak-p[1600,12]. The argument has two layers:
 
-- **Layer A (Section 6.2).** A single game hop replaces the TurboSHAKE128 KDF with a lazy random function, reducing AEAD
-  security to the security of the internal functions under independent, uniformly random per-context keys.
-- **Layer B (Sections 6.3–6.8).** Under random keys, each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) decomposes
-  into explicit properties of keyed sponge instances (overwrite-mode leaves and the XOR-absorb final node):
-  pseudorandomness of rate outputs, structural state equivalence, and fixed-key bijection.
+- **Layer A (Section 6.4).** A single game hop replaces the TurboSHAKE128 KDF with a lazy random function, using the
+  MRV15 keyed-sponge PRF security framework (Section 6.2) to bound the distinguishing advantage.
+- **Layer B (Sections 6.5–6.10).** Under random keys, each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) decomposes
+  into keyed-sponge PRF properties of the internal functions: pseudorandomness of rate outputs, structural state
+  equivalence, and fixed-key bijection.
 
 All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $c = 256$ bits and $\tau = 32$ tag
 bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
@@ -328,7 +328,7 @@ Let:
 - $\sigma$: total online Keccak-p calls performed by the construction across all oracle queries
   (including KDF, leaf-sponge, and tag-accumulation permutation calls).
 - $t$: adversary offline Keccak-p calls (an analysis parameter representing direct access to the ideal
-  permutation $\pi$ in the ideal-permutation model, not a deployment-controlled quantity; Section 6.12 provides
+  permutation $\pi$ in the ideal-permutation model, not a deployment-controlled quantity; Section 6.14 provides
   operational guidance on choosing $t$ for bound evaluation).
 - $S$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
 - $Q$: total number of AEAD outputs (encryption-oracle responses plus any outputs the adversary compares in a forgery or
@@ -338,23 +338,31 @@ Let:
 - $n = \max(1, \lceil |M|/B \rceil)$: number of chunks for a message of length $|M|$.
 - Throughout Section 6, $c = 8C = 256$ denotes the capacity in bits.
 
+Define:
+
+$$
+\varepsilon_{\mathrm{cap}} \;\stackrel{\mathrm{def}}{=}\; \frac{(\sigma + t)^2}{2^{c+1}}.
+$$
+
+This is the capacity birthday bound. Let $\mathsf{Bad}_{\mathrm{perm}}$ be the event that the ideal permutation
+exhibits a capacity-part collision among any pair of the $\sigma + t$ total evaluations (online construction calls and
+adversary offline calls). A *capacity-part collision* occurs when two distinct Keccak-p evaluations produce equal
+256-bit capacity outputs (the low $c$ bits of the 1600-bit state). By the birthday bound,
+$\Pr[\mathsf{Bad}_{\mathrm{perm}}] \leq \binom{\sigma+t}{2} \cdot 2^{-c} \leq \varepsilon_{\mathrm{cap}}$.
+
+Let $\varepsilon_{\mathrm{ks}}(q, \ell, \mu, N)$ denote the MRV15 keyed-sponge PRF advantage bound for $q$ keyed-sponge
+evaluations of at most $\ell$ input blocks each, $\mu$ total input blocks across all evaluations ($\mu \leq q\ell$),
+and $N$ adversary offline $\pi$-queries. The precise expression is given in Section 6.2.
+
+**PRP/PRF switching.** The ideal permutation samples without replacement. Throughout Section 6, "uniform" and
+"independent" outputs from $\pi$ on distinct inputs are understood modulo the PRP/PRF switching distance
+$\sigma^2 / 2^{1601}$, which is negligible compared to $\varepsilon_{\mathrm{cap}}$ for $c = 256 \ll 1600$. This cost
+is not repeated in individual theorem statements.
+
 Throughout this section, "capacity state," "capacity output," and "capacity projection" all refer to the 256-bit
 low-order portion of the 1600-bit Keccak-p state.
 
 Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
-
-Define the common structural term:
-
-$$
-\varepsilon_{\mathrm{indiff}} \;\stackrel{\mathrm{def}}{=}\; \frac{(\sigma + t)^2}{2^{c+1}}.
-$$
-
-This is the standard sponge indifferentiability bound (BDPVA07). **The quantity $\sigma + t$ counts all Keccak-p
-evaluations globally -- across all five domain-byte roles (0x33, 0x2B, 0x3B, 0x27, 0x37, assigned in Section 4), unpadded intermediate encrypt/decrypt
-permutations, and the adversary's offline permutation queries -- so it is charged once and covers all components
-simultaneously.** Because $\mathsf{Bad}_{\mathrm{perm}}$ (Section 6.2) is defined over all $\sigma + t$ evaluations
-regardless of domain byte, a single $\varepsilon_{\mathrm{indiff}}$ charge covers all sponge roles. Domain separation
-ensures that absent $\mathsf{Bad}_{\mathrm{perm}}$, each role's capacity states are disjoint from every other role's.
 
 ### 6.2 Bridge Theorem: KDF to Random Key
 
