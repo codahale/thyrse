@@ -1,6 +1,6 @@
 // Package thyrse implements a transcript-based cryptographic protocol framework.
 //
-// At each finalizing operation, TurboSHAKE128 is evaluated over the transcript to derive keys, chain values, and
+// At each finalizing operation, a Keccak duplex is evaluated over the transcript to derive keys, chain values, and
 // pseudorandom output. The transcript encoding is recoverable, providing random-oracle-indifferentiable key derivation
 // via the RO-KDF construction.
 //
@@ -29,9 +29,9 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 // Protocol is a transcript-based cryptographic protocol instance.
 //
 // Operations append frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal) evaluate
-// TurboSHAKE128 over the transcript, derive outputs, and reset the transcript with a chain value.
+// the duplex over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
-	h         keccak.TurboSHAKE128
+	h         keccak.Duplex
 	initLabel string
 }
 
@@ -39,7 +39,7 @@ type Protocol struct {
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
 	var p Protocol
-	p.h = keccak.NewTurboSHAKE128(dsChain)
+	// Duplex zero value is ready to use, ds is passed to PadPermute/Chain
 	p.initLabel = label
 	p.writeOpLabel(opInit, label)
 	return &p
@@ -360,30 +360,30 @@ func (p *Protocol) Clone() *Protocol {
 // Clear overwrites the protocol state with zeros and invalidates the instance. After Clear, the instance must not be
 // used.
 func (p *Protocol) Clear() {
-	p.h.Reset(0)
+	p.h.Reset()
 	p.initLabel = ""
 }
 
-// finalize performs the dual TurboSHAKE128 finalization in parallel using [keccak.TurboSHAKE128.Chain].
+// finalize performs the dual Duplex finalization using [keccak.Duplex.Chain].
 //
-// For Derive, Mask, and Seal: p.h (constructed with dsChain=0x20) produces the
-// chain value, and the clone (finalized with outputDS) produces the output read
-// into dst.
+// For Derive, Mask, and Seal: p.h (padded with dsChain=0x20) produces the
+// chain value, and the clone (padded with outputDS) produces the output
+// squeezed into dst.
 //
-// For Ratchet: the clone (finalized with dsRatchet=0x24) produces the chain value;
+// For Ratchet: the clone (padded with dsRatchet=0x24) produces the chain value;
 // p.h's output is discarded.
 func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
 
-	var oh keccak.TurboSHAKE128
+	var oh keccak.Duplex
 	if outputDS == dsRatchet {
-		p.h.Chain(&oh, dsRatchet)
-		_, _ = oh.Read(cv[:])
+		p.h.Chain(&oh, dsChain, dsRatchet)
+		oh.Squeeze(cv[:])
 	} else {
-		p.h.Chain(&oh, outputDS)
-		_, _ = p.h.Read(cv[:])
+		p.h.Chain(&oh, dsChain, outputDS)
+		p.h.Squeeze(cv[:])
 		if dst != nil {
-			_, _ = oh.Read(dst)
+			oh.Squeeze(dst)
 		}
 	}
 
@@ -401,9 +401,9 @@ func (p *Protocol) writeOpLabel(op byte, label string) {
 		buf[1] = 1
 		buf[2] = byte(n)
 		copy(buf[3:], label)
-		_, _ = p.h.Write(buf[:3+n])
+		p.h.Absorb(buf[:3+n])
 	} else {
-		_, _ = p.h.Write([]byte{op})
+		p.h.Absorb([]byte{op})
 		p.writeLengthEncode([]byte(label))
 	}
 }
@@ -411,7 +411,7 @@ func (p *Protocol) writeOpLabel(op byte, label string) {
 // resetChain resets the transcript with a CHAIN frame. The chain value is always chainValueSize bytes and the tag, when
 // present, is always treewrap.TagSize bytes.
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
-	p.h.Reset(dsChain)
+	p.h.Reset()
 
 	// Build the entire CHAIN frame in a single stack buffer:
 	//   opChain || originOp || left_encode(count) || left_encode(len(cv)) || cv
@@ -429,13 +429,13 @@ func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 
 	if len(tag) == 0 {
 		buf[3] = 1 // count = 1
-		_, _ = p.h.Write(buf[:n])
+		p.h.Absorb(buf[:n])
 	} else {
 		buf[3] = 2 // count = 2
 		buf[n] = 1 // left_encode length prefix
 		buf[n+1] = byte(len(tag))
 		copy(buf[n+2:], tag)
-		_, _ = p.h.Write(buf[:n+2+len(tag)])
+		p.h.Absorb(buf[:n+2+len(tag)])
 	}
 }
 
@@ -445,7 +445,7 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 
 	if x == 0 {
 		buf[0] = 1
-		_, _ = p.h.Write(buf[:2])
+		p.h.Absorb(buf[:2])
 		return
 	}
 
@@ -457,7 +457,7 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 		i--
 	}
 	buf[i] = byte(8 - i)
-	_, _ = p.h.Write(buf[i:9])
+	p.h.Absorb(buf[i:9])
 }
 
 // writeLengthEncode writes length_encode(x) = left_encode(len(x)) || x.
@@ -469,12 +469,12 @@ func (p *Protocol) writeLengthEncode(data []byte) {
 		buf[0] = 1
 		buf[1] = byte(n)
 		copy(buf[2:], data)
-		_, _ = p.h.Write(buf[:2+n])
+		p.h.Absorb(buf[:2+n])
 		return
 	}
 	p.writeLeftEncode(uint64(n))
 	if n > 0 {
-		_, _ = p.h.Write(data)
+		p.h.Absorb(data)
 	}
 }
 
