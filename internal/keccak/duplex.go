@@ -74,22 +74,60 @@ func (d *Duplex) AbsorbCV(s *State1) {
 
 // AbsorbCVx2 absorbs 2 chain values (32 bytes each) from s in instance order.
 func (d *Duplex) AbsorbCVx2(s *State2) {
+	if d.pos&7 != 0 {
+		panic("keccak: AbsorbCV on non-lane-aligned state")
+	}
 	for inst := range 2 {
-		d.absorbCVWords(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+		d.absorbCVLanes(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
 	}
 }
 
 // AbsorbCVx4 absorbs 4 chain values (32 bytes each) from s in instance order.
 func (d *Duplex) AbsorbCVx4(s *State4) {
+	if d.pos&7 != 0 {
+		panic("keccak: AbsorbCV on non-lane-aligned state")
+	}
 	for inst := range 4 {
-		d.absorbCVWords(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+		d.absorbCVLanes(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
 	}
 }
 
 // AbsorbCVx8 absorbs 8 chain values (32 bytes each) from s in instance order.
 func (d *Duplex) AbsorbCVx8(s *State8) {
+	if d.pos&7 != 0 {
+		panic("keccak: AbsorbCV on non-lane-aligned state")
+	}
 	for inst := range 8 {
-		d.absorbCVWords(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+		d.absorbCVLanes(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+	}
+}
+
+// absorbCVLanes absorbs a 4-lane (32-byte) chain value. The caller must ensure
+// d.pos is lane-aligned.
+func (d *Duplex) absorbCVLanes(w0, w1, w2, w3 uint64) {
+	lane := d.pos >> 3
+	remaining := (Rate >> 3) - lane
+	if remaining >= 4 {
+		d.s.a[lane] ^= w0
+		d.s.a[lane+1] ^= w1
+		d.s.a[lane+2] ^= w2
+		d.s.a[lane+3] ^= w3
+		d.pos += 32
+		if d.pos == Rate {
+			d.s.Permute12()
+			d.pos = 0
+		}
+		return
+	}
+	words := [4]uint64{w0, w1, w2, w3}
+	for i := range remaining {
+		d.s.a[lane+i] ^= words[i]
+	}
+	d.s.Permute12()
+	d.pos = 0
+	for i := remaining; i < 4; i++ {
+		d.s.a[i-remaining] ^= words[i]
+		d.pos += 8
 	}
 }
 
