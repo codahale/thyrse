@@ -112,6 +112,9 @@ func (s *State1) PadPermute(pos int, ds byte) {
 // ExtractBytes copies the first len(dst) bytes from the state.
 func (s *State1) ExtractBytes(dst []byte) {
 	full := len(dst) >> 3
+	if full > 0 {
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		binary.LittleEndian.PutUint64(dst[i*8:i*8+8], s.a[i])
 	}
@@ -135,6 +138,9 @@ func (s *State1) XORBytesAt(pos int, data []byte) {
 	}
 
 	full := len(data) >> 3
+	if full > 0 {
+		_ = data[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		s.a[lane+i] ^= binary.LittleEndian.Uint64(data[base : base+8])
@@ -192,6 +198,10 @@ func (s *State1) EncryptBytesAt(pos int, src, dst []byte) {
 	}
 
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		w := binary.LittleEndian.Uint64(src[base : base+8])
@@ -224,6 +234,10 @@ func (s *State1) DecryptBytesAt(pos int, src, dst []byte) {
 	}
 
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		ct := binary.LittleEndian.Uint64(src[base : base+8])
@@ -351,6 +365,10 @@ func (s *State2) PadPermute(pos int, ds byte) {
 // EncryptBytes performs SpongeWrap encryption on a partial block for instance inst.
 func (s *State2) EncryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		w := binary.LittleEndian.Uint64(src[base : base+8])
@@ -368,6 +386,10 @@ func (s *State2) EncryptBytes(inst int, src, dst []byte) {
 // DecryptBytes performs SpongeWrap decryption on a partial block for instance inst.
 func (s *State2) DecryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		ct := binary.LittleEndian.Uint64(src[base : base+8])
@@ -502,6 +524,10 @@ func (s *State4) PadPermute(pos int, ds byte) {
 // EncryptBytes performs SpongeWrap encryption on a partial block for instance inst.
 func (s *State4) EncryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		w := binary.LittleEndian.Uint64(src[base : base+8])
@@ -519,6 +545,10 @@ func (s *State4) EncryptBytes(inst int, src, dst []byte) {
 // DecryptBytes performs SpongeWrap decryption on a partial block for instance inst.
 func (s *State4) DecryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		ct := binary.LittleEndian.Uint64(src[base : base+8])
@@ -671,6 +701,10 @@ func (s *State8) PadPermute(pos int, ds byte) {
 // EncryptBytes performs SpongeWrap encryption on a partial block for instance inst.
 func (s *State8) EncryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		w := binary.LittleEndian.Uint64(src[base : base+8])
@@ -688,6 +722,10 @@ func (s *State8) EncryptBytes(inst int, src, dst []byte) {
 // DecryptBytes performs SpongeWrap decryption on a partial block for instance inst.
 func (s *State8) DecryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
+	if full > 0 {
+		_ = src[full*8-1] // BCE hint
+		_ = dst[full*8-1] // BCE hint
+	}
 	for i := range full {
 		base := i << 3
 		ct := binary.LittleEndian.Uint64(src[base : base+8])
