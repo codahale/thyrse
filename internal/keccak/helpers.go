@@ -597,3 +597,53 @@ func (s *State8) FastLoopDecrypt168(src, dst []byte, stride int) int {
 	}
 	return n
 }
+
+// PadPermute applies TurboSHAKE padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
+func (s *State8) PadPermute(pos int, ds byte) {
+	shift := uint((pos & 7) << 3)
+	dsMask := uint64(ds) << shift
+	posLane := pos >> 3
+	endShift := uint(((Rate - 1) & 7) << 3)
+	endMask := uint64(0x80) << endShift
+	endLane := (Rate - 1) >> 3
+	for inst := range 8 {
+		s.a[posLane][inst] ^= dsMask
+		s.a[endLane][inst] ^= endMask
+	}
+	s.Permute12()
+}
+
+// EncryptBytes performs SpongeWrap encryption on a partial block for instance inst.
+func (s *State8) EncryptBytes(inst int, src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		w := binary.LittleEndian.Uint64(src[base : base+8])
+		s.a[i][inst] ^= w
+		binary.LittleEndian.PutUint64(dst[base:base+8], s.a[i][inst])
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		w := loadPartialLE(src[base : base+rem])
+		s.a[full][inst] ^= w
+		storePartialLE(dst[base:base+rem], s.a[full][inst])
+	}
+}
+
+// DecryptBytes performs SpongeWrap decryption on a partial block for instance inst.
+func (s *State8) DecryptBytes(inst int, src, dst []byte) {
+	full := len(src) >> 3
+	for i := range full {
+		base := i << 3
+		ct := binary.LittleEndian.Uint64(src[base : base+8])
+		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.a[i][inst])
+		s.a[i][inst] = ct
+	}
+	if rem := len(src) & 7; rem > 0 {
+		base := full << 3
+		ct := loadPartialLE(src[base : base+rem])
+		mask := uint64(1)<<(rem*8) - 1
+		storePartialLE(dst[base:base+rem], ct^(s.a[full][inst]&mask))
+		s.a[full][inst] = (s.a[full][inst] & ^mask) | ct
+	}
+}
