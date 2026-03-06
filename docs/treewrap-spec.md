@@ -869,7 +869,7 @@ $1/2^{8\tau}$.
 
 For $\tau = C = 32$, both birthday denominators are $2^{257}$.
 
-### 6.9 Bare Usage (EncryptAndMAC / DecryptAndMAC)
+### 6.11 Bare Usage (EncryptAndMAC / DecryptAndMAC)
 
 The internal `EncryptAndMAC`/`DecryptAndMAC` functions (Section 5.1) may be used directly by callers that manage
 per-invocation key uniqueness and tag verification externally. This is an advanced interface.
@@ -885,13 +885,13 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
 | CMT-4                        | Provide external key derivation with collision resistance over injectively encoded AEAD contexts. |
 
-### 6.10 Chunk Reordering, Length Changes, and Empty Input
+### 6.12 Chunk Reordering, Length Changes, and Empty Input
 
 - Reordering chunks changes leaf-index binding (`key || LEU64(index)`), so recomputed tag changes.
 - Truncation/extension changes chunk count $n$, changing `length_encode(n)` in final accumulation input.
 - Empty plaintext uses $n=1$: one leaf with `single_node_tag()`, no final accumulation node.
 
-### 6.11 Side Channels
+### 6.13 Side Channels
 
 Implementations MUST be constant-time with respect to secret-dependent control flow and memory access.
 
@@ -899,7 +899,7 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 - Tag verification MUST use constant-time equality.
 - Partial-block logic may branch on public length, not on secret data.
 
-### 6.12 Operational Usage Limits (Normative)
+### 6.14 Operational Usage Limits (Normative)
 
 To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits (a key
 epoch) and rotate to a fresh master key before exceeding them.
@@ -952,7 +952,7 @@ requirements, or interoperability.
 
 Appendix C remains non-normative operational guidance for instrumentation and budgeting workflows.
 
-### 6.13 Implementation Design Callouts (Non-Normative)
+### 6.15 Implementation Design Callouts (Non-Normative)
 
 The following implementation decisions are performance-critical and align with high-throughput production designs:
 
@@ -991,11 +991,14 @@ string (Section 6.4.1). This stronger property is useful for protocols that deri
 ### 7.1. Operational Safety Limits
 
 Operational planning assumptions used in this section: $p = 2^{-50}$, 1500-byte messages, TreeWrap128 cost
-$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), and per-key accounting (single key / key epoch). Figures
-are conditional on the Section 6 model assumptions for Keccak-p[1600,12] and the selected offline-work profile.
+$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), $\ell \approx 49$ max input blocks per keyed-sponge
+evaluation, and per-key accounting (single key / key epoch). Figures are conditional on the Section 6 model assumptions
+for Keccak-p[1600,12] and the selected offline-work profile.
 
-Under those assumptions, the TreeWrap128 proof-bound-only volume is approximately $2^{80.6}$ GiB per key epoch. This is an
-analytical upper bound, not the practical deployment limit when random nonces are used.
+Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term is $2q^2\ell / 2^c$. Setting
+this to $\le 2^{-50}$ with $\ell = 49$ and $c = 256$ gives $q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}$, so
+$q \lesssim 2^{99.5}$ messages. At 1500 bytes/message the proof-bound volume is approximately $2^{110}$ GiB per key
+epoch. This is an analytical upper bound, not the practical deployment limit when random nonces are used.
 
 For deployment planning, use:
 
@@ -1019,18 +1022,19 @@ Example planning table (collision target $p = 2^{-50}$, record size = 1500 bytes
 |------------|-------------|------------------|----------------------------------|
 | 128-bit    | 1500 B      | nonce collisions | $\approx 2^{20.1}$ GiB           |
 | 192-bit    | 1500 B      | nonce collisions | $\approx 2^{52.1}$ GiB           |
-| 256-bit    | 1500 B      | proof bound      | $\approx 2^{80.6}$ GiB           |
+| 256-bit    | 1500 B      | proof bound      | $\approx 2^{110}$ GiB            |
 
 For a different record size, scale the nonce-collision-limited rows linearly with bytes/record and then apply the same
 minimum rule against the proof-bound volume.
 
-Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (Section 6.12), not by the asymptotic
+Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (Section 6.14), not by the asymptotic
 proof-bound figure alone.
 
 ## 8. References
 
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007. Establishes
-  the flat sponge claim (sponge indifferentiability from a random oracle).
+  the flat sponge claim (sponge indifferentiability from a random oracle). Referenced in the non-normative note in
+  Section 6.2.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap128.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
@@ -1044,14 +1048,14 @@ proof-bound figure alone.
   Applications to the Random Oracle Methodology." TCC 2004. Introduces indifferentiability and the core composition
   theorem framework used for random-oracle replacement arguments.
 - Coron, J.-S., Dodis, Y., Malinaud, C., and Puniya, P. "Merkle-Damgård Revisited: How to Construct a Hash Function."
-  CRYPTO 2005. Applies the MRH indifferentiability composition theorem to hash function constructions; used in Section
-  6.2 for the KDF game hop.
+  CRYPTO 2005. Applies the MRH indifferentiability composition theorem to hash function constructions; referenced in the
+  non-normative note in Section 6.4.
 - Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." Defines the CMT-4 committing
   security notion.
 - Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the Generic
-  Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2; used in Section 6.7.
+  Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2; used in Section 6.9.
 - Namprempre, C., Rogaway, P., and Shrimpton, T. "Reconsidering Generic Composition." EUROCRYPT 2014. Extends the
-  BN00 composition theorem to the nonce-based setting; used in Section 6.7.
+  BN00 composition theorem to the nonce-based setting; used in Section 6.9.
 - Ristenpart, T., Shacham, H., and Shrimpton, T. "Careful with Composition: Limitations of the Indifferentiability
   Framework." Eurocrypt 2011 (ePrint 2011/339 as "Limitations of Indifferentiability and Universal Composability").
   Highlights multi-stage composition caveats; motivates explicit game-hop arguments in composed proofs.
@@ -1061,8 +1065,8 @@ proof-bound figure alone.
   Overwrite is as secure as Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are
   covered by the duplex security bound.
 - Mennink, B., Reyhanitabar, R., and Vizar, D. "Security of Full-State Keyed Sponge and Duplex: Beyond the Birthday
-  Bound." Eurocrypt 2015. Provides direct ideal-permutation-model bounds for the keyed duplex, giving a tighter
-  reduction than routing through sponge indifferentiability.
+  Bound." Eurocrypt 2015. Primary security framework for TreeWrap128. Proves beyond-birthday-bound security for the
+  keyed sponge/duplex in the ideal-permutation model (Theorem 1). Used throughout Section 6.
 - Dinur, I., Dunkelman, O., and Shamir, A. "Improved practical attacks on round-reduced Keccak." Journal of
   Cryptology 27(2), 2014. Reports practical 4-round collisions and 5-round near-collision results in standard
   Keccak-224/256 settings.
@@ -1387,11 +1391,15 @@ It is not part of the normative algorithm definition.
 
 ### C.1 Why this matters
 
-The security bounds in Section 6 are driven by the total Keccak-p call budget term:
+The security bounds in Section 6 include a capacity birthday bound term:
 
 $$
-\varepsilon_{\mathrm{indiff}} = \frac{(\sigma + t)^2}{2^{c+1}}.
+\varepsilon_{\mathrm{cap}} = \frac{(\sigma + t)^2}{2^{c+1}}.
 $$
+
+This is the simplest conservative estimate for combined online ($\sigma$) and offline ($t$) Keccak-p call budgets.
+For tighter per-key planning under the MRV15 keyed-sponge framework, use $\varepsilon_{\mathrm{ks}}$ from Section 6.2,
+which provides beyond-birthday-bound security for the keyed setting.
 
 When a deployment uses multiple Keccak-based components under related security assumptions, a conservative practice is
 to budget their Keccak-p calls together rather than treating each component in isolation.
@@ -1405,19 +1413,19 @@ sigma_total = sigma_treewrap128 + sigma_turboshake + sigma_k12 + sigma_other_kec
 ```
 
 where each term is the count of online Keccak-p[1600,12] calls made by that component in the window.
-This is the same $\sigma_{\mathrm{total}}$ counter model used normatively in Section 6.12.
+This is the same $\sigma_{\mathrm{total}}$ counter model used normatively in Section 6.14.
 
 Then evaluate:
 
 $$
-\varepsilon_{\mathrm{budget}} = \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}}
+\varepsilon_{\mathrm{cap}} = \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}}
 $$
 
 for your selected adversary offline budget $t$.
 
 Use this as a planning control:
 
-- if $\varepsilon_{\mathrm{budget}}$ is below your target risk threshold, the window budget is acceptable;
+- if $\varepsilon_{\mathrm{cap}}$ is below your target risk threshold, the window budget is acceptable;
 - if not, shorten the window (rotate keys/state sooner), reduce throughput per key, or separate workloads across keys.
 
 ### C.3 What implementers should instrument
