@@ -2,6 +2,8 @@ package treewrap
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
@@ -28,8 +30,8 @@ func TestRoundTrip(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", keccak.Rate167},
-		{"168 bytes", keccak.Rate167 + 1},
+		{"168 bytes", keccak.Rate},
+		{"169 bytes", keccak.Rate + 1},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -79,7 +81,7 @@ func TestRoundTripInPlace(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", keccak.Rate167},
+		{"168 bytes", keccak.Rate},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -202,11 +204,11 @@ func TestEncryptAndMAC(t *testing.T) {
 		wantCT  string
 		wantTag string
 	}{
-		{"empty", 0, "", "668f373328d7bb108592d3aaf3dacdabcccff2ca302677c6ea33addf4f72990d"},
-		{"1 byte", 1, "f1", "c04761e374ccb3a926eeabbe49698122b5d72d362deb35c04a22132676309c35"},
-		{"one chunk", ChunkSize, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "16ca20542882e63361f8dce572834de742e828f3046cdffc90b5b79faa8e86e2"},
-		{"one chunk plus one", ChunkSize + 1, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "f09415d1d6ff856183f846834abba98f8069cf4ff83dafa4feb6ee333d64ea7e"},
-		{"four chunks", 4 * ChunkSize, "f13513b1112a5cf6cfd4fe007a73351cc808c4837321b9860843b2ef40c06163", "6e5ec10b445ae5ff86f3bc21917e6f7e02fc1c7a04238e9edecc611a1662ae84"},
+		{"empty", 0, "", "04de4572bd86958d645b9a72d843546cad974b41e7d9e0ae45fb0a03cd6d6a06"},
+		{"1 byte", 1, "6e", "d93a5f718170bfe41a8ce01c590b555038f233f0e6eae4ab9d131ca43f303177"},
+		{"one chunk", ChunkSize, "6e9bbe6b49e800fbb150f445717678c39ca857d33d382980dc023e2d64134f1d", "d72bc680d344ae9cbd6f08cc18e3a164f9427672bcce67c673734978c8562bb8"},
+		{"one chunk plus one", ChunkSize + 1, "6e9bbe6b49e800fbb150f445717678c39ca857d33d382980dc023e2d64134f1d", "3aea66ff9e65ce5cd25552c9df5311be173077fe1f0b9a84b562960734dcc122"},
+		{"four chunks", 4 * ChunkSize, "6e9bbe6b49e800fbb150f445717678c39ca857d33d382980dc023e2d64134f1d", "db63c80b11de51dd981d0742d59ecebd3d2e60ed6e749352fd9c4e6ebe649dfc"},
 	}
 
 	for _, tt := range tests {
@@ -237,8 +239,8 @@ func TestEncryptorDecryptorRoundTrip(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", keccak.Rate167},
-		{"168 bytes", keccak.Rate167 + 1},
+		{"168 bytes", keccak.Rate},
+		{"169 bytes", keccak.Rate + 1},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -287,7 +289,7 @@ func TestEncryptorEquivalence(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", keccak.Rate167},
+		{"168 bytes", keccak.Rate},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -331,7 +333,7 @@ func TestDecryptorEquivalence(t *testing.T) {
 	}{
 		{"empty", 0},
 		{"1 byte", 1},
-		{"167 bytes", keccak.Rate167},
+		{"168 bytes", keccak.Rate},
 		{"one chunk", ChunkSize},
 		{"one chunk plus one", ChunkSize + 1},
 		{"two chunks", 2 * ChunkSize},
@@ -372,7 +374,7 @@ func TestEncryptorMultiWrite(t *testing.T) {
 	key := testKey()
 
 	sizes := []int{
-		1, keccak.Rate167, keccak.Rate167 + 1, ChunkSize, ChunkSize + 1,
+		1, keccak.Rate, keccak.Rate + 1, ChunkSize, ChunkSize + 1,
 		2 * ChunkSize, 4 * ChunkSize, 5*ChunkSize + 100,
 	}
 
@@ -382,7 +384,7 @@ func TestEncryptorMultiWrite(t *testing.T) {
 	}{
 		{"single-byte", 1},
 		{"small", 100},
-		{"block-rate", keccak.Rate167},
+		{"block-rate", keccak.Rate},
 		{"chunk-aligned", ChunkSize},
 		{"chunk-plus-one", ChunkSize + 1},
 	}
@@ -423,7 +425,7 @@ func TestDecryptorMultiWrite(t *testing.T) {
 	key := testKey()
 
 	sizes := []int{
-		1, keccak.Rate167, keccak.Rate167 + 1, ChunkSize, ChunkSize + 1,
+		1, keccak.Rate, keccak.Rate + 1, ChunkSize, ChunkSize + 1,
 		2 * ChunkSize, 4 * ChunkSize, 5*ChunkSize + 100,
 	}
 
@@ -433,7 +435,7 @@ func TestDecryptorMultiWrite(t *testing.T) {
 	}{
 		{"single-byte", 1},
 		{"small", 100},
-		{"block-rate", keccak.Rate167},
+		{"block-rate", keccak.Rate},
 		{"chunk-aligned", ChunkSize},
 		{"chunk-plus-one", ChunkSize + 1},
 	}
@@ -482,6 +484,24 @@ func BenchmarkEncryptAndMAC(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				EncryptAndMAC(output[:0], key, pt)
+			}
+		})
+	}
+}
+
+func BenchmarkAESGCM(b *testing.B) {
+	key := testKey()
+	for _, size := range testdata.Sizes {
+		nonce := make([]byte, 12)
+		pt := make([]byte, size.N)
+		output := make([]byte, size.N)
+		b.Run(size.Name, func(b *testing.B) {
+			b.SetBytes(int64(size.N))
+			b.ReportAllocs()
+			for b.Loop() {
+				block, _ := aes.NewCipher(key[:])
+				gcm, _ := cipher.NewGCM(block)
+				gcm.Seal(output[:0], nonce, pt, nil)
 			}
 		})
 	}

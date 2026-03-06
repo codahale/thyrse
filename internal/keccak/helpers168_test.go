@@ -6,12 +6,11 @@ import (
 	"testing"
 )
 
-// TestFastLoopEncryptDecrypt167 verifies round-trip: encrypt then decrypt
+// TestFastLoopEncryptDecrypt168 verifies round-trip: encrypt then decrypt
 // recovers the original plaintext and produces identical final states.
-func TestFastLoopEncryptDecrypt167(t *testing.T) {
-	const padByte byte = 0x0B
+func TestFastLoopEncryptDecrypt168(t *testing.T) {
 	const nBlocks = 5
-	const blockSize = Rate167
+	const blockSize = Rate
 
 	t.Run("x1", func(t *testing.T) {
 		n := nBlocks * blockSize
@@ -31,11 +30,11 @@ func TestFastLoopEncryptDecrypt167(t *testing.T) {
 			sDec.a[i] = v
 		}
 
-		got := sEnc.FastLoopEncrypt167(pt, ct, padByte)
+		got := sEnc.FastLoopEncrypt168(pt, ct)
 		if got != n {
 			t.Fatalf("encrypt returned %d, want %d", got, n)
 		}
-		got = sDec.FastLoopDecrypt167(ct, recovered, padByte)
+		got = sDec.FastLoopDecrypt168(ct, recovered)
 		if got != n {
 			t.Fatalf("decrypt returned %d, want %d", got, n)
 		}
@@ -69,11 +68,11 @@ func TestFastLoopEncryptDecrypt167(t *testing.T) {
 			}
 		}
 
-		got := sEnc.FastLoopEncrypt167(pt, ct, stride, padByte)
+		got := sEnc.FastLoopEncrypt168(pt, ct, stride)
 		if got != n {
 			t.Fatalf("encrypt returned %d, want %d", got, n)
 		}
-		got = sDec.FastLoopDecrypt167(ct, recovered, stride, padByte)
+		got = sDec.FastLoopDecrypt168(ct, recovered, stride)
 		if got != n {
 			t.Fatalf("decrypt returned %d, want %d", got, n)
 		}
@@ -106,11 +105,11 @@ func TestFastLoopEncryptDecrypt167(t *testing.T) {
 			}
 		}
 
-		got := sEnc.FastLoopEncrypt167(pt, ct, stride, padByte)
+		got := sEnc.FastLoopEncrypt168(pt, ct, stride)
 		if got != n {
 			t.Fatalf("encrypt returned %d, want %d", got, n)
 		}
-		got = sDec.FastLoopDecrypt167(ct, recovered, stride, padByte)
+		got = sDec.FastLoopDecrypt168(ct, recovered, stride)
 		if got != n {
 			t.Fatalf("decrypt returned %d, want %d", got, n)
 		}
@@ -143,11 +142,11 @@ func TestFastLoopEncryptDecrypt167(t *testing.T) {
 			}
 		}
 
-		got := sEnc.FastLoopEncrypt167(pt, ct, stride, padByte)
+		got := sEnc.FastLoopEncrypt168(pt, ct, stride)
 		if got != n {
 			t.Fatalf("encrypt returned %d, want %d", got, n)
 		}
-		got = sDec.FastLoopDecrypt167(ct, recovered, stride, padByte)
+		got = sDec.FastLoopDecrypt168(ct, recovered, stride)
 		if got != n {
 			t.Fatalf("decrypt returned %d, want %d", got, n)
 		}
@@ -169,10 +168,10 @@ func seedState1(s *State1, seed []byte) {
 	}
 }
 
-// genericEncrypt1 runs x1 encrypt using pure Go logic.
-func genericEncrypt1(s *State1, pt, ct []byte, padWord uint64) {
-	for off := 0; off < len(pt); off += Rate167 {
-		for lane := range 20 {
+// genericEncrypt1 runs x1 encrypt using pure Go logic (168-byte blocks, no padding).
+func genericEncrypt1(s *State1, pt, ct []byte) {
+	for off := 0; off < len(pt); off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			w := uint64(pt[off+base]) | uint64(pt[off+base+1])<<8 | uint64(pt[off+base+2])<<16 | uint64(pt[off+base+3])<<24 |
 				uint64(pt[off+base+4])<<32 | uint64(pt[off+base+5])<<40 | uint64(pt[off+base+6])<<48 | uint64(pt[off+base+7])<<56
@@ -187,18 +186,14 @@ func genericEncrypt1(s *State1, pt, ct []byte, padWord uint64) {
 			ct[off+base+6] = byte(v >> 48)
 			ct[off+base+7] = byte(v >> 56)
 		}
-		w := loadPartialLE(pt[off+160 : off+167])
-		s.a[20] ^= w
-		storePartialLE(ct[off+160:off+167], s.a[20])
-		s.a[20] ^= padWord
 		s.Permute12()
 	}
 }
 
-// genericDecrypt1 runs x1 decrypt using pure Go logic.
-func genericDecrypt1(s *State1, ct, pt []byte, padWord uint64) {
-	for off := 0; off < len(ct); off += Rate167 {
-		for lane := range 20 {
+// genericDecrypt1 runs x1 decrypt using pure Go logic (168-byte blocks, no padding).
+func genericDecrypt1(s *State1, ct, pt []byte) {
+	for off := 0; off < len(ct); off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			w := uint64(ct[off+base]) | uint64(ct[off+base+1])<<8 | uint64(ct[off+base+2])<<16 | uint64(ct[off+base+3])<<24 |
 				uint64(ct[off+base+4])<<32 | uint64(ct[off+base+5])<<40 | uint64(ct[off+base+6])<<48 | uint64(ct[off+base+7])<<56
@@ -213,22 +208,15 @@ func genericDecrypt1(s *State1, ct, pt []byte, padWord uint64) {
 			pt[off+base+7] = byte(ptw >> 56)
 			s.a[lane] = w
 		}
-		ctw := loadPartialLE(ct[off+160 : off+167])
-		ptw := ctw ^ (s.a[20] & 0x00ffffffffffffff)
-		storePartialLE(pt[off+160:off+167], ptw)
-		s.a[20] = (s.a[20] & 0xff00000000000000) | ctw
-		s.a[20] ^= padWord
 		s.Permute12()
 	}
 }
 
-// TestFastLoopEncrypt167CrossValidation verifies the assembly encrypt matches
+// TestFastLoopEncrypt168CrossValidation verifies the assembly encrypt matches
 // the Go generic fallback by running both with identical inputs and comparing outputs.
-func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
-	const padByte byte = 0x07
+func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 	const nBlocks = 3
-	const n = nBlocks * Rate167
-	padWord := uint64(padByte) << 56
+	const n = nBlocks * Rate
 
 	t.Run("x1", func(t *testing.T) {
 		pt := make([]byte, n)
@@ -239,12 +227,12 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 		var sGen State1
 		seedState1(&sGen, seed)
 		ctGen := make([]byte, n)
-		genericEncrypt1(&sGen, pt, ctGen, padWord)
+		genericEncrypt1(&sGen, pt, ctGen)
 
 		var sAsm State1
 		seedState1(&sAsm, seed)
 		ctAsm := make([]byte, n)
-		sAsm.FastLoopEncrypt167(pt, ctAsm, padByte)
+		sAsm.FastLoopEncrypt168(pt, ctAsm)
 
 		if !bytes.Equal(ctGen, ctAsm) {
 			t.Fatal("assembly output differs from generic")
@@ -266,8 +254,8 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 		seedState1(&sGen0, seed)
 		seedState1(&sGen1, seed)
 		ctGen := make([]byte, 2*stride)
-		genericEncrypt1(&sGen0, pt[:stride], ctGen[:stride], padWord)
-		genericEncrypt1(&sGen1, pt[stride:], ctGen[stride:], padWord)
+		genericEncrypt1(&sGen0, pt[:stride], ctGen[:stride])
+		genericEncrypt1(&sGen1, pt[stride:], ctGen[stride:])
 
 		// Run x2 assembly.
 		var sAsm State2
@@ -279,7 +267,7 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 			sAsm.a[i][1] = v
 		}
 		ctAsm := make([]byte, 2*stride)
-		sAsm.FastLoopEncrypt167(pt, ctAsm, stride, padByte)
+		sAsm.FastLoopEncrypt168(pt, ctAsm, stride)
 
 		if !bytes.Equal(ctGen, ctAsm) {
 			for i := range len(ctGen) {
@@ -311,7 +299,7 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 		ctGen := make([]byte, 4*stride)
 		for inst := range 4 {
 			seedState1(&sGen[inst], seed)
-			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride], padWord)
+			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride])
 		}
 
 		// Run x4 assembly.
@@ -325,7 +313,7 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 			}
 		}
 		ctAsm := make([]byte, 4*stride)
-		sAsm.FastLoopEncrypt167(pt, ctAsm, stride, padByte)
+		sAsm.FastLoopEncrypt168(pt, ctAsm, stride)
 
 		if !bytes.Equal(ctGen, ctAsm) {
 			for i := range len(ctGen) {
@@ -355,7 +343,7 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 		ctGen := make([]byte, 8*stride)
 		for inst := range 8 {
 			seedState1(&sGen[inst], seed)
-			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride], padWord)
+			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride])
 		}
 
 		var sAsm State8
@@ -368,7 +356,7 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 			}
 		}
 		ctAsm := make([]byte, 8*stride)
-		sAsm.FastLoopEncrypt167(pt, ctAsm, stride, padByte)
+		sAsm.FastLoopEncrypt168(pt, ctAsm, stride)
 
 		if !bytes.Equal(ctGen, ctAsm) {
 			for i := range len(ctGen) {
@@ -388,13 +376,11 @@ func TestFastLoopEncrypt167CrossValidation(t *testing.T) {
 	})
 }
 
-// TestFastLoopDecrypt167CrossValidation verifies the assembly decrypt matches
+// TestFastLoopDecrypt168CrossValidation verifies the assembly decrypt matches
 // the Go generic fallback.
-func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
-	const padByte byte = 0x07
+func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 	const nBlocks = 3
-	const n = nBlocks * Rate167
-	padWord := uint64(padByte) << 56
+	const n = nBlocks * Rate
 
 	t.Run("x1", func(t *testing.T) {
 		ct := make([]byte, n)
@@ -405,12 +391,12 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 		var sGen State1
 		seedState1(&sGen, seed)
 		ptGen := make([]byte, n)
-		genericDecrypt1(&sGen, ct, ptGen, padWord)
+		genericDecrypt1(&sGen, ct, ptGen)
 
 		var sAsm State1
 		seedState1(&sAsm, seed)
 		ptAsm := make([]byte, n)
-		sAsm.FastLoopDecrypt167(ct, ptAsm, padByte)
+		sAsm.FastLoopDecrypt168(ct, ptAsm)
 
 		if !bytes.Equal(ptGen, ptAsm) {
 			t.Fatal("assembly output differs from generic")
@@ -431,8 +417,8 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 		seedState1(&sGen0, seed)
 		seedState1(&sGen1, seed)
 		ptGen := make([]byte, 2*stride)
-		genericDecrypt1(&sGen0, ct[:stride], ptGen[:stride], padWord)
-		genericDecrypt1(&sGen1, ct[stride:], ptGen[stride:], padWord)
+		genericDecrypt1(&sGen0, ct[:stride], ptGen[:stride])
+		genericDecrypt1(&sGen1, ct[stride:], ptGen[stride:])
 
 		var sAsm State2
 		for i := range 25 {
@@ -443,7 +429,7 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 			sAsm.a[i][1] = v
 		}
 		ptAsm := make([]byte, 2*stride)
-		sAsm.FastLoopDecrypt167(ct, ptAsm, stride, padByte)
+		sAsm.FastLoopDecrypt168(ct, ptAsm, stride)
 
 		if !bytes.Equal(ptGen, ptAsm) {
 			for i := range len(ptGen) {
@@ -474,7 +460,7 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 		ptGen := make([]byte, 4*stride)
 		for inst := range 4 {
 			seedState1(&sGen[inst], seed)
-			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride], padWord)
+			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride])
 		}
 
 		var sAsm State4
@@ -487,7 +473,7 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 			}
 		}
 		ptAsm := make([]byte, 4*stride)
-		sAsm.FastLoopDecrypt167(ct, ptAsm, stride, padByte)
+		sAsm.FastLoopDecrypt168(ct, ptAsm, stride)
 
 		if !bytes.Equal(ptGen, ptAsm) {
 			for i := range len(ptGen) {
@@ -517,7 +503,7 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 		ptGen := make([]byte, 8*stride)
 		for inst := range 8 {
 			seedState1(&sGen[inst], seed)
-			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride], padWord)
+			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride])
 		}
 
 		var sAsm State8
@@ -530,7 +516,7 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 			}
 		}
 		ptAsm := make([]byte, 8*stride)
-		sAsm.FastLoopDecrypt167(ct, ptAsm, stride, padByte)
+		sAsm.FastLoopDecrypt168(ct, ptAsm, stride)
 
 		if !bytes.Equal(ptGen, ptAsm) {
 			for i := range len(ptGen) {
@@ -550,12 +536,11 @@ func TestFastLoopDecrypt167CrossValidation(t *testing.T) {
 	})
 }
 
-func BenchmarkFastLoopEncrypt167(b *testing.B) {
+func BenchmarkFastLoopEncrypt168(b *testing.B) {
 	for _, size := range helperSizes {
-		// Adjust sizes to rate 167.
-		n := (size.n / Rate167) * Rate167
+		n := (size.n / Rate) * Rate
 		if n == 0 {
-			n = Rate167
+			n = Rate
 		}
 
 		in := makeInput(n)
@@ -566,7 +551,7 @@ func BenchmarkFastLoopEncrypt167(b *testing.B) {
 			b.SetBytes(int64(n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopEncrypt167(in, out, 0x0B)
+				s.FastLoopEncrypt168(in, out)
 			}
 		})
 
@@ -577,7 +562,7 @@ func BenchmarkFastLoopEncrypt167(b *testing.B) {
 			b.SetBytes(int64(2 * n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopEncrypt167(in2, out2, n, 0x0B)
+				s.FastLoopEncrypt168(in2, out2, n)
 			}
 		})
 
@@ -588,7 +573,7 @@ func BenchmarkFastLoopEncrypt167(b *testing.B) {
 			b.SetBytes(int64(4 * n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopEncrypt167(in4, out4, n, 0x0B)
+				s.FastLoopEncrypt168(in4, out4, n)
 			}
 		})
 
@@ -599,17 +584,17 @@ func BenchmarkFastLoopEncrypt167(b *testing.B) {
 			b.SetBytes(int64(8 * n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopEncrypt167(in8, out8, n, 0x0B)
+				s.FastLoopEncrypt168(in8, out8, n)
 			}
 		})
 	}
 }
 
-func BenchmarkFastLoopDecrypt167(b *testing.B) {
+func BenchmarkFastLoopDecrypt168(b *testing.B) {
 	for _, size := range helperSizes {
-		n := (size.n / Rate167) * Rate167
+		n := (size.n / Rate) * Rate
 		if n == 0 {
-			n = Rate167
+			n = Rate
 		}
 
 		in := makeInput(n)
@@ -620,7 +605,7 @@ func BenchmarkFastLoopDecrypt167(b *testing.B) {
 			b.SetBytes(int64(n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopDecrypt167(in, out, 0x0B)
+				s.FastLoopDecrypt168(in, out)
 			}
 		})
 
@@ -631,7 +616,7 @@ func BenchmarkFastLoopDecrypt167(b *testing.B) {
 			b.SetBytes(int64(2 * n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopDecrypt167(in2, out2, n, 0x0B)
+				s.FastLoopDecrypt168(in2, out2, n)
 			}
 		})
 
@@ -642,7 +627,7 @@ func BenchmarkFastLoopDecrypt167(b *testing.B) {
 			b.SetBytes(int64(4 * n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopDecrypt167(in4, out4, n, 0x0B)
+				s.FastLoopDecrypt168(in4, out4, n)
 			}
 		})
 
@@ -653,7 +638,7 @@ func BenchmarkFastLoopDecrypt167(b *testing.B) {
 			b.SetBytes(int64(8 * n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopDecrypt167(in8, out8, n, 0x0B)
+				s.FastLoopDecrypt168(in8, out8, n)
 			}
 		})
 	}

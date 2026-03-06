@@ -141,9 +141,9 @@
 	VLD1	(IN), [V25.D1]; ADD $8, IN; VEOR V25.B8, V19.B8, V19.B8; \
 	VLD1	(IN), [V25.D1]; ADD $8, IN; VEOR V25.B8, V20.B8, V20.B8
 
-// ENCRYPT_STRIPE_X2 encrypts 20 full lanes + 7-byte lane 20 from two input
+// ENCRYPT_STRIPE_X2 encrypts 21 full lanes from two input
 // pointers (SRC0, SRC1) into state registers V0-V20 (.D2), writing ciphertext
-// to DST0, DST1. Uses V25-V27 as temps, R7=padWord. Clobbers R8, R9, R10, R11.
+// to DST0, DST1. Uses V25-V26 as temps.
 #define ENCRYPT_STRIPE_X2(SRC0, SRC1, DST0, DST1) \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V25.B16, V0.B16, V0.B16; VST1 [V0.D1], (DST0); ADD $8, DST0; VDUP V0.D[1], V26.D2; VST1 [V26.D1], (DST1); ADD $8, DST1; \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V25.B16, V1.B16, V1.B16; VST1 [V1.D1], (DST0); ADD $8, DST0; VDUP V1.D[1], V26.D2; VST1 [V26.D1], (DST1); ADD $8, DST1; \
@@ -165,26 +165,11 @@
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V25.B16, V17.B16, V17.B16; VST1 [V17.D1], (DST0); ADD $8, DST0; VDUP V17.D[1], V26.D2; VST1 [V26.D1], (DST1); ADD $8, DST1; \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V25.B16, V18.B16, V18.B16; VST1 [V18.D1], (DST0); ADD $8, DST0; VDUP V18.D[1], V26.D2; VST1 [V26.D1], (DST1); ADD $8, DST1; \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V25.B16, V19.B16, V19.B16; VST1 [V19.D1], (DST0); ADD $8, DST0; VDUP V19.D[1], V26.D2; VST1 [V26.D1], (DST1); ADD $8, DST1; \
-	/* Lane 20: 7-byte encrypt for each instance. */ \
-	/* Instance 0: load 7 bytes from SRC0. */ \
-	MOVWU (SRC0), R8; MOVHU 4(SRC0), R9; ORR R9<<32, R8, R8; MOVBU 6(SRC0), R10; ORR R10<<48, R8, R8; \
-	/* Instance 1: load 7 bytes from SRC1. */ \
-	MOVWU (SRC1), R9; MOVHU 4(SRC1), R10; ORR R10<<32, R9, R9; MOVBU 6(SRC1), R11; ORR R11<<48, R9, R9; \
-	/* Combine into V25 = {src1, src0} */ \
-	VMOV R8, V25.D[0]; VMOV R9, V25.D[1]; \
-	/* state ^= src */ \
-	VEOR V25.B16, V20.B16, V20.B16; \
-	/* Store 7 bytes of new state for each instance. */ \
-	VMOV V20.D[0], R8; \
-	MOVW R8, (DST0); LSR $32, R8, R10; MOVH R10, 4(DST0); LSR $16, R10, R10; MOVB R10, 6(DST0); \
-	VMOV V20.D[1], R9; \
-	MOVW R9, (DST1); LSR $32, R9, R10; MOVH R10, 4(DST1); LSR $16, R10, R10; MOVB R10, 6(DST1); \
-	/* XOR padWord into both halves of lane 20. */ \
-	VDUP R7, V25.D2; VEOR V25.B16, V20.B16, V20.B16
+	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V25.B16, V20.B16, V20.B16; VST1 [V20.D1], (DST0); ADD $8, DST0; VDUP V20.D[1], V26.D2; VST1 [V26.D1], (DST1); ADD $8, DST1
 
-// DECRYPT_STRIPE_X2 decrypts 20 full lanes + 7-byte lane 20 from two input
+// DECRYPT_STRIPE_X2 decrypts 21 full lanes from two input
 // pointers (SRC0, SRC1) into state registers V0-V20 (.D2), writing plaintext
-// to DST0, DST1. Uses V25-V27 as temps, R7=padWord. Clobbers R8, R9, R10, R11.
+// to DST0, DST1. Uses V25-V27 as temps.
 #define DECRYPT_STRIPE_X2(SRC0, SRC1, DST0, DST1) \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V0.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V0.B16; \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V1.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V1.B16; \
@@ -206,45 +191,22 @@
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V17.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V17.B16; \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V18.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V18.B16; \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V19.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V19.B16; \
-	/* Lane 20: 7-byte decrypt for each instance, scalar. */ \
-	/* Instance 0 */ \
-	MOVWU (SRC0), R8; MOVHU 4(SRC0), R9; ORR R9<<32, R8, R8; MOVBU 6(SRC0), R10; ORR R10<<48, R8, R8; \
-	VMOV V20.D[0], R9; \
-	EOR R8, R9, R10; /* pt = ct ^ state */ \
-	MOVW R10, (DST0); LSR $32, R10, R11; MOVH R11, 4(DST0); LSR $16, R11, R11; MOVB R11, 6(DST0); \
-	/* new state = ct (low 7 bytes) | state (high byte) */ \
-	AND $0x00FFFFFFFFFFFFFF, R8, R8; \
-	AND $0xFF00000000000000, R9, R9; \
-	ORR R8, R9, R9; \
-	VMOV R9, V20.D[0]; \
-	/* Instance 1 */ \
-	MOVWU (SRC1), R8; MOVHU 4(SRC1), R9; ORR R9<<32, R8, R8; MOVBU 6(SRC1), R10; ORR R10<<48, R8, R8; \
-	VMOV V20.D[1], R9; \
-	EOR R8, R9, R10; /* pt = ct ^ state */ \
-	MOVW R10, (DST1); LSR $32, R10, R11; MOVH R11, 4(DST1); LSR $16, R11, R11; MOVB R11, 6(DST1); \
-	AND $0x00FFFFFFFFFFFFFF, R8, R8; \
-	AND $0xFF00000000000000, R9, R9; \
-	ORR R8, R9, R9; \
-	VMOV R9, V20.D[1]; \
-	/* XOR padWord into both halves of lane 20. */ \
-	VDUP R7, V25.D2; VEOR V25.B16, V20.B16, V20.B16
+	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V20.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V20.B16
 
-// func fastLoopEncrypt167x2(s *State2, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopEncrypt167x2(SB), NOSPLIT, $16-48
+// func fastLoopEncrypt168x2(s *State2, src, dst *byte, stride, n int)
+TEXT ·fastLoopEncrypt168x2(SB), NOSPLIT, $8-40
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R5
 	MOVD	stride+24(FP), R6
 	MOVD	n+32(FP), R4
-	MOVD	padWord+40(FP), R7
 
 	ADD	R2, R6, R3   // R3 = src1
 	SUB	R2, R5, R8   // R8 = dst - src (same stride)
 	ADD	R8, R3, R6   // R6 = dst1
 
-	// Save dst1 and padWord on stack.
+	// Save dst1 on stack.
 	MOVD	R6, 0(RSP)
-	MOVD	R7, 8(RSP)
 
 	// Load lane-major state.
 	VLD1.P	32(R0), [V0.D2, V1.D2]
@@ -265,19 +227,14 @@ TEXT ·fastLoopEncrypt167x2(SB), NOSPLIT, $16-48
 
 enc_loop_x2:
 	MOVD	0(RSP), R6   // dst1
-	MOVD	8(RSP), R7   // padWord
 	ENCRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 	MOVD	R6, 0(RSP)   // save updated dst1
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x2
 
 	// Store lane-major state.
@@ -297,21 +254,19 @@ enc_loop_x2:
 
 	RET
 
-// func fastLoopDecrypt167x2(s *State2, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x2(SB), NOSPLIT, $16-48
+// func fastLoopDecrypt168x2(s *State2, src, dst *byte, stride, n int)
+TEXT ·fastLoopDecrypt168x2(SB), NOSPLIT, $8-40
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R5
 	MOVD	stride+24(FP), R6
 	MOVD	n+32(FP), R4
-	MOVD	padWord+40(FP), R7
 
 	ADD	R2, R6, R3   // R3 = src1
 	SUB	R2, R5, R8   // R8 = dst - src (same stride)
 	ADD	R8, R3, R6   // R6 = dst1
 
 	MOVD	R6, 0(RSP)
-	MOVD	R7, 8(RSP)
 
 	// Load lane-major state.
 	VLD1.P	32(R0), [V0.D2, V1.D2]
@@ -332,19 +287,14 @@ TEXT ·fastLoopDecrypt167x2(SB), NOSPLIT, $16-48
 
 dec_loop_x2:
 	MOVD	0(RSP), R6   // dst1
-	MOVD	8(RSP), R7   // padWord
 	DECRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 	MOVD	R6, 0(RSP)
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x2
 
 	// Store lane-major state.
@@ -578,9 +528,8 @@ loop_x8_67:
 
 	RET
 
-// ENCRYPT_STRIPE_X1 encrypts 20 full lanes + 7-byte lane 20 from SRC into state
-// V0-V20 (.D1), writing ciphertext to DST. Uses V25 as temp, R5=padWord.
-// Clobbers R6, R7, R8.
+// ENCRYPT_STRIPE_X1 encrypts 21 full lanes from SRC into state
+// V0-V20 (.D1), writing ciphertext to DST. Uses V25 as temp.
 #define ENCRYPT_STRIPE_X1(SRC, DST) \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V25.B8, V0.B8, V0.B8; VST1 [V0.D1], (DST); ADD $8, DST; \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V25.B8, V1.B8, V1.B8; VST1 [V1.D1], (DST); ADD $8, DST; \
@@ -602,30 +551,10 @@ loop_x8_67:
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V25.B8, V17.B8, V17.B8; VST1 [V17.D1], (DST); ADD $8, DST; \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V25.B8, V18.B8, V18.B8; VST1 [V18.D1], (DST); ADD $8, DST; \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V25.B8, V19.B8, V19.B8; VST1 [V19.D1], (DST); ADD $8, DST; \
-	/* Lane 20: 7 data bytes. Load 4+2+1 into R6. */ \
-	MOVWU	(SRC), R6; \
-	MOVHU	4(SRC), R7; \
-	ORR	R7<<32, R6, R6; \
-	MOVBU	6(SRC), R8; \
-	ORR	R8<<48, R6, R6; \
-	/* XOR into state */ \
-	VMOV	V20.D[0], R7; \
-	EOR	R6, R7, R7; \
-	VMOV	R7, V20.D[0]; \
-	/* Store 7 bytes of new state */ \
-	MOVW	R7, (DST); \
-	LSR	$32, R7, R8; \
-	MOVH	R8, 4(DST); \
-	LSR	$16, R8, R8; \
-	MOVB	R8, 6(DST); \
-	/* XOR padWord into state lane 20 */ \
-	VMOV	V20.D[0], R7; \
-	EOR	R5, R7, R7; \
-	VMOV	R7, V20.D[0]
+	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V25.B8, V20.B8, V20.B8; VST1 [V20.D1], (DST); ADD $8, DST
 
-// DECRYPT_STRIPE_X1 decrypts 20 full lanes + 7-byte lane 20 from SRC into state
-// V0-V20 (.D1), writing plaintext to DST. Uses V25-V26 as temps, R5=padWord.
-// Clobbers R6, R7, R8.
+// DECRYPT_STRIPE_X1 decrypts 21 full lanes from SRC into state
+// V0-V20 (.D1), writing plaintext to DST. Uses V25-V26 as temps.
 #define DECRYPT_STRIPE_X1(SRC, DST) \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V0.B8, V25.B8, V26.B8; VST1 [V26.D1], (DST); ADD $8, DST; VMOV V25.B8, V0.B8; \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V1.B8, V25.B8, V26.B8; VST1 [V26.D1], (DST); ADD $8, DST; VMOV V25.B8, V1.B8; \
@@ -647,38 +576,14 @@ loop_x8_67:
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V17.B8, V25.B8, V26.B8; VST1 [V26.D1], (DST); ADD $8, DST; VMOV V25.B8, V17.B8; \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V18.B8, V25.B8, V26.B8; VST1 [V26.D1], (DST); ADD $8, DST; VMOV V25.B8, V18.B8; \
 	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V19.B8, V25.B8, V26.B8; VST1 [V26.D1], (DST); ADD $8, DST; VMOV V25.B8, V19.B8; \
-	/* Lane 20: 7-byte decrypt. Load ct into R6. */ \
-	MOVWU	(SRC), R6; \
-	MOVHU	4(SRC), R7; \
-	ORR	R7<<32, R6, R6; \
-	MOVBU	6(SRC), R8; \
-	ORR	R8<<48, R6, R6; \
-	/* pt = ct ^ state (low 7 bytes) */ \
-	VMOV	V20.D[0], R7; \
-	EOR	R6, R7, R8; \
-	/* Store 7 bytes of pt */ \
-	MOVW	R8, (DST); \
-	LSR	$32, R8, R8; \
-	MOVH	R8, 4(DST); \
-	LSR	$16, R8, R8; \
-	MOVB	R8, 6(DST); \
-	/* new state = ct (low 7 bytes) | state (high byte) */ \
-	AND	$0x00FFFFFFFFFFFFFF, R6, R6; \
-	AND	$0xFF00000000000000, R7, R7; \
-	ORR	R6, R7, R7; \
-	VMOV	R7, V20.D[0]; \
-	/* XOR padWord into state lane 20 */ \
-	VMOV	V20.D[0], R7; \
-	EOR	R5, R7, R7; \
-	VMOV	R7, V20.D[0]
+	VLD1	(SRC), [V25.D1]; ADD $8, SRC; VEOR V20.B8, V25.B8, V26.B8; VST1 [V26.D1], (DST); ADD $8, DST; VMOV V25.B8, V20.B8
 
-// func fastLoopEncrypt167x1(s *State1, src, dst *byte, n int, padWord uint64)
-TEXT ·fastLoopEncrypt167x1(SB), NOSPLIT, $0-40
+// func fastLoopEncrypt168x1(s *State1, src, dst *byte, n int)
+TEXT ·fastLoopEncrypt168x1(SB), NOSPLIT, $0-32
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R3
 	MOVD	n+24(FP), R4
-	MOVD	padWord+32(FP), R5
 
 	// Load single state (.D1).
 	VLD1.P	32(R0), [V0.D1, V1.D1, V2.D1, V3.D1]
@@ -693,14 +598,12 @@ TEXT ·fastLoopEncrypt167x1(SB), NOSPLIT, $0-40
 
 enc_loop_x1:
 	ENCRYPT_STRIPE_X1(R2, R3)
-	ADD	$7, R2
-	ADD	$7, R3
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x1
 
 	// Store single state (.D1).
@@ -714,13 +617,12 @@ enc_loop_x1:
 
 	RET
 
-// func fastLoopDecrypt167x1(s *State1, src, dst *byte, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x1(SB), NOSPLIT, $0-40
+// func fastLoopDecrypt168x1(s *State1, src, dst *byte, n int)
+TEXT ·fastLoopDecrypt168x1(SB), NOSPLIT, $0-32
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R3
 	MOVD	n+24(FP), R4
-	MOVD	padWord+32(FP), R5
 
 	// Load single state (.D1).
 	VLD1.P	32(R0), [V0.D1, V1.D1, V2.D1, V3.D1]
@@ -735,14 +637,12 @@ TEXT ·fastLoopDecrypt167x1(SB), NOSPLIT, $0-40
 
 dec_loop_x1:
 	DECRYPT_STRIPE_X1(R2, R3)
-	ADD	$7, R2
-	ADD	$7, R3
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x1
 
 	// Store single state (.D1).
@@ -794,14 +694,13 @@ loop_x1:
 
 	RET
 
-// func fastLoopEncrypt167x4(s *State4, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopEncrypt167x4(SB), NOSPLIT, $48-48
+// func fastLoopEncrypt168x4(s *State4, src, dst *byte, stride, n int)
+TEXT ·fastLoopEncrypt168x4(SB), NOSPLIT, $40-40
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R5
 	MOVD	stride+24(FP), R8
 	MOVD	n+32(FP), R4
-	MOVD	padWord+40(FP), R7
 
 	// Compute 4 src pointers: R2=src0, R3=src1.
 	ADD	R2, R8, R3    // src1
@@ -813,31 +712,25 @@ TEXT ·fastLoopEncrypt167x4(SB), NOSPLIT, $48-48
 	ADD	R11, R9, R11  // dst2
 	ADD	R8, R11, R8   // dst3
 
-	// Save src2, dst2, src3, dst3, n, padWord.
+	// Save src2, dst2, src3, dst3, n.
 	MOVD	R9, 0(RSP)
 	MOVD	R11, 8(RSP)
 	MOVD	R10, 16(RSP)
 	MOVD	R8, 24(RSP)
 	MOVD	R4, 32(RSP)
-	MOVD	R7, 40(RSP)
 
 	// Pair (0,1): offset 0, stride 32.
 	MOVD	R0, R8
 	LOAD25_STRIDE(R8, 32)
 
 enc_loop_x4_01:
-	MOVD	40(RSP), R7
 	ENCRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x4_01
 
 	MOVD	R0, R8
@@ -854,18 +747,13 @@ enc_loop_x4_01:
 	LOAD25_STRIDE(R8, 32)
 
 enc_loop_x4_23:
-	MOVD	40(RSP), R7
 	ENCRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x4_23
 
 	ADD	$16, R0, R8
@@ -873,14 +761,13 @@ enc_loop_x4_23:
 
 	RET
 
-// func fastLoopDecrypt167x4(s *State4, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x4(SB), NOSPLIT, $48-48
+// func fastLoopDecrypt168x4(s *State4, src, dst *byte, stride, n int)
+TEXT ·fastLoopDecrypt168x4(SB), NOSPLIT, $40-40
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R5
 	MOVD	stride+24(FP), R8
 	MOVD	n+32(FP), R4
-	MOVD	padWord+40(FP), R7
 
 	ADD	R2, R8, R3
 	ADD	R8, R3, R9
@@ -895,24 +782,18 @@ TEXT ·fastLoopDecrypt167x4(SB), NOSPLIT, $48-48
 	MOVD	R10, 16(RSP)
 	MOVD	R8, 24(RSP)
 	MOVD	R4, 32(RSP)
-	MOVD	R7, 40(RSP)
 
 	MOVD	R0, R8
 	LOAD25_STRIDE(R8, 32)
 
 dec_loop_x4_01:
-	MOVD	40(RSP), R7
 	DECRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x4_01
 
 	MOVD	R0, R8
@@ -928,18 +809,13 @@ dec_loop_x4_01:
 	LOAD25_STRIDE(R8, 32)
 
 dec_loop_x4_23:
-	MOVD	40(RSP), R7
 	DECRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x4_23
 
 	ADD	$16, R0, R8
@@ -947,14 +823,13 @@ dec_loop_x4_23:
 
 	RET
 
-// func fastLoopEncrypt167x8(s *State8, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopEncrypt167x8(SB), NOSPLIT, $112-48
+// func fastLoopEncrypt168x8(s *State8, src, dst *byte, stride, n int)
+TEXT ·fastLoopEncrypt168x8(SB), NOSPLIT, $104-40
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R5
 	MOVD	stride+24(FP), R8
 	MOVD	n+32(FP), R4
-	MOVD	padWord+40(FP), R7
 
 	SUB	R2, R5, R11   // dst_offset
 	ADD	R2, R8, R3    // src1
@@ -991,25 +866,19 @@ TEXT ·fastLoopEncrypt167x8(SB), NOSPLIT, $112-48
 	MOVD	R10, 88(RSP)
 
 	MOVD	R4, 96(RSP)   // n
-	MOVD	R7, 104(RSP)  // padWord
 
 	// Pair (0,1): offset 0, stride 64.
 	MOVD	R0, R8
 	LOAD25_STRIDE(R8, 64)
 
 enc_loop_x8_01:
-	MOVD	104(RSP), R7
 	ENCRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x8_01
 
 	MOVD	R0, R8
@@ -1026,18 +895,13 @@ enc_loop_x8_01:
 	LOAD25_STRIDE(R8, 64)
 
 enc_loop_x8_23:
-	MOVD	104(RSP), R7
 	ENCRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x8_23
 
 	ADD	$16, R0, R8
@@ -1054,18 +918,13 @@ enc_loop_x8_23:
 	LOAD25_STRIDE(R8, 64)
 
 enc_loop_x8_45:
-	MOVD	104(RSP), R7
 	ENCRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x8_45
 
 	ADD	$32, R0, R8
@@ -1082,18 +941,13 @@ enc_loop_x8_45:
 	LOAD25_STRIDE(R8, 64)
 
 enc_loop_x8_67:
-	MOVD	104(RSP), R7
 	ENCRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	enc_loop_x8_67
 
 	ADD	$48, R0, R8
@@ -1101,14 +955,13 @@ enc_loop_x8_67:
 
 	RET
 
-// func fastLoopDecrypt167x8(s *State8, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x8(SB), NOSPLIT, $112-48
+// func fastLoopDecrypt168x8(s *State8, src, dst *byte, stride, n int)
+TEXT ·fastLoopDecrypt168x8(SB), NOSPLIT, $104-40
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R2
 	MOVD	dst+16(FP), R5
 	MOVD	stride+24(FP), R8
 	MOVD	n+32(FP), R4
-	MOVD	padWord+40(FP), R7
 
 	SUB	R2, R5, R11
 	ADD	R2, R8, R3
@@ -1145,24 +998,18 @@ TEXT ·fastLoopDecrypt167x8(SB), NOSPLIT, $112-48
 	MOVD	R10, 88(RSP)
 
 	MOVD	R4, 96(RSP)
-	MOVD	R7, 104(RSP)
 
 	MOVD	R0, R8
 	LOAD25_STRIDE(R8, 64)
 
 dec_loop_x8_01:
-	MOVD	104(RSP), R7
 	DECRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x8_01
 
 	MOVD	R0, R8
@@ -1178,18 +1025,13 @@ dec_loop_x8_01:
 	LOAD25_STRIDE(R8, 64)
 
 dec_loop_x8_23:
-	MOVD	104(RSP), R7
 	DECRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x8_23
 
 	ADD	$16, R0, R8
@@ -1205,18 +1047,13 @@ dec_loop_x8_23:
 	LOAD25_STRIDE(R8, 64)
 
 dec_loop_x8_45:
-	MOVD	104(RSP), R7
 	DECRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x8_45
 
 	ADD	$32, R0, R8
@@ -1232,18 +1069,13 @@ dec_loop_x8_45:
 	LOAD25_STRIDE(R8, 64)
 
 dec_loop_x8_67:
-	MOVD	104(RSP), R7
 	DECRYPT_STRIPE_X2(R2, R3, R5, R6)
-	ADD	$7, R2
-	ADD	$7, R3
-	ADD	$7, R5
-	ADD	$7, R6
 
 	MOVD	$round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	SUBS	$167, R4
+	SUBS	$168, R4
 	BNE	dec_loop_x8_67
 
 	ADD	$48, R0, R8

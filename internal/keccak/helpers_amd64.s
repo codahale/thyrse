@@ -835,7 +835,7 @@ done:
 
 
 // ============================================================================
-// Rate-167 fused encrypt/decrypt + permute loops
+// Rate-168 fused encrypt/decrypt + permute loops
 // ============================================================================
 
 // ENCRYPT_LANE_X1 encrypts one full lane (8 bytes) at offset i for x1.
@@ -876,39 +876,19 @@ done:
 	NOTQ	R10; \
 	MOVQ	R10, i*8(DI)
 
-// LOAD_7BYTES loads 7 bytes from ptr+off into reg (clobbers tmp). 4+2+1 decomposition.
-#define LOAD_7BYTES(ptr, off, reg, tmp) \
-	MOVLQZX	off(ptr), reg; \
-	MOVWQZX	(off+4)(ptr), tmp; \
-	SHLQ	$32, tmp; \
-	ORQ	tmp, reg; \
-	MOVBQZX	(off+6)(ptr), tmp; \
-	SHLQ	$48, tmp; \
-	ORQ	tmp, reg
-
-// STORE_7BYTES stores low 7 bytes of reg to ptr at off (clobbers tmp).
-#define STORE_7BYTES(ptr, off, reg, tmp) \
-	MOVL	reg, off(ptr); \
-	MOVQ	reg, tmp; \
-	SHRQ	$32, tmp; \
-	MOVW	tmp, (off+4)(ptr); \
-	SHRQ	$16, tmp; \
-	MOVB	tmp, (off+6)(ptr)
 
 
-// func fastLoopEncrypt167x1(s *State1, src, dst *byte, n int, padWord uint64)
+// func fastLoopEncrypt168x1(s *State1, src, dst *byte, n int)
 //
-// Frame: 232 bytes local (0-199 perm scratch, 200=src, 208=dst, 216=count, 224=padWord), 40 bytes args.
-TEXT ·fastLoopEncrypt167x1(SB), $232-40
+// Frame: 224 bytes local (0-199 perm scratch, 200=src, 208=dst, 216=count), 32 bytes args.
+TEXT ·fastLoopEncrypt168x1(SB), $224-32
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), BX
 	MOVQ	n+24(FP), CX
-	MOVQ	padWord+32(FP), DX
 	MOVQ	AX, 200(SP)
 	MOVQ	BX, 208(SP)
 	MOVQ	CX, 216(SP)
-	MOVQ	DX, 224(SP)
 
 	NOTQ	8(DI)
 	NOTQ	16(DI)
@@ -918,7 +898,7 @@ TEXT ·fastLoopEncrypt167x1(SB), $232-40
 	NOTQ	160(DI)
 
 enc_loop_x1:
-	CMPQ	216(SP), $167
+	CMPQ	216(SP), $168
 	JB	enc_done_x1
 
 	MOVQ	200(SP), AX
@@ -945,23 +925,13 @@ enc_loop_x1:
 	ENCRYPT_LANE_X1_COMP(17)
 	ENCRYPT_LANE_X1(18)
 	ENCRYPT_LANE_X1(19)
+	ENCRYPT_LANE_X1_COMP(20)
 
-	// Lane 20 (complemented): 7 data bytes (160-166).
-	LOAD_7BYTES(AX, 160, R10, R11)
-	XORQ	R10, 20*8(DI)
-	MOVQ	20*8(DI), R10
-	NOTQ	R10
-	STORE_7BYTES(BX, 160, R10, R11)
-
-	// XOR padding
-	MOVQ	224(SP), R10
-	XORQ	R10, 20*8(DI)
-
-	ADDQ	$167, AX
-	ADDQ	$167, BX
+	ADDQ	$168, AX
+	ADDQ	$168, BX
 	MOVQ	AX, 200(SP)
 	MOVQ	BX, 208(SP)
-	SUBQ	$167, 216(SP)
+	SUBQ	$168, 216(SP)
 
 	// Permute (same as absorb x1)
 	MOVQ	(DI), SI
@@ -1007,17 +977,15 @@ enc_done_x1:
 	RET
 
 
-// func fastLoopDecrypt167x1(s *State1, src, dst *byte, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x1(SB), $232-40
+// func fastLoopDecrypt168x1(s *State1, src, dst *byte, n int)
+TEXT ·fastLoopDecrypt168x1(SB), $224-32
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), BX
 	MOVQ	n+24(FP), CX
-	MOVQ	padWord+32(FP), DX
 	MOVQ	AX, 200(SP)
 	MOVQ	BX, 208(SP)
 	MOVQ	CX, 216(SP)
-	MOVQ	DX, 224(SP)
 
 	NOTQ	8(DI)
 	NOTQ	16(DI)
@@ -1027,7 +995,7 @@ TEXT ·fastLoopDecrypt167x1(SB), $232-40
 	NOTQ	160(DI)
 
 dec_loop_x1:
-	CMPQ	216(SP), $167
+	CMPQ	216(SP), $168
 	JB	dec_done_x1
 
 	MOVQ	200(SP), AX
@@ -1054,35 +1022,13 @@ dec_loop_x1:
 	DECRYPT_LANE_X1_COMP(17)
 	DECRYPT_LANE_X1(18)
 	DECRYPT_LANE_X1(19)
+	DECRYPT_LANE_X1_COMP(20)
 
-	// Lane 20 (complemented): 7-byte decrypt.
-	// pt = NOT(ct ^ complemented_state) (low 7 bytes)
-	// new_complemented_state = (high_byte | NOT(ct))
-	LOAD_7BYTES(AX, 160, R10, R11)
-	// R10 = 7-byte ciphertext (bits 0-55)
-	MOVQ	20*8(DI), R11		// complemented state
-	MOVQ	R11, R12		// save complemented state
-	XORQ	R10, R11		// ct ^ complemented_state = NOT(pt)
-	NOTQ	R11			// pt
-	STORE_7BYTES(BX, 160, R11, R13)
-	// new state = (high_byte of complemented_state) | NOT(ct)
-	SHRQ	$56, R12
-	SHLQ	$56, R12		// keep high byte (complemented)
-	NOTQ	R10			// NOT(ct)
-	SHLQ	$8, R10			// clear bits 56-63 (were 0, became 1 from NOT)
-	SHRQ	$8, R10
-	ORQ	R10, R12
-	MOVQ	R12, 20*8(DI)
-
-	// XOR padding
-	MOVQ	224(SP), R10
-	XORQ	R10, 20*8(DI)
-
-	ADDQ	$167, AX
-	ADDQ	$167, BX
+	ADDQ	$168, AX
+	ADDQ	$168, BX
 	MOVQ	AX, 200(SP)
 	MOVQ	BX, 208(SP)
-	SUBQ	$167, 216(SP)
+	SUBQ	$168, 216(SP)
 
 	// Permute
 	MOVQ	(DI), SI
@@ -1141,17 +1087,16 @@ dec_done_x1:
 	MOVQ	i*8(CX), R10; MOVQ i*16+8(R8), R11; XORQ R10, R11; MOVQ R11, i*8(BX); MOVQ R10, i*16+8(R8)
 
 
-// func fastLoopEncrypt167x2(s *State2, src, dst *byte, stride, n int, padWord uint64)
+// func fastLoopEncrypt168x2(s *State2, src, dst *byte, stride, n int)
 //
-// Frame: 856 bytes local (0-799 = 2×400 perm buffers, 800=src0, 808=src1, 816=dst0, 824=dst1,
-//   832=count, 840=padWord), 48 bytes args.
-TEXT ·fastLoopEncrypt167x2(SB), $856-48
+// Frame: 840 bytes local (0-799 = 2×400 perm buffers, 800=src0, 808=src1, 816=dst0, 824=dst1,
+//   832=count), 40 bytes args.
+TEXT ·fastLoopEncrypt168x2(SB), $840-40
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9
 	MOVQ	stride+24(FP), CX
 	MOVQ	n+32(FP), DX
-	MOVQ	padWord+40(FP), R12
 
 	// Compute src/dst pointers.
 	MOVQ	AX, 800(SP)		// src0
@@ -1161,7 +1106,6 @@ TEXT ·fastLoopEncrypt167x2(SB), $856-48
 	LEAQ	(R9)(CX*1), R10
 	MOVQ	R10, 824(SP)		// dst1
 	MOVQ	DX, 832(SP)		// count
-	MOVQ	R12, 840(SP)		// padWord
 
 	// Load 25×16 from State2 into buffer A.
 	VMOVDQU	0*16(DI), X0;  VMOVDQU	X0, 0*16(SP)
@@ -1191,7 +1135,7 @@ TEXT ·fastLoopEncrypt167x2(SB), $856-48
 	VMOVDQU	24*16(DI), X0; VMOVDQU	X0, 24*16(SP)
 
 enc_loop_x2:
-	CMPQ	832(SP), $167
+	CMPQ	832(SP), $168
 	JB	enc_done_x2
 
 	LEAQ	0(SP), R8
@@ -1220,33 +1164,17 @@ enc_loop_x2:
 	ENCRYPT_LANE_X2(17)
 	ENCRYPT_LANE_X2(18)
 	ENCRYPT_LANE_X2(19)
+	ENCRYPT_LANE_X2(20)
 
-	// Lane 20: 7 bytes for each instance.
-	// Instance 0
-	LOAD_7BYTES(AX, 160, R10, R11)
-	XORQ	R10, 20*16+0(R8)
-	MOVQ	20*16+0(R8), R10
-	STORE_7BYTES(DX, 160, R10, R11)
-	// Instance 1
-	LOAD_7BYTES(CX, 160, R10, R11)
-	XORQ	R10, 20*16+8(R8)
-	MOVQ	20*16+8(R8), R10
-	STORE_7BYTES(BX, 160, R10, R11)
-
-	// XOR padding into both instances of lane 20.
-	MOVQ	840(SP), R10
-	XORQ	R10, 20*16+0(R8)
-	XORQ	R10, 20*16+8(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
 	MOVQ	AX, 800(SP)
 	MOVQ	CX, 808(SP)
 	MOVQ	DX, 816(SP)
 	MOVQ	BX, 824(SP)
-	SUBQ	$167, 832(SP)
+	SUBQ	$168, 832(SP)
 
 	// Permute: 12-round inner loop.
 	LEAQ	0(SP), R8
@@ -1295,14 +1223,13 @@ enc_done_x2:
 	RET
 
 
-// func fastLoopDecrypt167x2(s *State2, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x2(SB), $856-48
+// func fastLoopDecrypt168x2(s *State2, src, dst *byte, stride, n int)
+TEXT ·fastLoopDecrypt168x2(SB), $840-40
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9
 	MOVQ	stride+24(FP), CX
 	MOVQ	n+32(FP), DX
-	MOVQ	padWord+40(FP), R12
 
 	MOVQ	AX, 800(SP)
 	LEAQ	(AX)(CX*1), R10
@@ -1311,7 +1238,6 @@ TEXT ·fastLoopDecrypt167x2(SB), $856-48
 	LEAQ	(R9)(CX*1), R10
 	MOVQ	R10, 824(SP)
 	MOVQ	DX, 832(SP)
-	MOVQ	R12, 840(SP)
 
 	// Load state.
 	VMOVDQU	0*16(DI), X0;  VMOVDQU	X0, 0*16(SP)
@@ -1341,7 +1267,7 @@ TEXT ·fastLoopDecrypt167x2(SB), $856-48
 	VMOVDQU	24*16(DI), X0; VMOVDQU	X0, 24*16(SP)
 
 dec_loop_x2:
-	CMPQ	832(SP), $167
+	CMPQ	832(SP), $168
 	JB	dec_done_x2
 
 	LEAQ	0(SP), R8
@@ -1370,43 +1296,17 @@ dec_loop_x2:
 	DECRYPT_LANE_X2(17)
 	DECRYPT_LANE_X2(18)
 	DECRYPT_LANE_X2(19)
+	DECRYPT_LANE_X2(20)
 
-	// Lane 20: 7-byte decrypt for each instance.
-	// Instance 0: pt = ct ^ state(low7), state = (state_high | ct)
-	LOAD_7BYTES(AX, 160, R10, R11)
-	MOVQ	20*16+0(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(DX, 160, R11, R13)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*16+0(R8)
-	// Instance 1
-	LOAD_7BYTES(CX, 160, R10, R11)
-	MOVQ	20*16+8(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(BX, 160, R11, R13)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*16+8(R8)
-
-	// XOR padding.
-	MOVQ	840(SP), R10
-	XORQ	R10, 20*16+0(R8)
-	XORQ	R10, 20*16+8(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
 	MOVQ	AX, 800(SP)
 	MOVQ	CX, 808(SP)
 	MOVQ	DX, 816(SP)
 	MOVQ	BX, 824(SP)
-	SUBQ	$167, 832(SP)
+	SUBQ	$168, 832(SP)
 
 	// Permute.
 	LEAQ	0(SP), R8
@@ -1472,17 +1372,16 @@ dec_done_x2:
 	MOVQ i*8(BX), R10; MOVQ i*32+24(R8), R11; XORQ R10, R11; MOVQ R11, i*8(R14); MOVQ R10, i*32+24(R8)
 
 
-// func fastLoopEncrypt167x4(s *State4, src, dst *byte, stride, n int, padWord uint64)
+// func fastLoopEncrypt168x4(s *State4, src, dst *byte, stride, n int)
 //
-// Frame: 1688 bytes local (0-1599 = 2x800 perm buffers, 1600=src0..src3 (32), 1632=dst0..dst3 (32),
-//   1664=count, 1672=padWord), 48 bytes args.
-TEXT ·fastLoopEncrypt167x4(SB), $1688-48
+// Frame: 1672 bytes local (0-1599 = 2x800 perm buffers, 1600=src0..src3 (32), 1632=dst0..dst3 (32),
+//   1664=count), 40 bytes args.
+TEXT ·fastLoopEncrypt168x4(SB), $1672-40
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9
 	MOVQ	stride+24(FP), CX
 	MOVQ	n+32(FP), DX
-	MOVQ	padWord+40(FP), R12
 
 	// Compute 4 src pointers.
 	MOVQ	AX, 1600(SP)
@@ -1501,7 +1400,6 @@ TEXT ·fastLoopEncrypt167x4(SB), $1688-48
 	LEAQ	(R10)(CX*1), R10
 	MOVQ	R10, 1656(SP)
 	MOVQ	DX, 1664(SP)
-	MOVQ	R12, 1672(SP)
 
 	// Load 25x32 from State4 into buffer A.
 	VMOVDQU	0*32(DI), Y0;  VMOVDQU	Y0, 0*32(SP)
@@ -1531,7 +1429,7 @@ TEXT ·fastLoopEncrypt167x4(SB), $1688-48
 	VMOVDQU	24*32(DI), Y0; VMOVDQU	Y0, 24*32(SP)
 
 enc_loop_x4:
-	CMPQ	1664(SP), $167
+	CMPQ	1664(SP), $168
 	JB	enc_done_x4
 
 	LEAQ	0(SP), R8
@@ -1564,40 +1462,16 @@ enc_loop_x4:
 	ENCRYPT_LANE_X4(17)
 	ENCRYPT_LANE_X4(18)
 	ENCRYPT_LANE_X4(19)
+	ENCRYPT_LANE_X4(20)
 
-	// Lane 20: 7 bytes x 4 instances.
-	LOAD_7BYTES(AX, 160, R10, R11)
-	XORQ	R10, 20*32+0(R8)
-	MOVQ	20*32+0(R8), R10
-	STORE_7BYTES(SI, 160, R10, R11)
-	LOAD_7BYTES(CX, 160, R10, R11)
-	XORQ	R10, 20*32+8(R8)
-	MOVQ	20*32+8(R8), R10
-	STORE_7BYTES(BP, 160, R10, R11)
-	LOAD_7BYTES(DX, 160, R10, R11)
-	XORQ	R10, 20*32+16(R8)
-	MOVQ	20*32+16(R8), R10
-	STORE_7BYTES(R13, 160, R10, R11)
-	LOAD_7BYTES(BX, 160, R10, R11)
-	XORQ	R10, 20*32+24(R8)
-	MOVQ	20*32+24(R8), R10
-	STORE_7BYTES(R14, 160, R10, R11)
-
-	// XOR padding.
-	MOVQ	1672(SP), R10
-	XORQ	R10, 20*32+0(R8)
-	XORQ	R10, 20*32+8(R8)
-	XORQ	R10, 20*32+16(R8)
-	XORQ	R10, 20*32+24(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
-	ADDQ	$167, SI
-	ADDQ	$167, BP
-	ADDQ	$167, R13
-	ADDQ	$167, R14
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
+	ADDQ	$168, SI
+	ADDQ	$168, BP
+	ADDQ	$168, R13
+	ADDQ	$168, R14
 	MOVQ	AX, 1600(SP)
 	MOVQ	CX, 1608(SP)
 	MOVQ	DX, 1616(SP)
@@ -1606,7 +1480,7 @@ enc_loop_x4:
 	MOVQ	BP, 1640(SP)
 	MOVQ	R13, 1648(SP)
 	MOVQ	R14, 1656(SP)
-	SUBQ	$167, 1664(SP)
+	SUBQ	$168, 1664(SP)
 
 	// Permute.
 	LEAQ	0(SP), R8
@@ -1655,14 +1529,13 @@ enc_done_x4:
 	RET
 
 
-// func fastLoopDecrypt167x4(s *State4, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x4(SB), $1688-48
+// func fastLoopDecrypt168x4(s *State4, src, dst *byte, stride, n int)
+TEXT ·fastLoopDecrypt168x4(SB), $1672-40
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9
 	MOVQ	stride+24(FP), CX
 	MOVQ	n+32(FP), DX
-	MOVQ	padWord+40(FP), R12
 
 	MOVQ	AX, 1600(SP)
 	LEAQ	(AX)(CX*1), R10
@@ -1679,7 +1552,6 @@ TEXT ·fastLoopDecrypt167x4(SB), $1688-48
 	LEAQ	(R10)(CX*1), R10
 	MOVQ	R10, 1656(SP)
 	MOVQ	DX, 1664(SP)
-	MOVQ	R12, 1672(SP)
 
 	VMOVDQU	0*32(DI), Y0;  VMOVDQU	Y0, 0*32(SP)
 	VMOVDQU	1*32(DI), Y0;  VMOVDQU	Y0, 1*32(SP)
@@ -1708,7 +1580,7 @@ TEXT ·fastLoopDecrypt167x4(SB), $1688-48
 	VMOVDQU	24*32(DI), Y0; VMOVDQU	Y0, 24*32(SP)
 
 dec_loop_x4:
-	CMPQ	1664(SP), $167
+	CMPQ	1664(SP), $168
 	JB	dec_done_x4
 
 	LEAQ	0(SP), R8
@@ -1741,63 +1613,16 @@ dec_loop_x4:
 	DECRYPT_LANE_X4(17)
 	DECRYPT_LANE_X4(18)
 	DECRYPT_LANE_X4(19)
+	DECRYPT_LANE_X4(20)
 
-	// Lane 20: 7-byte decrypt x 4 instances.
-	LOAD_7BYTES(AX, 160, R10, R11)
-	MOVQ	20*32+0(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(SI, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+0(R8)
-
-	LOAD_7BYTES(CX, 160, R10, R11)
-	MOVQ	20*32+8(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(BP, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+8(R8)
-
-	LOAD_7BYTES(DX, 160, R10, R11)
-	MOVQ	20*32+16(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(R13, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+16(R8)
-
-	LOAD_7BYTES(BX, 160, R10, R11)
-	MOVQ	20*32+24(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(R14, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+24(R8)
-
-	// XOR padding.
-	MOVQ	1672(SP), R10
-	XORQ	R10, 20*32+0(R8)
-	XORQ	R10, 20*32+8(R8)
-	XORQ	R10, 20*32+16(R8)
-	XORQ	R10, 20*32+24(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
-	ADDQ	$167, SI
-	ADDQ	$167, BP
-	ADDQ	$167, R13
-	ADDQ	$167, R14
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
+	ADDQ	$168, SI
+	ADDQ	$168, BP
+	ADDQ	$168, R13
+	ADDQ	$168, R14
 	MOVQ	AX, 1600(SP)
 	MOVQ	CX, 1608(SP)
 	MOVQ	DX, 1616(SP)
@@ -1806,7 +1631,7 @@ dec_loop_x4:
 	MOVQ	BP, 1640(SP)
 	MOVQ	R13, 1648(SP)
 	MOVQ	R14, 1656(SP)
-	SUBQ	$167, 1664(SP)
+	SUBQ	$168, 1664(SP)
 
 	// Permute.
 	LEAQ	0(SP), R8
@@ -1855,18 +1680,17 @@ dec_done_x4:
 	RET
 
 
-// func fastLoopEncrypt167x8AVX2(s *State8, src, dst *byte, stride, n int, padWord uint64)
+// func fastLoopEncrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)
 //
 // 2x fused x4 (half 0: instances 0-3, half 1: instances 4-7).
-// Frame: 1696 bytes local (0-1599 = 2x800 perm buffers,
-//   1600=src0..src3 (32), 1632=dst0..dst3 (32), 1664=count, 1672=padWord, 1680=saved state ptr), 48 bytes args.
-TEXT ·fastLoopEncrypt167x8AVX2(SB), $1696-48
+// Frame: 1688 bytes local (0-1599 = 2x800 perm buffers,
+//   1600=src0..src3 (32), 1632=dst0..dst3 (32), 1664=count, 1672=saved state ptr), 40 bytes args.
+TEXT ·fastLoopEncrypt168x8AVX2(SB), $1688-40
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9
 	MOVQ	stride+24(FP), CX
 	MOVQ	n+32(FP), DX
-	MOVQ	padWord+40(FP), R12
 
 	// === Half 0: instances 0-3 ===
 	MOVQ	AX, 1600(SP)
@@ -1884,8 +1708,7 @@ TEXT ·fastLoopEncrypt167x8AVX2(SB), $1696-48
 	LEAQ	(R10)(CX*1), R10
 	MOVQ	R10, 1656(SP)
 	MOVQ	DX, 1664(SP)
-	MOVQ	R12, 1672(SP)
-	MOVQ	DI, 1680(SP)
+	MOVQ	DI, 1672(SP)
 
 	// Load instances 0-3 from State8 (stride 64, offset 0).
 	VMOVDQU	0*64(DI), Y0;   VMOVDQU	Y0, 0*32(SP)
@@ -1915,7 +1738,7 @@ TEXT ·fastLoopEncrypt167x8AVX2(SB), $1696-48
 	VMOVDQU	24*64(DI), Y0;  VMOVDQU	Y0, 24*32(SP)
 
 enc_loop_x8a:
-	CMPQ	1664(SP), $167
+	CMPQ	1664(SP), $168
 	JB	enc_done_x8a
 
 	LEAQ	0(SP), R8
@@ -1948,38 +1771,16 @@ enc_loop_x8a:
 	ENCRYPT_LANE_X4(17)
 	ENCRYPT_LANE_X4(18)
 	ENCRYPT_LANE_X4(19)
+	ENCRYPT_LANE_X4(20)
 
-	LOAD_7BYTES(AX, 160, R10, R11)
-	XORQ	R10, 20*32+0(R8)
-	MOVQ	20*32+0(R8), R10
-	STORE_7BYTES(SI, 160, R10, R11)
-	LOAD_7BYTES(CX, 160, R10, R11)
-	XORQ	R10, 20*32+8(R8)
-	MOVQ	20*32+8(R8), R10
-	STORE_7BYTES(BP, 160, R10, R11)
-	LOAD_7BYTES(DX, 160, R10, R11)
-	XORQ	R10, 20*32+16(R8)
-	MOVQ	20*32+16(R8), R10
-	STORE_7BYTES(R13, 160, R10, R11)
-	LOAD_7BYTES(BX, 160, R10, R11)
-	XORQ	R10, 20*32+24(R8)
-	MOVQ	20*32+24(R8), R10
-	STORE_7BYTES(R14, 160, R10, R11)
-
-	MOVQ	1672(SP), R10
-	XORQ	R10, 20*32+0(R8)
-	XORQ	R10, 20*32+8(R8)
-	XORQ	R10, 20*32+16(R8)
-	XORQ	R10, 20*32+24(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
-	ADDQ	$167, SI
-	ADDQ	$167, BP
-	ADDQ	$167, R13
-	ADDQ	$167, R14
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
+	ADDQ	$168, SI
+	ADDQ	$168, BP
+	ADDQ	$168, R13
+	ADDQ	$168, R14
 	MOVQ	AX, 1600(SP)
 	MOVQ	CX, 1608(SP)
 	MOVQ	DX, 1616(SP)
@@ -1988,7 +1789,7 @@ enc_loop_x8a:
 	MOVQ	BP, 1640(SP)
 	MOVQ	R13, 1648(SP)
 	MOVQ	R14, 1656(SP)
-	SUBQ	$167, 1664(SP)
+	SUBQ	$168, 1664(SP)
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
@@ -2091,7 +1892,7 @@ enc_done_x8a:
 	VMOVDQU	24*64+32(DI), Y0; VMOVDQU	Y0, 24*32(SP)
 
 enc_loop_x8b:
-	CMPQ	1664(SP), $167
+	CMPQ	1664(SP), $168
 	JB	enc_done_x8b
 
 	LEAQ	0(SP), R8
@@ -2124,38 +1925,16 @@ enc_loop_x8b:
 	ENCRYPT_LANE_X4(17)
 	ENCRYPT_LANE_X4(18)
 	ENCRYPT_LANE_X4(19)
+	ENCRYPT_LANE_X4(20)
 
-	LOAD_7BYTES(AX, 160, R10, R11)
-	XORQ	R10, 20*32+0(R8)
-	MOVQ	20*32+0(R8), R10
-	STORE_7BYTES(SI, 160, R10, R11)
-	LOAD_7BYTES(CX, 160, R10, R11)
-	XORQ	R10, 20*32+8(R8)
-	MOVQ	20*32+8(R8), R10
-	STORE_7BYTES(BP, 160, R10, R11)
-	LOAD_7BYTES(DX, 160, R10, R11)
-	XORQ	R10, 20*32+16(R8)
-	MOVQ	20*32+16(R8), R10
-	STORE_7BYTES(R13, 160, R10, R11)
-	LOAD_7BYTES(BX, 160, R10, R11)
-	XORQ	R10, 20*32+24(R8)
-	MOVQ	20*32+24(R8), R10
-	STORE_7BYTES(R14, 160, R10, R11)
-
-	MOVQ	1672(SP), R10
-	XORQ	R10, 20*32+0(R8)
-	XORQ	R10, 20*32+8(R8)
-	XORQ	R10, 20*32+16(R8)
-	XORQ	R10, 20*32+24(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
-	ADDQ	$167, SI
-	ADDQ	$167, BP
-	ADDQ	$167, R13
-	ADDQ	$167, R14
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
+	ADDQ	$168, SI
+	ADDQ	$168, BP
+	ADDQ	$168, R13
+	ADDQ	$168, R14
 	MOVQ	AX, 1600(SP)
 	MOVQ	CX, 1608(SP)
 	MOVQ	DX, 1616(SP)
@@ -2164,7 +1943,7 @@ enc_loop_x8b:
 	MOVQ	BP, 1640(SP)
 	MOVQ	R13, 1648(SP)
 	MOVQ	R14, 1656(SP)
-	SUBQ	$167, 1664(SP)
+	SUBQ	$168, 1664(SP)
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
@@ -2183,7 +1962,7 @@ enc_round_loop_x8b:
 
 enc_done_x8b:
 	// Store half 1 back.
-	MOVQ	1680(SP), DI
+	MOVQ	1672(SP), DI
 	LEAQ	0(SP), R8
 	VMOVDQU	0*32(R8), Y0;  VMOVDQU	Y0, 0*64+32(DI)
 	VMOVDQU	1*32(R8), Y0;  VMOVDQU	Y0, 1*64+32(DI)
@@ -2214,14 +1993,13 @@ enc_done_x8b:
 	RET
 
 
-// func fastLoopDecrypt167x8AVX2(s *State8, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x8AVX2(SB), $1696-48
+// func fastLoopDecrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)
+TEXT ·fastLoopDecrypt168x8AVX2(SB), $1688-40
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9
 	MOVQ	stride+24(FP), CX
 	MOVQ	n+32(FP), DX
-	MOVQ	padWord+40(FP), R12
 
 	// === Half 0 ===
 	MOVQ	AX, 1600(SP)
@@ -2239,8 +2017,7 @@ TEXT ·fastLoopDecrypt167x8AVX2(SB), $1696-48
 	LEAQ	(R10)(CX*1), R10
 	MOVQ	R10, 1656(SP)
 	MOVQ	DX, 1664(SP)
-	MOVQ	R12, 1672(SP)
-	MOVQ	DI, 1680(SP)
+	MOVQ	DI, 1672(SP)
 
 	VMOVDQU	0*64(DI), Y0;   VMOVDQU	Y0, 0*32(SP)
 	VMOVDQU	1*64(DI), Y0;   VMOVDQU	Y0, 1*32(SP)
@@ -2269,7 +2046,7 @@ TEXT ·fastLoopDecrypt167x8AVX2(SB), $1696-48
 	VMOVDQU	24*64(DI), Y0;  VMOVDQU	Y0, 24*32(SP)
 
 dec_loop_x8a:
-	CMPQ	1664(SP), $167
+	CMPQ	1664(SP), $168
 	JB	dec_done_x8a
 
 	LEAQ	0(SP), R8
@@ -2302,61 +2079,16 @@ dec_loop_x8a:
 	DECRYPT_LANE_X4(17)
 	DECRYPT_LANE_X4(18)
 	DECRYPT_LANE_X4(19)
+	DECRYPT_LANE_X4(20)
 
-	LOAD_7BYTES(AX, 160, R10, R11)
-	MOVQ	20*32+0(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(SI, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+0(R8)
-
-	LOAD_7BYTES(CX, 160, R10, R11)
-	MOVQ	20*32+8(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(BP, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+8(R8)
-
-	LOAD_7BYTES(DX, 160, R10, R11)
-	MOVQ	20*32+16(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(R13, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+16(R8)
-
-	LOAD_7BYTES(BX, 160, R10, R11)
-	MOVQ	20*32+24(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(R14, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+24(R8)
-
-	MOVQ	1672(SP), R10
-	XORQ	R10, 20*32+0(R8)
-	XORQ	R10, 20*32+8(R8)
-	XORQ	R10, 20*32+16(R8)
-	XORQ	R10, 20*32+24(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
-	ADDQ	$167, SI
-	ADDQ	$167, BP
-	ADDQ	$167, R13
-	ADDQ	$167, R14
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
+	ADDQ	$168, SI
+	ADDQ	$168, BP
+	ADDQ	$168, R13
+	ADDQ	$168, R14
 	MOVQ	AX, 1600(SP)
 	MOVQ	CX, 1608(SP)
 	MOVQ	DX, 1616(SP)
@@ -2365,7 +2097,7 @@ dec_loop_x8a:
 	MOVQ	BP, 1640(SP)
 	MOVQ	R13, 1648(SP)
 	MOVQ	R14, 1656(SP)
-	SUBQ	$167, 1664(SP)
+	SUBQ	$168, 1664(SP)
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
@@ -2383,7 +2115,7 @@ dec_round_loop_x8a:
 	JMP	dec_loop_x8a
 
 dec_done_x8a:
-	MOVQ	1680(SP), DI
+	MOVQ	1672(SP), DI
 	LEAQ	0(SP), R8
 	VMOVDQU	0*32(R8), Y0;  VMOVDQU	Y0, 0*64(DI)
 	VMOVDQU	1*32(R8), Y0;  VMOVDQU	Y0, 1*64(DI)
@@ -2464,7 +2196,7 @@ dec_done_x8a:
 	VMOVDQU	24*64+32(DI), Y0; VMOVDQU	Y0, 24*32(SP)
 
 dec_loop_x8b:
-	CMPQ	1664(SP), $167
+	CMPQ	1664(SP), $168
 	JB	dec_done_x8b
 
 	LEAQ	0(SP), R8
@@ -2497,61 +2229,16 @@ dec_loop_x8b:
 	DECRYPT_LANE_X4(17)
 	DECRYPT_LANE_X4(18)
 	DECRYPT_LANE_X4(19)
+	DECRYPT_LANE_X4(20)
 
-	LOAD_7BYTES(AX, 160, R10, R11)
-	MOVQ	20*32+0(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(SI, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+0(R8)
-
-	LOAD_7BYTES(CX, 160, R10, R11)
-	MOVQ	20*32+8(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(BP, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+8(R8)
-
-	LOAD_7BYTES(DX, 160, R10, R11)
-	MOVQ	20*32+16(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(R13, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+16(R8)
-
-	LOAD_7BYTES(BX, 160, R10, R11)
-	MOVQ	20*32+24(R8), R11
-	MOVQ	R11, R12
-	XORQ	R10, R11
-	STORE_7BYTES(R14, 160, R11, R15)
-	SHRQ	$56, R12
-	SHLQ	$56, R12
-	ORQ	R10, R12
-	MOVQ	R12, 20*32+24(R8)
-
-	MOVQ	1672(SP), R10
-	XORQ	R10, 20*32+0(R8)
-	XORQ	R10, 20*32+8(R8)
-	XORQ	R10, 20*32+16(R8)
-	XORQ	R10, 20*32+24(R8)
-
-	ADDQ	$167, AX
-	ADDQ	$167, CX
-	ADDQ	$167, DX
-	ADDQ	$167, BX
-	ADDQ	$167, SI
-	ADDQ	$167, BP
-	ADDQ	$167, R13
-	ADDQ	$167, R14
+	ADDQ	$168, AX
+	ADDQ	$168, CX
+	ADDQ	$168, DX
+	ADDQ	$168, BX
+	ADDQ	$168, SI
+	ADDQ	$168, BP
+	ADDQ	$168, R13
+	ADDQ	$168, R14
 	MOVQ	AX, 1600(SP)
 	MOVQ	CX, 1608(SP)
 	MOVQ	DX, 1616(SP)
@@ -2560,7 +2247,7 @@ dec_loop_x8b:
 	MOVQ	BP, 1640(SP)
 	MOVQ	R13, 1648(SP)
 	MOVQ	R14, 1656(SP)
-	SUBQ	$167, 1664(SP)
+	SUBQ	$168, 1664(SP)
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
@@ -2578,7 +2265,7 @@ dec_round_loop_x8b:
 	JMP	dec_loop_x8b
 
 dec_done_x8b:
-	MOVQ	1680(SP), DI
+	MOVQ	1672(SP), DI
 	LEAQ	0(SP), R8
 	VMOVDQU	0*32(R8), Y0;  VMOVDQU	Y0, 0*64+32(DI)
 	VMOVDQU	1*32(R8), Y0;  VMOVDQU	Y0, 1*64+32(DI)
@@ -2628,17 +2315,16 @@ dec_done_x8b:
 	VMOVDQA64	Z25, Zlane
 
 
-// func fastLoopEncrypt167x8AVX512(s *State8, src, dst *byte, stride, n int, padWord uint64)
+// func fastLoopEncrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
 //
 // State-resident in Z0-Z24. BX=src base, R14=dst base.
-// Frame: 400 bytes local (320 theta D + 64 gather indices + 16 pad), 48 bytes args.
-TEXT ·fastLoopEncrypt167x8AVX512(SB), $400-48
+// Frame: 384 bytes local (320 theta D + 64 gather indices), 40 bytes args.
+TEXT ·fastLoopEncrypt168x8AVX512(SB), $384-40
 	MOVQ	s+0(FP), AX
 	MOVQ	src+8(FP), BX
 	MOVQ	dst+16(FP), R14
 	MOVQ	stride+24(FP), R13
 	MOVQ	n+32(FP), R12
-	MOVQ	padWord+40(FP), R15
 
 	// Build gather index vector at SP+320.
 	MOVQ	$0, 320(SP)
@@ -2655,9 +2341,6 @@ TEXT ·fastLoopEncrypt167x8AVX512(SB), $400-48
 	MOVQ	CX, 368(SP)
 	ADDQ	R13, CX
 	MOVQ	CX, 376(SP)
-
-	// Save padWord to stack (R15 is clobbered by permutation).
-	MOVQ	R15, 384(SP)
 
 	// Load state.
 	VMOVDQU64	0*64(AX), Z0
@@ -2687,12 +2370,12 @@ TEXT ·fastLoopEncrypt167x8AVX512(SB), $400-48
 	VMOVDQU64	24*64(AX), Z24
 
 enc_loop_avx512:
-	CMPQ	R12, $167
+	CMPQ	R12, $168
 	JB	enc_done_avx512
 
 	VMOVDQU64	320(SP), Z28
 
-	// Encrypt lanes 0-19 via gather/scatter.
+	// Encrypt all 21 lanes via gather/scatter.
 	ENCRYPT_LANE_X8_GS(0*8, Z0)
 	ENCRYPT_LANE_X8_GS(1*8, Z1)
 	ENCRYPT_LANE_X8_GS(2*8, Z2)
@@ -2713,46 +2396,7 @@ enc_loop_avx512:
 	ENCRYPT_LANE_X8_GS(17*8, Z17)
 	ENCRYPT_LANE_X8_GS(18*8, Z18)
 	ENCRYPT_LANE_X8_GS(19*8, Z19)
-
-	// Lane 20: scalar 7-byte encrypt for each of 8 instances.
-	// Extract each qword from Z20, process, insert back.
-	// Use stride from gather index table to compute offsets.
-	VMOVDQU64	Z20, 0(SP)	// spill Z20 to SP+0..63
-	MOVQ	$0, CX		// instance counter
-	MOVQ	$0, DX		// src/dst offset = instance * stride
-
-enc_lane20_loop:
-	CMPQ	CX, $8
-	JGE	enc_lane20_done
-
-	// Load 7 bytes from src + offset + 160.
-	LEAQ	(BX)(DX*1), SI
-	LOAD_7BYTES(SI, 160, R10, R11)
-	// XOR into state lane 20[instance]
-	LEAQ	(CX)(CX*1), DI		// inst * 2 (need inst * 8)
-	SHLQ	$2, DI			// inst * 8
-	XORQ	R10, (SP)(DI*1)		// state ^= pt
-	MOVQ	(SP)(DI*1), R10		// ct = state
-	// Store 7 bytes to dst + offset + 160.
-	LEAQ	(R14)(DX*1), SI
-	STORE_7BYTES(SI, 160, R10, R11)
-
-	ADDQ	R13, DX		// next instance offset
-	INCQ	CX
-	JMP	enc_lane20_loop
-
-enc_lane20_done:
-	// XOR padding into all 8 instances of lane 20.
-	MOVQ	384(SP), R10	// padWord
-	XORQ	R10, 0*8(SP)
-	XORQ	R10, 1*8(SP)
-	XORQ	R10, 2*8(SP)
-	XORQ	R10, 3*8(SP)
-	XORQ	R10, 4*8(SP)
-	XORQ	R10, 5*8(SP)
-	XORQ	R10, 6*8(SP)
-	XORQ	R10, 7*8(SP)
-	VMOVDQU64	0(SP), Z20	// reload Z20
+	ENCRYPT_LANE_X8_GS(20*8, Z20)
 
 	// Permute.
 	LEAQ	round_consts_2x+192(SB), R11
@@ -2760,9 +2404,9 @@ enc_lane20_done:
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
 
-	ADDQ	$167, BX
-	ADDQ	$167, R14
-	SUBQ	$167, R12
+	ADDQ	$168, BX
+	ADDQ	$168, R14
+	SUBQ	$168, R12
 	JMP	enc_loop_avx512
 
 enc_done_avx512:
@@ -2796,14 +2440,13 @@ enc_done_avx512:
 	RET
 
 
-// func fastLoopDecrypt167x8AVX512(s *State8, src, dst *byte, stride, n int, padWord uint64)
-TEXT ·fastLoopDecrypt167x8AVX512(SB), $400-48
+// func fastLoopDecrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
+TEXT ·fastLoopDecrypt168x8AVX512(SB), $384-40
 	MOVQ	s+0(FP), AX
 	MOVQ	src+8(FP), BX
 	MOVQ	dst+16(FP), R14
 	MOVQ	stride+24(FP), R13
 	MOVQ	n+32(FP), R12
-	MOVQ	padWord+40(FP), R15
 
 	MOVQ	$0, 320(SP)
 	MOVQ	R13, 328(SP)
@@ -2819,8 +2462,6 @@ TEXT ·fastLoopDecrypt167x8AVX512(SB), $400-48
 	MOVQ	CX, 368(SP)
 	ADDQ	R13, CX
 	MOVQ	CX, 376(SP)
-
-	MOVQ	R15, 384(SP)
 
 	VMOVDQU64	0*64(AX), Z0
 	VMOVDQU64	1*64(AX), Z1
@@ -2849,7 +2490,7 @@ TEXT ·fastLoopDecrypt167x8AVX512(SB), $400-48
 	VMOVDQU64	24*64(AX), Z24
 
 dec_loop_avx512:
-	CMPQ	R12, $167
+	CMPQ	R12, $168
 	JB	dec_done_avx512
 
 	VMOVDQU64	320(SP), Z28
@@ -2875,55 +2516,16 @@ dec_loop_avx512:
 	DECRYPT_LANE_X8_GS(18*8, Z18)
 	DECRYPT_LANE_X8_GS(19*8, Z19)
 
-	// Lane 20: scalar 7-byte decrypt for each of 8 instances.
-	VMOVDQU64	Z20, 0(SP)
-	MOVQ	$0, CX
-	MOVQ	$0, DX
-
-dec_lane20_loop:
-	CMPQ	CX, $8
-	JGE	dec_lane20_done
-
-	LEAQ	(BX)(DX*1), SI
-	LOAD_7BYTES(SI, 160, R10, R11)
-	// R10 = ciphertext (7 bytes)
-	LEAQ	(CX)(CX*1), DI
-	SHLQ	$2, DI			// inst * 8
-	MOVQ	(SP)(DI*1), R11		// state
-	MOVQ	R11, R15		// save state
-	XORQ	R10, R11		// pt = ct ^ state
-	LEAQ	(R14)(DX*1), SI
-	STORE_7BYTES(SI, 160, R11, R9)
-	// state = (state & 0xff00...) | ct
-	SHRQ	$56, R15
-	SHLQ	$56, R15
-	ORQ	R10, R15
-	MOVQ	R15, (SP)(DI*1)
-
-	ADDQ	R13, DX
-	INCQ	CX
-	JMP	dec_lane20_loop
-
-dec_lane20_done:
-	MOVQ	384(SP), R10
-	XORQ	R10, 0*8(SP)
-	XORQ	R10, 1*8(SP)
-	XORQ	R10, 2*8(SP)
-	XORQ	R10, 3*8(SP)
-	XORQ	R10, 4*8(SP)
-	XORQ	R10, 5*8(SP)
-	XORQ	R10, 6*8(SP)
-	XORQ	R10, 7*8(SP)
-	VMOVDQU64	0(SP), Z20
+	DECRYPT_LANE_X8_GS(20*8, Z20)
 
 	LEAQ	round_consts_2x+192(SB), R11
 	X8_4ROUNDS_AVX512(0, 16, 32, 48)
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
 
-	ADDQ	$167, BX
-	ADDQ	$167, R14
-	SUBQ	$167, R12
+	ADDQ	$168, BX
+	ADDQ	$168, R14
+	SUBQ	$168, R12
 	JMP	dec_loop_avx512
 
 dec_done_avx512:

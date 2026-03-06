@@ -44,79 +44,79 @@ func fastLoopAbsorb168x8Arch(s *State8, in []byte, stride, n int) bool {
 }
 
 //go:noescape
-func fastLoopEncrypt167x1(s *State1, src, dst *byte, n int, padWord uint64)
+func fastLoopEncrypt168x1(s *State1, src, dst *byte, n int)
 
 //go:noescape
-func fastLoopDecrypt167x1(s *State1, src, dst *byte, n int, padWord uint64)
+func fastLoopDecrypt168x1(s *State1, src, dst *byte, n int)
 
 //go:noescape
-func fastLoopEncrypt167x2(s *State2, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopEncrypt168x2(s *State2, src, dst *byte, stride, n int)
 
 //go:noescape
-func fastLoopDecrypt167x2(s *State2, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopDecrypt168x2(s *State2, src, dst *byte, stride, n int)
 
 //go:noescape
-func fastLoopEncrypt167x4(s *State4, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopEncrypt168x4(s *State4, src, dst *byte, stride, n int)
 
 //go:noescape
-func fastLoopDecrypt167x4(s *State4, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopDecrypt168x4(s *State4, src, dst *byte, stride, n int)
 
 //go:noescape
-func fastLoopEncrypt167x8AVX2(s *State8, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopEncrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)
 
 //go:noescape
-func fastLoopDecrypt167x8AVX2(s *State8, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopDecrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)
 
 //go:noescape
-func fastLoopEncrypt167x8AVX512(s *State8, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopEncrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
 
 //go:noescape
-func fastLoopDecrypt167x8AVX512(s *State8, src, dst *byte, stride, n int, padWord uint64)
+func fastLoopDecrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
 
-func fastLoopEncrypt167x1Arch(s *State1, src, dst []byte, padWord uint64) bool {
-	fastLoopEncrypt167x1(s, unsafe.SliceData(src), unsafe.SliceData(dst), len(src), padWord)
+func fastLoopEncrypt168x1Arch(s *State1, src, dst []byte) bool {
+	fastLoopEncrypt168x1(s, unsafe.SliceData(src), unsafe.SliceData(dst), len(src))
 	return true
 }
 
-func fastLoopDecrypt167x1Arch(s *State1, src, dst []byte, padWord uint64) bool {
-	fastLoopDecrypt167x1(s, unsafe.SliceData(src), unsafe.SliceData(dst), len(src), padWord)
+func fastLoopDecrypt168x1Arch(s *State1, src, dst []byte) bool {
+	fastLoopDecrypt168x1(s, unsafe.SliceData(src), unsafe.SliceData(dst), len(src))
 	return true
 }
 
-func fastLoopEncrypt167x2Arch(s *State2, src, dst []byte, stride, n int, padWord uint64) bool {
-	fastLoopEncrypt167x2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+func fastLoopEncrypt168x2Arch(s *State2, src, dst []byte, stride, n int) bool {
+	fastLoopEncrypt168x2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	return true
 }
 
-func fastLoopDecrypt167x2Arch(s *State2, src, dst []byte, stride, n int, padWord uint64) bool {
-	fastLoopDecrypt167x2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+func fastLoopDecrypt168x2Arch(s *State2, src, dst []byte, stride, n int) bool {
+	fastLoopDecrypt168x2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	return true
 }
 
-func fastLoopEncrypt167x4Arch(s *State4, src, dst []byte, stride, n int, padWord uint64) bool {
-	fastLoopEncrypt167x4(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+func fastLoopEncrypt168x4Arch(s *State4, src, dst []byte, stride, n int) bool {
+	fastLoopEncrypt168x4(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	return true
 }
 
-func fastLoopDecrypt167x4Arch(s *State4, src, dst []byte, stride, n int, padWord uint64) bool {
-	fastLoopDecrypt167x4(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+func fastLoopDecrypt168x4Arch(s *State4, src, dst []byte, stride, n int) bool {
+	fastLoopDecrypt168x4(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	return true
 }
 
-func fastLoopEncrypt167x8Arch(s *State8, src, dst []byte, stride, n int, padWord uint64) bool {
+func fastLoopEncrypt168x8Arch(s *State8, src, dst []byte, stride, n int) bool {
 	if hasAVX512 {
-		fastLoopEncrypt167x8AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+		fastLoopEncrypt168x8AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	} else {
-		fastLoopEncrypt167x8AVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+		fastLoopEncrypt168x8AVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	}
 	return true
 }
 
-func fastLoopDecrypt167x8Arch(s *State8, src, dst []byte, stride, n int, padWord uint64) bool {
+func fastLoopDecrypt168x8Arch(s *State8, src, dst []byte, stride, n int) bool {
 	if hasAVX512 {
-		fastLoopDecrypt167x8AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+		fastLoopDecrypt168x8AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	} else {
-		fastLoopDecrypt167x8AVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n, padWord)
+		fastLoopDecrypt168x8AVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
 	}
 	return true
 }

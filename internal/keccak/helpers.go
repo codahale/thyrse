@@ -3,8 +3,7 @@ package keccak
 import "encoding/binary"
 
 const (
-	Rate    = 168
-	Rate167 = 167
+	Rate = 168
 )
 
 func loadPartialLE(in []byte) uint64 {
@@ -64,51 +63,40 @@ func (s *State1) AbsorbFinal(tail []byte, ds byte) {
 	xorByteInWord(&s.a[(Rate-1)>>3], Rate-1, 0x80)
 }
 
-// FastLoopEncrypt167 XORs plaintext into state, outputs ciphertext, pads, and permutes
-// for each full 167-byte block. Returns bytes processed (multiple of 167).
-func (s *State1) FastLoopEncrypt167(src, dst []byte, paddingByte byte) int {
-	n := (len(src) / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopEncrypt167x1Arch(s, src[:n], dst[:n], padWord) {
+// FastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes
+// for each full 168-byte block. Returns bytes processed (multiple of 168).
+func (s *State1) FastLoopEncrypt168(src, dst []byte) int {
+	n := (len(src) / Rate) * Rate
+	if n > 0 && fastLoopEncrypt168x1Arch(s, src[:n], dst[:n]) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			w := binary.LittleEndian.Uint64(src[off+base : off+base+8])
 			s.a[lane] ^= w
 			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], s.a[lane])
 		}
-		w := loadPartialLE(src[off+160 : off+167])
-		s.a[20] ^= w
-		storePartialLE(dst[off+160:off+167], s.a[20])
-		s.a[20] ^= padWord
 		s.Permute12()
 	}
 	return n
 }
 
-// FastLoopDecrypt167 decrypts ciphertext (plaintext = ct ^ state, state = ct), pads, and permutes
-// for each full 167-byte block. Returns bytes processed (multiple of 167).
-func (s *State1) FastLoopDecrypt167(src, dst []byte, paddingByte byte) int {
-	n := (len(src) / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopDecrypt167x1Arch(s, src[:n], dst[:n], padWord) {
+// FastLoopDecrypt168 decrypts ciphertext (plaintext = ct ^ state, state = ct), and permutes
+// for each full 168-byte block. Returns bytes processed (multiple of 168).
+func (s *State1) FastLoopDecrypt168(src, dst []byte) int {
+	n := (len(src) / Rate) * Rate
+	if n > 0 && fastLoopDecrypt168x1Arch(s, src[:n], dst[:n]) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			ct := binary.LittleEndian.Uint64(src[off+base : off+base+8])
 			pt := ct ^ s.a[lane]
 			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], pt)
 			s.a[lane] = ct
 		}
-		ct := loadPartialLE(src[off+160 : off+167])
-		pt := ct ^ (s.a[20] & 0x00ffffffffffffff)
-		storePartialLE(dst[off+160:off+167], pt)
-		s.a[20] = (s.a[20] & 0xff00000000000000) | ct
-		s.a[20] ^= padWord
 		s.Permute12()
 	}
 	return n
@@ -246,17 +234,16 @@ func (s *State2) AbsorbFinal(tail0, tail1 []byte, ds byte) {
 	}
 }
 
-// FastLoopEncrypt167 XORs plaintext into state, outputs ciphertext, pads, and permutes.
+// FastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes.
 // Instance i reads from src[i*stride:], writes to dst[i*stride:]. Returns bytes processed per instance.
-func (s *State2) FastLoopEncrypt167(src, dst []byte, stride int, paddingByte byte) int {
+func (s *State2) FastLoopEncrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-stride, 0)
-	n = (n / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopEncrypt167x2Arch(s, src, dst, stride, n, padWord) {
+	n = (n / Rate) * Rate
+	if n > 0 && fastLoopEncrypt168x2Arch(s, src, dst, stride, n) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			for inst := range 2 {
 				w := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
@@ -264,27 +251,20 @@ func (s *State2) FastLoopEncrypt167(src, dst []byte, stride int, paddingByte byt
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.a[lane][inst])
 			}
 		}
-		for inst := range 2 {
-			w := loadPartialLE(src[inst*stride+off+160 : inst*stride+off+167])
-			s.a[20][inst] ^= w
-			storePartialLE(dst[inst*stride+off+160:inst*stride+off+167], s.a[20][inst])
-			s.a[20][inst] ^= padWord
-		}
 		s.Permute12()
 	}
 	return n
 }
 
-// FastLoopDecrypt167 decrypts ciphertext, pads, and permutes.
-func (s *State2) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byte) int {
+// FastLoopDecrypt168 decrypts ciphertext and permutes.
+func (s *State2) FastLoopDecrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-stride, 0)
-	n = (n / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopDecrypt167x2Arch(s, src, dst, stride, n, padWord) {
+	n = (n / Rate) * Rate
+	if n > 0 && fastLoopDecrypt168x2Arch(s, src, dst, stride, n) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			for inst := range 2 {
 				ct := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
@@ -292,13 +272,6 @@ func (s *State2) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byt
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], pt)
 				s.a[lane][inst] = ct
 			}
-		}
-		for inst := range 2 {
-			ct := loadPartialLE(src[inst*stride+off+160 : inst*stride+off+167])
-			pt := ct ^ (s.a[20][inst] & 0x00ffffffffffffff)
-			storePartialLE(dst[inst*stride+off+160:inst*stride+off+167], pt)
-			s.a[20][inst] = (s.a[20][inst] & 0xff00000000000000) | ct
-			s.a[20][inst] ^= padWord
 		}
 		s.Permute12()
 	}
@@ -413,16 +386,15 @@ func (s *State4) AbsorbFinal(tail0, tail1, tail2, tail3 []byte, ds byte) {
 	}
 }
 
-// FastLoopEncrypt167 XORs plaintext into state, outputs ciphertext, pads, and permutes.
-func (s *State4) FastLoopEncrypt167(src, dst []byte, stride int, paddingByte byte) int {
+// FastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes.
+func (s *State4) FastLoopEncrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-3*stride, 0)
-	n = (n / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopEncrypt167x4Arch(s, src, dst, stride, n, padWord) {
+	n = (n / Rate) * Rate
+	if n > 0 && fastLoopEncrypt168x4Arch(s, src, dst, stride, n) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			for inst := range 4 {
 				w := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
@@ -430,27 +402,20 @@ func (s *State4) FastLoopEncrypt167(src, dst []byte, stride int, paddingByte byt
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.a[lane][inst])
 			}
 		}
-		for inst := range 4 {
-			w := loadPartialLE(src[inst*stride+off+160 : inst*stride+off+167])
-			s.a[20][inst] ^= w
-			storePartialLE(dst[inst*stride+off+160:inst*stride+off+167], s.a[20][inst])
-			s.a[20][inst] ^= padWord
-		}
 		s.Permute12()
 	}
 	return n
 }
 
-// FastLoopDecrypt167 decrypts ciphertext, pads, and permutes.
-func (s *State4) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byte) int {
+// FastLoopDecrypt168 decrypts ciphertext and permutes.
+func (s *State4) FastLoopDecrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-3*stride, 0)
-	n = (n / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopDecrypt167x4Arch(s, src, dst, stride, n, padWord) {
+	n = (n / Rate) * Rate
+	if n > 0 && fastLoopDecrypt168x4Arch(s, src, dst, stride, n) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			for inst := range 4 {
 				ct := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
@@ -458,13 +423,6 @@ func (s *State4) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byt
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], pt)
 				s.a[lane][inst] = ct
 			}
-		}
-		for inst := range 4 {
-			ct := loadPartialLE(src[inst*stride+off+160 : inst*stride+off+167])
-			pt := ct ^ (s.a[20][inst] & 0x00ffffffffffffff)
-			storePartialLE(dst[inst*stride+off+160:inst*stride+off+167], pt)
-			s.a[20][inst] = (s.a[20][inst] & 0xff00000000000000) | ct
-			s.a[20][inst] ^= padWord
 		}
 		s.Permute12()
 	}
@@ -597,16 +555,15 @@ func (s *State8) AbsorbFinal(tail0, tail1, tail2, tail3, tail4, tail5, tail6, ta
 	}
 }
 
-// FastLoopEncrypt167 XORs plaintext into state, outputs ciphertext, pads, and permutes.
-func (s *State8) FastLoopEncrypt167(src, dst []byte, stride int, paddingByte byte) int {
+// FastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes.
+func (s *State8) FastLoopEncrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-7*stride, 0)
-	n = (n / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopEncrypt167x8Arch(s, src, dst, stride, n, padWord) {
+	n = (n / Rate) * Rate
+	if n > 0 && fastLoopEncrypt168x8Arch(s, src, dst, stride, n) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			for inst := range 8 {
 				w := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
@@ -614,27 +571,20 @@ func (s *State8) FastLoopEncrypt167(src, dst []byte, stride int, paddingByte byt
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.a[lane][inst])
 			}
 		}
-		for inst := range 8 {
-			w := loadPartialLE(src[inst*stride+off+160 : inst*stride+off+167])
-			s.a[20][inst] ^= w
-			storePartialLE(dst[inst*stride+off+160:inst*stride+off+167], s.a[20][inst])
-			s.a[20][inst] ^= padWord
-		}
 		s.Permute12()
 	}
 	return n
 }
 
-// FastLoopDecrypt167 decrypts ciphertext, pads, and permutes.
-func (s *State8) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byte) int {
+// FastLoopDecrypt168 decrypts ciphertext and permutes.
+func (s *State8) FastLoopDecrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-7*stride, 0)
-	n = (n / Rate167) * Rate167
-	padWord := uint64(paddingByte) << 56
-	if n > 0 && fastLoopDecrypt167x8Arch(s, src, dst, stride, n, padWord) {
+	n = (n / Rate) * Rate
+	if n > 0 && fastLoopDecrypt168x8Arch(s, src, dst, stride, n) {
 		return n
 	}
-	for off := 0; off < n; off += Rate167 {
-		for lane := range 20 {
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
 			base := lane << 3
 			for inst := range 8 {
 				ct := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
@@ -642,13 +592,6 @@ func (s *State8) FastLoopDecrypt167(src, dst []byte, stride int, paddingByte byt
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], pt)
 				s.a[lane][inst] = ct
 			}
-		}
-		for inst := range 8 {
-			ct := loadPartialLE(src[inst*stride+off+160 : inst*stride+off+167])
-			pt := ct ^ (s.a[20][inst] & 0x00ffffffffffffff)
-			storePartialLE(dst[inst*stride+off+160:inst*stride+off+167], pt)
-			s.a[20][inst] = (s.a[20][inst] & 0xff00000000000000) | ct
-			s.a[20][inst] ^= padWord
 		}
 		s.Permute12()
 	}
