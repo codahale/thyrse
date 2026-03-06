@@ -463,7 +463,7 @@ directly covered by Theorem 1 with $z = 1$.
 
 1. **Padded vs. padded (different domain bytes).** The domain byte occupies a fixed position in the TurboSHAKE padding frame (byte position `pos` in `pad_permute`). Two padded blocks with different domain bytes differ in that byte position, hence have different rate content and different full $\pi$-inputs regardless of capacity.
 
-2. **Padded vs. unpadded.** Unpadded intermediate blocks (set $\mathcal{U}$) carry no domain byte or `0x80` padding. Their capacity inputs are secret values inherited from the keyed init (via prior $\pi$-calls). Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, capacity outputs are pairwise distinct across all $\sigma + t$ evaluations, so unpadded blocks' capacity inputs are distinct from those of any padded block.
+2. **Padded vs. unpadded.** Unpadded intermediate blocks (set $\mathcal{U}$) carry no domain byte or `0x80` padding. Their capacity inputs are inherited from the keyed init chain: the initial capacity is zero; after the init `pad_permute`, the capacity output is nonzero with overwhelming probability (it is the capacity projection of $\pi$ on a fresh input); each subsequent $\pi$-call inherits the previous call's capacity output. Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, all capacity outputs are pairwise distinct across the $\sigma + t$ evaluations. The only $\pi$-call with zero capacity input is the initial state (used exclusively by padded init calls), so no unpadded block's capacity input can equal any padded block's capacity input. Combined with the rate-content difference (unpadded blocks lack domain bytes and `0x80` padding), the full 1600-bit $\pi$-inputs are distinct.
 
 3. **Within a set.** Calls within the same role are distinguished by either different keys (different rate content at init) or different capacity inputs inherited from prior calls in the chain (guaranteed distinct under $\neg\mathsf{Bad}_{\mathrm{perm}}$).
 
@@ -477,11 +477,11 @@ directly covered by Theorem 1 with $z = 1$.
 | `0x27` | 0010 0111 | 11 **0** 00 1 | 0 | final (single-node tag, $n=1$ only) |
 | `0x37` | 0011 0111 | 11 **1** 01 1 | 1 | final (tag accumulation) |
 
-Inner/final node separability follows directly from Sakura Lemma 4: the tag-accumulation domain byte (`0x37`, $S = 1$) is distinguishable from all leaf domain bytes (`0x33`, `0x2B`, $S = 0$) and the KDF byte (`0x3B`, $S = 0$) by the frame bit alone. The single-node tag byte (`0x27`, $S = 0$) appears only in the $n = 1$ path where no final node exists, so no inner/final ambiguity arises.
+Inner/final node separability follows directly from Sakura Lemma 4: the tag-accumulation domain byte (`0x37`, $S = 1$) is distinguishable from all leaf domain bytes (`0x33`, `0x2B`, $S = 0$) and the KDF byte (`0x3B`, $S = 0$) by the frame bit alone. The single-node tag byte (`0x27`) is a dedicated single-node terminal domain byte with $S = 0$; its role separation comes from its distinct domain byte value (unique among all five bytes), not from the Sakura frame bit. It appears only in the $n = 1$ path where no final node exists, so no inner/final ambiguity arises.
 
 **Design constraint.** Future modifications to domain byte assignments MUST preserve Sakura suffix encoding compliance and the frame-bit partition between inner and final roles.
 
-**Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation) and Sections 6.5–6.6 (independent leaf and final-node analysis).
+**Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation) and Sections 6.6–6.10 (independent leaf, tag, and commitment analysis).
 
 ### 6.4 Bridge Theorem: KDF to Random Key
 
