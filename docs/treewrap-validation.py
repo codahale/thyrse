@@ -1,10 +1,35 @@
 #!/usr/bin/env python3
 """TreeWrap spec vector utility.
 
+Workflow for managing test vectors
+==================================
+
+The JSON file (treewrap-test-vectors.json) is the source of truth for test
+vector *definitions* (inputs, checks, mutations). The spec's Python code
+blocks are the source of truth for the *reference implementation*. Expected
+outputs are derived, never hand-written.
+
+Adding a new vector:
+  1. Add the vector definition to treewrap-test-vectors.json (id, title,
+     key/nonce/ad/message, checks). Set "expected" to an empty dict {}.
+  2. Run:  python3 treewrap-validation.py --update
+     This executes the spec's reference Python against every vector and
+     fills in / overwrites all "expected" fields in the JSON.
+  3. Run:  python3 treewrap-validation.py --render
+     This regenerates the test-vector section in treewrap-spec.md from
+     the JSON. Never hand-edit that section of the spec.
+  4. Run:  python3 treewrap-validation.py --validate
+     Sanity-check: confirms JSON expected values match reference output.
+  5. Commit both treewrap-test-vectors.json and treewrap-spec.md.
+
+Changing the reference implementation:
+  Same as above — after editing the spec's Python blocks, run --update,
+  --render, --validate, then commit.
+
 Modes:
-- --validate: validate reference implementation against JSON vectors.
-- --update: recompute JSON expected values from reference implementation.
-- --render: rewrite Section 9 in treewrap-spec.md from JSON vectors.
+  --validate  Compare reference implementation output to JSON expected values.
+  --update    Recompute JSON expected values from reference implementation.
+  --render    Regenerate the test-vector section in treewrap-spec.md from JSON.
 """
 
 from __future__ import annotations
