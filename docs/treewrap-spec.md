@@ -814,6 +814,28 @@ $$
 
 The total bound follows from the decomposition in Section 6.5. For $\tau = 32$, the bare denominator is $2^{256}$.
 
+### 6.11 Summary of Bounds
+
+Each property's total advantage combines the bridge-hop cost (Section 6.4) with the bare advantage
+(Sections 6.7–6.10):
+
+$$
+\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
+$$
+
+| Property | $\mathrm{Adv}^{\mathrm{bare}}$ | Total |
+|----------|-------------------------------|-------|
+| IND-CPA  | $0$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$ |
+| INT-CTXT | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
+| IND-CCA2 | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
+| CMT-4    | $Q / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + Q / 2^{8\tau}$ |
+
+Where $\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}$,
+$\varepsilon_{\mathrm{ks}} = \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$
+is the MRV15 keyed-sponge PRF bound (Section 6.2), and
+$\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}$ is the PRF-RF switching cost.
+Parameters are defined in Section 6.1.
+
 ## 7. Operational Security
 
 ### 7.1 Bare Usage (EncryptAndMAC / DecryptAndMAC)
