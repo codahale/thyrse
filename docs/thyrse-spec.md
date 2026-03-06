@@ -86,13 +86,10 @@ Each TurboSHAKE128 evaluation uses a domain separation byte that identifies the 
 | 0x22 | Mask key derivation            | Mask / Unmask       |
 | 0x23 | Seal key derivation            | Seal / Open         |
 | 0x24 | Ratchet chain derivation       | Ratchet             |
-| 0x27 | TreeWrap single-node tag       | TreeWrap (internal) |
-| 0x2B | TreeWrap chain value           | TreeWrap (internal) |
-| 0x33 | TreeWrap init (key absorption) | TreeWrap (internal) |
-| 0x37 | TreeWrap tag accumulation      | TreeWrap (internal) |
-| 0x3B | TreeWrap key derivation        | TreeWrap (internal) |
 
-All domain bytes are in the range 0x01–0x7F as required by TurboSHAKE128.
+All domain bytes are in the range 0x01–0x7F as required by TurboSHAKE128. TreeWrap's internal domain
+bytes are not listed here; they are specified in the TreeWrap specification and covered by its own
+security analysis.
 
 ## 7. Operation Codes
 
