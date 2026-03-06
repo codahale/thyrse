@@ -437,6 +437,44 @@ in memory defeats the purpose of ratcheting.
 to dead memory, implementations MUST use platform-specific secure-zeroing primitives (e.g., `explicit_bzero`,
 `SecureZeroMemory`, `volatile` writes) to ensure that sensitive data is actually erased.
 
+### 12.5 Practical Data Limits
+
+The security bounds in §13.7 are expressed in terms of Keccak-p[1600,12] calls. This section converts
+them to practical data volumes and provides operational recommendations.
+
+**Sponge blocks per operation.** Each Keccak-p invocation processes one sponge block of $R = 168$ bytes.
+The data complexity $\sigma$ counts the total number of Keccak-p invocations across all Thyrse backbone
+and TreeWrap operations:
+
+- A `Mix` operation absorbing $d$ bytes costs $\lceil(\text{frame overhead} + d) / 168\rceil$ blocks, but
+  since non-finalizing operations pack into the running sponge state, the cost is amortized. A typical
+  AEAD header (`Init` + `Mix(key)` + `Mix(nonce)` + `Mix(ad)` with a 32-byte key, 12-byte nonce, and
+  16-byte AD) fits within a single rate block with zero permutation calls before encryption begins.
+
+- A finalizing operation (`Derive`, `Ratchet`, `Mask`, `Seal`) forces at least 2 Keccak-p calls (one per
+  TurboSHAKE128 evaluation for the chain value and output/key clones).
+
+- TreeWrap encryption of $m$ bytes adds Keccak-p calls as specified in the TreeWrap specification. See
+  the TreeWrap specification for per-invocation cost accounting.
+
+**Data volume limits.** Setting a target of $\varepsilon_{\mathrm{indiff}} \leq 2^{-128}$ in the
+indifferentiability bound $(\sigma + t)^2 / 2^{257}$ gives $\sigma + t \leq 2^{64.5}$. Assuming an
+adversary offline budget of $t = 2^{64}$, the protocol's data budget is approximately $2^{64}$ sponge
+blocks, or approximately $2^{71}$ bytes ($\approx 2.8$ exabytes). This limit is shared across all
+operations in a single session (or globally in the multi-user setting).
+
+**Per-session recommendations.** Although the global data limit is enormous, implementations should enforce
+per-session limits as defense in depth:
+
+- **Maximum message size per `Seal`/`Mask`:** No inherent limit beyond available memory, but
+  implementations MAY enforce a limit of $2^{38}$ bytes (256 GB) per operation.
+
+- **Maximum finalizations per session:** `Ratchet` at least every $2^{32}$ finalizations to limit the
+  chain collision term and provide forward secrecy.
+
+- **Session rekeying:** For sessions processing more than $2^{48}$ bytes cumulatively, rekey by
+  establishing a new session with fresh key material.
+
 ## 13. Security Considerations
 
 ### 13.1 Assumptions
