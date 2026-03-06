@@ -13,6 +13,7 @@ package treewrap
 import (
 	"encoding/binary"
 
+	"github.com/codahale/thyrse/internal/encoding"
 	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
@@ -25,12 +26,12 @@ func leafPadBuf(key *[KeySize]byte, index uint64) [KeySize + 8]byte {
 	return buf
 }
 
-// initDuplex initializes a State1 for a duplex sponge (absorb key||index, pad, permute).
-func initDuplex(s *keccak.State1, key *[KeySize]byte, index uint64) {
-	s.Reset()
+// initDuplex initializes a Duplex sponge (absorb key||index, pad, permute).
+func initDuplex(d *keccak.Duplex, key *[KeySize]byte, index uint64) {
+	d.Reset()
 	buf := leafPadBuf(key, index)
-	s.AbsorbFinal(buf[:], initDS)
-	s.Permute12()
+	d.Absorb(buf[:])
+	d.PadPermute(initDS)
 }
 
 const (
@@ -52,49 +53,31 @@ const (
 // hopFrame is the Sakura message-hop / chaining-hop framing: '110^{62}' packed LSB-first (8 bytes).
 var hopFrame = [8]byte{0x03}
 
-// absorbInto XOR-absorbs data into a State1 at the given rate position, permuting at rate boundaries.
-func absorbInto(s *keccak.State1, pos *int, data []byte) {
-	for len(data) > 0 {
-		if *pos == keccak.Rate {
-			s.Permute12()
-			*pos = 0
-		}
-		n := min(keccak.Rate-*pos, len(data))
-		s.XORBytesAt(*pos, data[:n])
-		*pos += n
-		data = data[n:]
-	}
-}
-
 type cryptor struct {
-	key      [KeySize]byte
-	s        keccak.State1 // current leaf's sponge (for chunks 1+)
-	final    keccak.State1 // final node sponge (encrypts chunk 0, absorbs CVs)
-	finalPos int           // byte position in final node's rate
+	key       [KeySize]byte
+	leaf      keccak.Duplex // current leaf's duplex (for chunks 1+)
+	final     keccak.Duplex // final node duplex (encrypts chunk 0, absorbs CVs)
 	finalized bool
-	nLeaves  int  // number of completed leaf CVs absorbed into final node
-	pos      int  // byte position in current leaf's sponge rate
-	chunkOff int  // bytes processed in current chunk
-	leafMode bool // true after chunk 0 complete and HOP_FRAME absorbed
+	nLeaves   int  // number of completed leaf CVs absorbed into final node
+	chunkOff  int  // bytes processed in current chunk
+	leafMode  bool // true after chunk 0 complete and HOP_FRAME absorbed
 }
 
-// finalizeCV squeezes the chain value from the current leaf's sponge state and absorbs it into the final node.
+// finalizeCV squeezes the chain value from the current leaf's duplex and absorbs it into the final node.
 func (c *cryptor) finalizeCV() {
-	c.s.PadPermute(c.pos, chainValueDS)
+	c.leaf.PadPermute(chainValueDS)
 	var cv [KeySize]byte
-	c.s.ExtractBytes(cv[:])
-	absorbInto(&c.final, &c.finalPos, cv[:])
+	c.leaf.Squeeze(cv[:])
+	c.final.Absorb(cv[:])
 	c.nLeaves++
 	c.chunkOff = 0
-	c.pos = 0
 }
 
 // transitionToLeafMode absorbs HOP_FRAME into the final node and enters leaf mode.
 func (c *cryptor) transitionToLeafMode() {
-	absorbInto(&c.final, &c.finalPos, hopFrame[:])
+	c.final.Absorb(hopFrame[:])
 	c.leafMode = true
 	c.chunkOff = 0
-	c.pos = 0
 }
 
 func (c *cryptor) finalizeInternal() [TagSize]byte {
@@ -105,9 +88,9 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 
 	if !c.leafMode {
 		// n=1: tag directly from final node (which encrypted chunk 0).
-		c.final.PadPermute(c.finalPos, tagSingleDS)
+		c.final.PadPermute(tagSingleDS)
 		var tag [TagSize]byte
-		c.final.ExtractBytes(tag[:])
+		c.final.Squeeze(tag[:])
 		return tag
 	}
 
@@ -117,13 +100,13 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 	}
 
 	// Chaining hop suffix: length_encode(nLeaves) || 0xFF || 0xFF
-	suffix := append(lengthEncode(uint64(c.nLeaves)), 0xFF, 0xFF)
-	absorbInto(&c.final, &c.finalPos, suffix)
+	suffix := append(encoding.LengthEncode(uint64(c.nLeaves)), 0xFF, 0xFF)
+	c.final.Absorb(suffix)
 
 	// Tag: pad_permute(0x06)
-	c.final.PadPermute(c.finalPos, tagChainDS)
+	c.final.PadPermute(tagChainDS)
 	var tag [TagSize]byte
-	c.final.ExtractBytes(tag[:])
+	c.final.Squeeze(tag[:])
 	return tag
 }
 
@@ -150,7 +133,8 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	if !e.leafMode {
 		// Still on chunk 0: encrypt into final node.
 		n := min(len(src), ChunkSize-e.chunkOff)
-		e.encryptFinal(dst[:n], src[:n])
+		e.final.Encrypt(dst[:n], src[:n])
+		e.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
@@ -168,7 +152,8 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	// Continue an in-progress partial leaf chunk.
 	if e.chunkOff > 0 {
 		n := min(len(src), ChunkSize-e.chunkOff)
-		e.encryptPartial(dst[:n], src[:n])
+		e.leaf.Encrypt(dst[:n], src[:n])
+		e.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
@@ -186,44 +171,10 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial leaf chunk with remaining bytes.
 	if len(src) > 0 {
-		initDuplex(&e.s, &e.key, uint64(e.nLeaves+1))
-		e.pos = 0
+		initDuplex(&e.leaf, &e.key, uint64(e.nLeaves+1))
 		e.chunkOff = 0
-		e.encryptPartial(dst[:len(src)], src)
-	}
-}
-
-// encryptFinal encrypts bytes through the final node's sponge state (chunk 0).
-func (e *Encryptor) encryptFinal(dst, src []byte) {
-	for len(src) > 0 {
-		if e.finalPos == keccak.Rate {
-			e.final.Permute12()
-			e.finalPos = 0
-		}
-
-		n := min(keccak.Rate-e.finalPos, len(src))
-		e.final.EncryptBytesAt(e.finalPos, src[:n], dst[:n])
-		e.finalPos += n
-		e.chunkOff += n
-		dst = dst[n:]
-		src = src[n:]
-	}
-}
-
-// encryptPartial processes bytes through the current leaf chunk's sponge state.
-func (e *Encryptor) encryptPartial(dst, src []byte) {
-	for len(src) > 0 {
-		if e.pos == keccak.Rate {
-			e.s.Permute12()
-			e.pos = 0
-		}
-
-		n := min(keccak.Rate-e.pos, len(src))
-		e.s.EncryptBytesAt(e.pos, src[:n], dst[:n])
-		e.pos += n
-		e.chunkOff += n
-		dst = dst[n:]
-		src = src[n:]
+		e.leaf.Encrypt(dst[:len(src)], src)
+		e.chunkOff += len(src)
 	}
 }
 
@@ -235,7 +186,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		off := idx * ChunkSize
 		cvs := encryptX8(&e.key, uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize])
 		for i := range cvs {
-			absorbInto(&e.final, &e.finalPos, cvs[i][:])
+			e.final.Absorb(cvs[i][:])
 		}
 		e.nLeaves += 8
 		idx += 8
@@ -245,7 +196,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		off := idx * ChunkSize
 		cvs := encryptX4(&e.key, uint64(e.nLeaves+1), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize])
 		for i := range cvs {
-			absorbInto(&e.final, &e.finalPos, cvs[i][:])
+			e.final.Absorb(cvs[i][:])
 		}
 		e.nLeaves += 4
 		idx += 4
@@ -255,7 +206,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		off := idx * ChunkSize
 		cvs := encryptX2(&e.key, uint64(e.nLeaves+1), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize])
 		for i := range cvs {
-			absorbInto(&e.final, &e.finalPos, cvs[i][:])
+			e.final.Absorb(cvs[i][:])
 		}
 		e.nLeaves += 2
 		idx += 2
@@ -264,7 +215,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		cv := encryptX1(&e.key, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize])
-		absorbInto(&e.final, &e.finalPos, cv[:])
+		e.final.Absorb(cv[:])
 		e.nLeaves++
 		idx++
 	}
@@ -300,7 +251,8 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	if !d.leafMode {
 		// Still on chunk 0: decrypt from final node.
 		n := min(len(src), ChunkSize-d.chunkOff)
-		d.decryptFinal(dst[:n], src[:n])
+		d.final.Decrypt(dst[:n], src[:n])
+		d.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
@@ -318,7 +270,8 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	// Continue an in-progress partial leaf chunk.
 	if d.chunkOff > 0 {
 		n := min(len(src), ChunkSize-d.chunkOff)
-		d.decryptPartial(dst[:n], src[:n])
+		d.leaf.Decrypt(dst[:n], src[:n])
+		d.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
@@ -336,44 +289,10 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial leaf chunk with remaining bytes.
 	if len(src) > 0 {
-		initDuplex(&d.s, &d.key, uint64(d.nLeaves+1))
-		d.pos = 0
+		initDuplex(&d.leaf, &d.key, uint64(d.nLeaves+1))
 		d.chunkOff = 0
-		d.decryptPartial(dst[:len(src)], src)
-	}
-}
-
-// decryptFinal decrypts bytes through the final node's sponge state (chunk 0).
-func (d *Decryptor) decryptFinal(dst, src []byte) {
-	for len(src) > 0 {
-		if d.finalPos == keccak.Rate {
-			d.final.Permute12()
-			d.finalPos = 0
-		}
-
-		n := min(keccak.Rate-d.finalPos, len(src))
-		d.final.DecryptBytesAt(d.finalPos, src[:n], dst[:n])
-		d.finalPos += n
-		d.chunkOff += n
-		dst = dst[n:]
-		src = src[n:]
-	}
-}
-
-// decryptPartial processes bytes through the current leaf chunk's sponge state.
-func (d *Decryptor) decryptPartial(dst, src []byte) {
-	for len(src) > 0 {
-		if d.pos == keccak.Rate {
-			d.s.Permute12()
-			d.pos = 0
-		}
-
-		n := min(keccak.Rate-d.pos, len(src))
-		d.s.DecryptBytesAt(d.pos, src[:n], dst[:n])
-		d.pos += n
-		d.chunkOff += n
-		dst = dst[n:]
-		src = src[n:]
+		d.leaf.Decrypt(dst[:len(src)], src)
+		d.chunkOff += len(src)
 	}
 }
 
@@ -385,7 +304,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		off := idx * ChunkSize
 		cvs := decryptX8(&d.key, uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize])
 		for i := range cvs {
-			absorbInto(&d.final, &d.finalPos, cvs[i][:])
+			d.final.Absorb(cvs[i][:])
 		}
 		d.nLeaves += 8
 		idx += 8
@@ -395,7 +314,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		off := idx * ChunkSize
 		cvs := decryptX4(&d.key, uint64(d.nLeaves+1), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize])
 		for i := range cvs {
-			absorbInto(&d.final, &d.finalPos, cvs[i][:])
+			d.final.Absorb(cvs[i][:])
 		}
 		d.nLeaves += 4
 		idx += 4
@@ -405,7 +324,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		off := idx * ChunkSize
 		cvs := decryptX2(&d.key, uint64(d.nLeaves+1), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize])
 		for i := range cvs {
-			absorbInto(&d.final, &d.finalPos, cvs[i][:])
+			d.final.Absorb(cvs[i][:])
 		}
 		d.nLeaves += 2
 		idx += 2
@@ -414,7 +333,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		cv := decryptX1(&d.key, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize])
-		absorbInto(&d.final, &d.finalPos, cv[:])
+		d.final.Absorb(cv[:])
 		d.nLeaves++
 		idx++
 	}
@@ -450,28 +369,6 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 	d := NewDecryptor(key)
 	d.XORKeyStream(pt, ciphertext)
 	return ret, d.Finalize()
-}
-
-// lengthEncode encodes x as in KangarooTwelve: big-endian with no leading zeros, followed by a byte giving the length
-// of the encoding.
-func lengthEncode(x uint64) []byte {
-	if x == 0 {
-		return []byte{0x00}
-	}
-
-	n := 0
-	for v := x; v > 0; v >>= 8 {
-		n++
-	}
-
-	buf := make([]byte, n+1)
-	for i := n - 1; i >= 0; i-- {
-		buf[i] = byte(x)
-		x >>= 8
-	}
-	buf[n] = byte(n)
-
-	return buf
 }
 
 // finalPos returns the sponge position after encrypting/decrypting chunkLen bytes.
