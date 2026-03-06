@@ -818,22 +818,26 @@ $$
 Nonce reuse for the same $(K,N,AD)$ is out of scope for this claim and breaks standard nonce-respecting
 IND-CCA2 formulations.
 
-### 6.8 CMT-4 (Fixed Master Key)
+### 6.10 CMT-4 (Fixed Master Key)
 
 This theorem follows the standard Bellare-Hoang committing-security notion (CMT-4, see Section 8): a ciphertext should not
-admit two distinct valid openings under one fixed secret key. The proof is a composition argument over Section 6.2 plus
+admit two distinct valid openings under one fixed secret key. The proof is a composition argument over Section 6.4 plus
 fixed-key injectivity of the internal functions (Lemma 3).
 
-**Game (CMT-4, nonce-respecting).** Sample one secret master key $K$ once and give the adversary encryption-oracle
-access under $K$ with nonce-respecting queries. The adversary outputs one ciphertext $C^\star$ and two distinct opening
-tuples $(N,AD,M) \neq (N',AD',M')$ with $|M| = |M'| = |C^\star| - \tau$ (enforced by the ciphertext length). It wins iff both openings verify:
+```
+Game CMT-4(A):
+  K <-$ {0,1}^{|K|}
+  (C*, (N, AD, M), (N', AD', M')) <- A^{Enc}
+  require (N, AD, M) != (N', AD', M')
+  require |M| = |M'| = |C*| - tau
+  return Dec(K, N, AD, C*) = M and Dec(K, N', AD', C*) = M'
 
-$$
-\mathrm{Dec}(K,N,AD,C^\star)=M \quad\text{and}\quad \mathrm{Dec}(K,N',AD',C^\star)=M'.
-$$
+Oracle Enc(N, AD, M):
+  return TreeWrap128.Encrypt(K, N, AD, M)
+```
 
-As in Section 6.5, move to $\mathsf{G}_1$ where context-to-key derivation is replaced by a lazy random function and pay one
-global $\varepsilon_{\mathrm{indiff}}$ term for $\mathsf{Bad}_{\mathrm{perm}}$.
+As in Section 6.7, move to $\mathsf{G}_1$ where context-to-key derivation is replaced by a lazy random function and pay
+$\varepsilon_{\mathrm{cap}}$ plus $\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$.
 
 Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
 
@@ -842,29 +846,20 @@ Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
   fixes the plaintext length ($|M| = |M'| = |C^\star|$ minus the tag), both messages have identical chunking. Then two
   different messages opening the same $C^\star$ under the same key and chunking contradict Lemma 3 (fixed-key
   bijection), so this case is impossible.
-- **Case 2: different contexts** $(N,AD)\neq(N',AD')$. Contexts map to distinct random keys in $\mathsf{G}_1$. A dual
-  valid opening then requires that the same ciphertext decrypts validly under two different derived keys, which means
-  the $\tau$-byte tags must match across the two tag computations. Different derived keys produce different init
-  absorptions, hence different capacity states after the first permutation call. With
-  $\neg\mathsf{Bad}_{\mathrm{perm}}$ covering all $\pi$-call pairs globally (including cross-context pairs), the two
-  tag computations query $\pi$ on disjoint inputs. The ideal permutation on disjoint inputs produces approximately
-  independent uniform outputs (up to PRP/PRF switching distance $\leq \sigma^2/2^{1601}$, absorbed by
-  $\varepsilon_{\mathrm{indiff}}$). For $n > 1$: different keys produce different first permutation inputs across all
-  leaves and final nodes. Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, no capacity collision occurs between any pair of
-  calls from the two contexts, so by Lemma 1 the two final-node tags are approximately independent uniform $\tau$-byte
-  strings.
+- **Case 2: different contexts** $(N,AD)\neq(N',AD')$. Distinct contexts map to independent random keys in
+  $\mathsf{G}_1$. Tag computations under different keys produce approximately independent uniform $\tau$-byte values
+  (Section 6.6.1, tag PRF security). The adversary wins only if a tag collision exists among the $Q$ outputs.
 
   **Adversary strategy and birthday bound.** The adversary's optimal strategy is to find a tag collision among the $Q$
   AEAD outputs (encryption-oracle responses plus the two openings in $C^\star$). A dual valid opening under different
-  contexts requires $T = T'$ where $T$ and $T'$ are the tags computed under two independent derived keys. Under
-  $\neg\mathsf{Bad}_{\mathrm{perm}}$, these tags are approximately independent uniform $\tau$-byte strings (by
-  Lemma 1 / tag PRF security from Section 6.4.1). The adversary wins only if such a collision exists among some pair
-  of the $Q$ outputs. By the birthday bound, $\Pr[\exists\ \text{collision}] \leq Q^2/2^{8\tau+1}$.
+  contexts requires $T = T'$ where $T$ and $T'$ are the tags computed under two independent derived keys. The adversary
+  wins only if such a collision exists among some pair of the $Q$ outputs. By the birthday bound,
+  $\Pr[\exists\ \text{collision}] \leq Q^2/2^{8\tau+1}$.
 
 Therefore:
 
 $$
-\varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}} + \varepsilon_{\mathrm{ctx\text{-}coll}}.
+\varepsilon_{\mathrm{cmt4}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{Q^2}{2^{8\tau+1}}.
 $$
 
 Here $Q$ (as defined in Section 6.1) counts all AEAD outputs in the experiment: encryption-oracle responses plus the two
