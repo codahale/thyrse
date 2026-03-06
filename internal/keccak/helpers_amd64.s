@@ -1808,7 +1808,7 @@ enc_round_loop_x8a:
 
 enc_done_x8a:
 	// Store half 0 back.
-	MOVQ	1680(SP), DI
+	MOVQ	1672(SP), DI
 	LEAQ	0(SP), R8
 	VMOVDQU	0*32(R8), Y0;  VMOVDQU	Y0, 0*64(DI)
 	VMOVDQU	1*32(R8), Y0;  VMOVDQU	Y0, 1*64(DI)
