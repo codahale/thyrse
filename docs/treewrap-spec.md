@@ -668,17 +668,27 @@ Combining both cases: for any pair of distinct AEAD outputs $(i, j)$ (whether wi
 $\Pr[T_i = T_j] \leq 2^{-8\tau}$.
 The birthday bound over all $\binom{Q}{2}$ pairs then gives the $Q^2/2^{8\tau+1}$ term.
 
-### 6.5 IND-CPA (Nonce-Respecting)
+### 6.7 IND-CPA (Nonce-Respecting)
 
-By the bridge theorem (Section 6.2), it suffices to bound
+```
+Game IND-CPA_b(A):
+  K <-$ {0,1}^{|K|}
+  b' <- A^{Enc_b}
+  return b'
+
+Oracle Enc_b(N, AD, M0, M1):
+  require |M0| = |M1|
+  return TreeWrap128.Encrypt(K, N, AD, M_b)
+```
+
+By the bridge theorem (Section 6.4), it suffices to bound
 $\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}}$ -- the IND-CPA advantage of the internal functions under
 independent uniformly random per-context keys.
 
 **Claim.** Within $\mathsf{G}_1$ conditioned on
 $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$, the IND-CPA advantage of the internal functions is
 negligible: $\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}$ (the PRP/PRF switching
-distance, absorbed by $\varepsilon_{\mathrm{indiff}}$). The unconditional real-world bound is
-$\varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$.
+distance, absorbed by $\varepsilon_{\mathrm{cap}}$ per the Section 6.1 convention).
 
 *Justification.* In $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
 
@@ -686,10 +696,10 @@ $\varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$.
 - Distinct contexts map to independent uniformly random keys in $\mathsf{G}_1$.
 - Under a truly random key $K_{tw}$ (from the lazy RF in $\mathsf{G}_1$) and the ideal permutation conditioned on
   $\neg\mathsf{Bad}_{\mathrm{perm}}$, the ciphertext distribution is independent of the adversary's plaintext choice.
-  The argument proceeds by induction over rate blocks, showing that each ciphertext block is uniformly distributed
-  regardless of the plaintext:
+  The argument proceeds by induction over rate blocks (using the keyed-sponge pseudorandomness from Section 6.2 and
+  Lemma 1, Section 6.5), showing that each ciphertext block is uniformly distributed regardless of the plaintext:
   - *Block 0:* The `init` step absorbed the truly random key $K_{tw}$ and applied $\pi$ via `pad_permute` (one
-    permutation call); the resulting state is uniformly random (see Lemma 1). The first rate block of
+    permutation call); the resulting state is uniformly random (see Lemma 1, Section 6.5). The first rate block of
     keystream bytes — $S[0]$ through $S[R{-}1]$ — comes directly from this post-init permutation output, so they are
     uniform. (The next $\pi$-call occurs only when `pos` reaches $R$ during encryption, producing the state for
     Block 1.) The ciphertext byte
@@ -714,22 +724,36 @@ $\varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$.
     inherits the same uniformity guarantee as full blocks.
 
 The adversary therefore receives approximately uniformly random ciphertexts regardless of which plaintext it submits.
-The only deviation from perfect uniformity is the PRP/PRF switching distance $\sigma^2/2^{1601}$ (the ideal permutation
-samples without replacement; see the Remark before Section 6.4), which is absorbed by $\varepsilon_{\mathrm{indiff}}$.
 
 Therefore:
 
 $$
-\varepsilon_{\mathrm{ind\text{-}cpa}} \le \varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx\text{-}coll}}.
+\varepsilon_{\mathrm{ind\text{-}cpa}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}}.
 $$
 
-### 6.6 INT-CTXT
+### 6.8 INT-CTXT
+
+```
+Game INT-CTXT(A):
+  K <-$ {0,1}^{|K|}; S <- {}
+  win <- A^{Enc, Forge}
+  return win
+
+Oracle Enc(N, AD, M):
+  C <- TreeWrap128.Encrypt(K, N, AD, M)
+  S <- S union {(N, AD, C)}
+  return C
+
+Oracle Forge(N, AD, C):
+  if (N, AD, C) in S: return bot
+  return TreeWrap128.Decrypt(K, N, AD, C) != None
+```
 
 **Claim.** $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.$
 
 *Justification.* In $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$, each
 forgery attempt targets a context with a uniformly random key. The tag is a pseudorandom $\tau$-byte value (by
-Lemma 1 and Section 6.4.1). Each forgery attempt — i.e., a (ciphertext, tag) pair not previously output by the
+Lemma 1, Section 6.5, and Section 6.6). Each forgery attempt — i.e., a (ciphertext, tag) pair not previously output by the
 encryption oracle (standard INT-CTXT definition) — must guess the correct $\tau$-byte tag value, succeeding with
 probability at most $2^{-8\tau}$.
 
@@ -745,12 +769,12 @@ computation is independent (different init capacity states, no capacity collisio
 $\neg\mathsf{Bad}_{\mathrm{perm}}$). Across $S$ attempts (union bound):
 
 $$
-\varepsilon_{\mathrm{int\text{-}ctxt}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx\text{-}coll}}.
+\varepsilon_{\mathrm{int\text{-}ctxt}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{S}{2^{8\tau}}.
 $$
 
 If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$.
 
-### 6.7 IND-CCA2 (Nonce-Respecting)
+### 6.9 IND-CCA2 (Nonce-Respecting)
 
 IND-CCA2 follows from IND-CPA and INT-CTXT via the generic composition theorem of Bellare and Namprempre (BN00;
 extended to the nonce-based setting by Namprempre, Rogaway, and Shrimpton, NRS14).
@@ -767,26 +791,26 @@ oracle rejects all adversary-crafted queries (except with probability
 $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}$), so it provides no useful information beyond what the
 encryption oracle already reveals. Removing the decryption oracle reduces the game to IND-CPA.
 
-**Step 2: Substitute bare bounds.** From Sections 6.5 and 6.6:
+**Step 2: Substitute bare bounds.** From Sections 6.7 and 6.8:
 $\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}$ (absorbed by
-$\varepsilon_{\mathrm{indiff}}$) and
+$\varepsilon_{\mathrm{cap}}$ per the Section 6.1 convention) and
 $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}$. Therefore:
 
 $$
 \mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \frac{S}{2^{8\tau}}.
 $$
 
-**Step 3: Lift through bridge theorem.** Applying the decomposition from Section 6.2:
+**Step 3: Lift through bridge theorem.** Applying the decomposition from Section 6.4:
 
 $$
-\varepsilon_{\mathrm{ind\text{-}cca2}} \le \varepsilon_{\mathrm{indiff}} + \frac{S}{2^{8\tau}} + \varepsilon_{\mathrm{ctx\text{-}coll}}.
+\varepsilon_{\mathrm{ind\text{-}cca2}} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \frac{S}{2^{8\tau}}.
 $$
 
 > *Note on construction type.* TreeWrap128 is structurally an encrypt-and-MAC scheme (the tag is derived from the
 > same sponge state as the ciphertext), not an Encrypt-then-MAC scheme with independent keys. The BN00 composition
 > theorem (Theorem 4.3) is a general result: it states that *any* symmetric encryption scheme satisfying both IND-CPA
 > and INT-CTXT also satisfies IND-CCA2. The theorem's only preconditions are these two properties of the composed
-> scheme, not any requirement on its internal structure (e.g., independent keys or separate MAC). Sections 6.5 and 6.6
+> scheme, not any requirement on its internal structure (e.g., independent keys or separate MAC). Sections 6.7 and 6.8
 > establish IND-CPA and INT-CTXT for TreeWrap128 directly, so the theorem applies. The overwrite-mode sponge ensures
 > that the tag depends on the ciphertext (ciphertext bytes are written into the rate before the tag squeeze), which is
 > why INT-CTXT holds despite the shared state.
