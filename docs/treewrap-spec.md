@@ -523,7 +523,7 @@ duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
 ($R = 168$ bytes). These outputs are directly covered by Theorem 2.
 
 > [!NOTE]
-> BDPVA07 sponge indifferentiability gives
+> The BDPVA07 flat sponge claim gives a generic
 > $(\sigma + t)^2 / 2^{c+1}$ for the unkeyed sponge setting. MRV15 provides
 > tighter bounds for the keyed setting that TreeWrap128 exclusively uses.
 > BDPVA07 remains valid as a fallback analysis but is superseded here. For the
@@ -1127,8 +1127,8 @@ proof-bound figure alone.
 ## 9. References
 
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007. Establishes
-  the flat sponge claim (sponge indifferentiability from a random oracle). Referenced in the non-normative note in
-  Section 6.2.
+  the flat sponge claim (a heuristic generic security bound for random sponges based on inner-collision analysis). Referenced
+  in the non-normative note in Section 6.2.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap128.
 - RFC 9861: TurboSHAKE and KangarooTwelve.
