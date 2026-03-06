@@ -866,7 +866,9 @@ $$
 Here $Q$ (as defined in Section 6.1) counts all AEAD outputs in the experiment. For $\tau = 32$, the denominator is
 $2^{256}$.
 
-### 6.11 Bare Usage (EncryptAndMAC / DecryptAndMAC)
+## 7. Operational Security
+
+### 7.1 Bare Usage (EncryptAndMAC / DecryptAndMAC)
 
 The internal `EncryptAndMAC`/`DecryptAndMAC` functions (Section 5.1) may be used directly by callers that manage
 per-invocation key uniqueness and tag verification externally. This is an advanced interface.
@@ -882,13 +884,13 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
 | CMT-4                        | Provide external key derivation with collision resistance over injectively encoded AEAD contexts. |
 
-### 6.12 Chunk Reordering, Length Changes, and Empty Input
+### 7.2 Chunk Reordering, Length Changes, and Empty Input
 
 - Reordering chunks changes leaf-index binding (`key || LEU64(index)`), so recomputed tag changes.
 - Truncation/extension changes chunk count $n$, changing `length_encode(n)` in final accumulation input.
 - Empty plaintext uses $n=1$: one leaf with `single_node_tag()`, no final accumulation node.
 
-### 6.13 Side Channels
+### 7.3 Side Channels
 
 Implementations MUST be constant-time with respect to secret-dependent control flow and memory access.
 
@@ -896,7 +898,7 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 - Tag verification MUST use constant-time equality.
 - Partial-block logic may branch on public length, not on secret data.
 
-### 6.14 Operational Usage Limits (Normative)
+### 7.4 Operational Usage Limits (Normative)
 
 To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits (a key
 epoch) and rotate to a fresh master key before exceeding them.
@@ -949,7 +951,7 @@ requirements, or interoperability.
 
 Appendix C remains non-normative operational guidance for instrumentation and budgeting workflows.
 
-### 6.15 Implementation Design Callouts (Non-Normative)
+### 7.5 Implementation Design Callouts (Non-Normative)
 
 The following implementation decisions are performance-critical and align with high-throughput production designs:
 
@@ -974,7 +976,7 @@ The following implementation decisions are performance-critical and align with h
 - **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
   patterns when constructing final-node inputs.
 
-## 7. Comparison with Traditional AEAD
+## 8. Comparison with Traditional AEAD
 
 TreeWrap128 differs from traditional AEAD in several respects.
 
@@ -985,7 +987,7 @@ by the TurboSHAKE128-based KDF to derive a unique internal key, not passed to th
 necessarily pseudorandom. TreeWrap128's tag is a full PRF: under a random key, the tag is indistinguishable from a random
 string (Section 6.6.1). This stronger property is useful for protocols that derive further keying material from the tag.
 
-### 7.1. Operational Safety Limits
+### 8.1. Operational Safety Limits
 
 Operational planning assumptions used in this section: $p = 2^{-50}$, 1500-byte messages, TreeWrap128 cost
 $\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), $\ell \approx 49$ max input blocks per keyed-sponge
@@ -1029,7 +1031,7 @@ minimum rule against the proof-bound volume.
 Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (Section 6.14), not by the asymptotic
 proof-bound figure alone.
 
-## 8. References
+## 9. References
 
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007. Establishes
   the flat sponge claim (sponge indifferentiability from a random oracle). Referenced in the non-normative note in
@@ -1077,9 +1079,9 @@ proof-bound figure alone.
 - Aumasson, J.-P. and Meier, W. "Zero-sum distinguishers for reduced Keccak-f and for the core functions of Luffa and
   Hamsi." 2009. https://www.aumasson.jp/data/papers/AM09.pdf. Presents zero-sum distinguishers up to 16 rounds.
 
-## 9. Test Vectors
+## 10. Test Vectors
 
-### 9.1 Internal Function Vectors
+### 10.1 Internal Function Vectors
 
 All internal function vectors use:
 
@@ -1088,7 +1090,7 @@ All internal function vectors use:
 
 Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. All values are hexadecimal.
 
-#### 9.1.1 Empty Plaintext (MAC-only, n = 1)
+#### 10.1.1 Empty Plaintext (MAC-only, n = 1)
 
 | Field | Value |
 |-------|-------|
@@ -1096,7 +1098,7 @@ Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. 
 | ct | (empty) |
 | tag | `75c535a63e00491b6a63871da0e3c430bb42688ceb8ba05543e96386d55564b4` |
 
-#### 9.1.2 One-Byte Plaintext (n = 1)
+#### 10.1.2 One-Byte Plaintext (n = 1)
 
 | Field | Value |
 |-------|-------|
@@ -1107,7 +1109,7 @@ Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. 
 Flipping bit 0 of the ciphertext (`f0`) yields tag
 `c5b46e7da8de3ceb1801b4b3f800ee52b06419e224de77967a11994166c66954`.
 
-#### 9.1.3 B-Byte Plaintext (exactly one chunk, n = 1)
+#### 10.1.3 B-Byte Plaintext (exactly one chunk, n = 1)
 
 | Field | Value |
 |-------|-------|
@@ -1118,7 +1120,7 @@ Flipping bit 0 of the ciphertext (`f0`) yields tag
 Flipping bit 0 of `ct[0]` yields tag
 `c38c6774775e4ddb5d338ac439bcf1654f40b4916901043a992f51c5bb0c5d91`.
 
-#### 9.1.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
+#### 10.1.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
 
 | Field | Value |
 |-------|-------|
@@ -1129,7 +1131,7 @@ Flipping bit 0 of `ct[0]` yields tag
 Flipping bit 0 of `ct[0]` yields tag
 `434be033d300ea9ac7a4881d509e21d20db7a2e437b159e152c776d16a5fe8c4`.
 
-#### 9.1.5 4B-Byte Plaintext (four full chunks, n = 4)
+#### 10.1.5 4B-Byte Plaintext (four full chunks, n = 4)
 
 | Field | Value |
 |-------|-------|
@@ -1143,17 +1145,17 @@ Flipping bit 0 of `ct[0]` yields tag
 Swapping chunks 0 and 1 (bytes 0-8,191 and 8,192-16,383) yields tag
 `704270ad357c5a68a9f59b0f087f759d87a134b0f67f1cfcfe63f46a7f8ab985`.
 
-#### 9.1.6 Round-Trip Consistency
+#### 10.1.6 Round-Trip Consistency
 
 For all internal function vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as
 `EncryptAndMAC`.
 
-### 9.2 TreeWrap128 Vectors
+### 10.2 TreeWrap128 Vectors
 
 These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including SP 800-185
 `encode_string` key derivation.
 
-#### 9.2.1 Empty Message
+#### 10.2.1 Empty Message
 
 | Field | Value |
 |-------|-------|
@@ -1166,7 +1168,7 @@ These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 9.2.2 33-Byte Message With 5-Byte AD
+#### 10.2.2 33-Byte Message With 5-Byte AD
 
 | Field | Value |
 |-------|-------|
@@ -1179,7 +1181,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 9.2.3 Multi-Chunk Message (8193 Bytes)
+#### 10.2.3 Multi-Chunk Message (8193 Bytes)
 
 | Field | Value |
 |-------|-------|
@@ -1193,7 +1195,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 9.2.4 Nonce Reuse Behavior (Equal-Length Messages)
+#### 10.2.4 Nonce Reuse Behavior (Equal-Length Messages)
 
 | Field | Value |
 |-------|-------|
@@ -1209,7 +1211,7 @@ Reusing the same `(K, N, AD)` with a different message is deterministic and yiel
 `ct1 xor ct2 = m1 xor m2` for equal-length messages (validated by this vector).
 Nonce reuse is out of scope for Section 6 nonce-respecting claims.
 
-#### 9.2.5 Swapped Nonce and AD Domains
+#### 10.2.5 Swapped Nonce and AD Domains
 
 | Field | Value |
 |-------|-------|
@@ -1224,7 +1226,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Swapping `N` and `AD` (same byte length) yields a different `ct‖tag` and does not
 validate the original `ct‖tag`.
 
-#### 9.2.6 Empty AD vs One-Byte AD 00
+#### 10.2.6 Empty AD vs One-Byte AD 00
 
 | Field | Value |
 |-------|-------|
@@ -1238,7 +1240,7 @@ validate the original `ct‖tag`.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖tag`.
 
-#### 9.2.7 Long AD (128 Bytes)
+#### 10.2.7 Long AD (128 Bytes)
 
 | Field | Value |
 |-------|-------|
