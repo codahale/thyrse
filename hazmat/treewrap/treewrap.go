@@ -43,10 +43,10 @@ const (
 	// ChunkSize is the size of each leaf chunk in bytes.
 	ChunkSize = 8 * 1024
 
-	initDS       = 0x33 // Domain separation byte for leaf init (key/index absorption).
-	singleNodeDS = 0x27 // Domain separation byte for single-node tag.
-	chainValueDS = 0x2B // Domain separation byte for chain value extraction.
-	tagAccumDS   = 0x37 // Domain separation byte for tag accumulation.
+	initDS       = 0x08 // Domain separation byte for leaf init (key/index absorption).
+	singleNodeDS = 0x0C // Domain separation byte for single-node tag.
+	chainValueDS = 0x0A // Domain separation byte for chain value extraction.
+	tagAccumDS   = 0x0E // Domain separation byte for tag accumulation.
 )
 
 type cryptor struct {
