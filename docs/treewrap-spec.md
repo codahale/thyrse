@@ -372,7 +372,7 @@ permutation at the claimed workloads. This is a modeling assumption, not a proof
 Let:
 
 - $\sigma$: total online Keccak-p calls performed by the construction across all oracle queries
-  (including KDF, leaf-sponge, and tag-accumulation permutation calls).
+  (including KDF, leaf-sponge, and chaining-hop tag permutation calls).
 - $t$: adversary offline Keccak-p calls (an analysis parameter representing direct access to the ideal
   permutation $\pi$ in the ideal-permutation model, not a deployment-controlled quantity; Section 7.4 provides
   operational guidance on choosing $t$ for bound evaluation).
@@ -515,10 +515,10 @@ duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
 | Set | Role | Domain byte | Distinguishing mechanism |
 |-----|------|-------------|--------------------------|
 | $\mathcal{K}$ | KDF | `0x09` | Padded, domain byte `0x09` |
-| $\mathcal{I}$ | Leaf init | `0x08` | Padded, domain byte `0x08` |
-| $\mathcal{C}$ | Chain value | `0x0A` | Padded, domain byte `0x0A` |
-| $\mathcal{T}_s$ | Single-node tag | `0x0C` | Padded, domain byte `0x0C` |
-| $\mathcal{T}_f$ | Tag accumulation | `0x0E` | Padded, domain byte `0x0E` |
+| $\mathcal{I}$ | Duplex init | `0x08` | Padded, domain byte `0x08` |
+| $\mathcal{C}$ | Chain value | `0x0B` | Padded, domain byte `0x0B` |
+| $\mathcal{T}_s$ | Single-node tag | `0x07` | Padded, domain byte `0x07` |
+| $\mathcal{T}_f$ | Chaining-hop tag | `0x06` | Padded, domain byte `0x06` |
 | $\mathcal{U}$ | Unpadded intermediate | — | Secret capacity from keyed init |
 
 *Proof sketch.* Three cases:
@@ -529,15 +529,15 @@ duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
 
 3. **Within a set.** Calls within the same role are distinguished by either different keys (different rate content at init) or different capacity inputs inherited from prior calls in the chain (guaranteed distinct under $\neg\mathsf{Bad}_{\mathrm{perm}}$).
 
-**Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Keccak delimited suffix (ePrint 2013/231) using the standard encoding: a variable-length suffix bit-string is stored LSB-first in the byte, with a delimiter `1` bit immediately after the last suffix bit. All five TreeWrap128 bytes use 3-bit suffixes (delimiter at bit 3). The last suffix bit encodes the Sakura node type: `0` for inner/leaf, `1` for final.
+**Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Keccak delimited suffix (ePrint 2013/231) using the standard encoding: a variable-length suffix bit-string is stored LSB-first in the byte, with a delimiter `1` bit immediately after the last suffix bit. The inner-node bytes (`0x08`, `0x0B`, `0x09`) use 3-bit suffixes (delimiter at bit 3), while the final-node bytes (`0x07`, `0x06`) use 2-bit suffixes (delimiter at bit 2). All follow the Keccak delimited-suffix convention. The last suffix bit encodes the Sakura node type: `0` for inner/leaf, `1` for final.
 
 | Domain byte | Binary | Suffix (LSB-first) | Last bit | Node type |
 |-------------|--------|-------------------|----------|-----------|
-| `0x08` | 0000 1**000** | `000` | 0 | inner (leaf init) |
-| `0x0A` | 0000 1**010** | `010` | 0 | inner (chain value) |
+| `0x08` | 0000 1**000** | `000` | 0 | inner (duplex init) |
+| `0x0B` | 0000 1**011** | `110` | 0 | inner (chain value) |
 | `0x09` | 0000 1**001** | `100` | 0 | inner (KDF) |
-| `0x0C` | 0000 1**100** | `001` | 1 | final (single-node tag) |
-| `0x0E` | 0000 1**110** | `011` | 1 | final (tag accumulation) |
+| `0x07` | 0000 0**111** | `11` | 1 | final (tag, n=1) |
+| `0x06` | 0000 0**110** | `01` | 1 | final (tag, n>1) |
 
 Inner/final node separability follows directly from Sakura Lemma 4: the final-node bytes (`0x07`, `0x06`) have last suffix bit `1`, while all inner/leaf bytes (`0x08`, `0x0B`, `0x09`) have last suffix bit `0`. Three of the five domain bytes (`0x0B`, `0x07`, `0x06`) are reused directly from KangarooTwelve's Sakura encoding, providing established cross-protocol semantics.
 
@@ -586,7 +586,7 @@ hop replaces only the KDF; all oracles and winning conditions are otherwise iden
 
 1. **Domain separation (Section 6.3).** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the KDF's $\pi$-calls (set
    $\mathcal{K}$, domain byte `0x09`) are on inputs disjoint from all other components' $\pi$-calls. The KDF sponge
-   evaluation is therefore functionally independent of the leaf ciphers and final-node sponge.
+   evaluation is therefore functionally independent of the leaf ciphers and final-node Duplex.
 
 2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a single-evaluation keyed sponge (absorb context, squeeze
    once) with uniformly random master key $K$. By the outer-keyed sponge result (ADMV15, Section 6.2), after the
@@ -650,7 +650,7 @@ For any keyed duplex initialized with `K_tw || LEU64(i)` (where $K_{tw}$ is a un
 public index), in the ideal-permutation model, the PRF advantage distinguishing the rate outputs (keystream bytes and
 terminal squeeze bytes) from uniformly random is at most $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$ is the
 number of duplexing calls for leaf $i$ and $t$ is the adversary offline Keccak-p budget (Section 6.1). This holds for both overwrite-mode
-absorption (used by leaves) and standard XOR-mode absorption (used by TurboSHAKE128, including the final node).
+absorption (used during encryption) and standard XOR-mode absorption (used during framing and chain-value absorption in the final node).
 
 *Proof.* Each leaf is a keyed duplex with uniformly random key $K_{tw}$ (from $\mathsf{G}_1$). By the Domain Separation
 Lemma (Section 6.3), under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the leaf's $\pi$-calls are disjoint from all other
@@ -681,13 +681,27 @@ identical chunking.
 This bijection is used in Section 6.10 (CMT-4) to rule out two different plaintexts opening the same ciphertext under
 one key.
 
-**Final-node tag (n > 1).** For multi-chunk messages, the tag is produced by
-`turboshake128(final_input, 0x0E, TAU)` — a single-evaluation keyed sponge with key $K_{tw}$ absorbed at the start.
-By domain separation (Section 6.3, set $\mathcal{T}_f$), the final node's $\pi$-calls are disjoint from all leaf and
-KDF calls. MRV15 Theorem 1 (FKS) applies to this keyed sponge, with the outer-keyed initialization covered by ADMV15
-(same argument as Section 6.2). The tag output is therefore pseudorandom with advantage at most
-$\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)$, where $\ell_f$ is the number of absorbed blocks in the final-node
-input.
+**Final-node tag (n = 1).** For single-chunk messages, the final node is a single Duplex that inits with
+$(K_{tw}, 0)$ via `pad_permute(0x08)`, encrypts the entire message (overwrite mode, covered by Lemma 2), and squeezes
+the tag via `pad_permute(0x07)`. This is one continuous FKD evaluation. MRV15 Theorem 2 (FKD) applies to the entire
+sequence, with the outer-keyed initialization covered by ADMV15 (same argument as Section 6.2). By domain separation
+(Section 6.3, set $\mathcal{T}_s$), the final node's tag-squeeze $\pi$-call is disjoint from all leaf and KDF calls.
+The tag output is therefore pseudorandom with advantage at most $\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)$,
+where $\ell_f$ covers all duplexing calls in the final node (init + encryption blocks + tag squeeze).
+
+**Final-node tag (n > 1).** For multi-chunk messages, the final node is a single Duplex that:
+
+1. Inits with $(K_{tw}, 0)$ via `pad_permute(0x08)`.
+2. Encrypts chunk 0 (overwrite mode, covered by Lemma 2).
+3. XOR-absorbs HOP_FRAME and chain values (standard XOR-absorb).
+4. Applies `pad_permute(0x06)` and squeezes the tag.
+
+This is one continuous FKD evaluation. The overwrite-mode equivalence (Lemma 2) covers the encryption phase; standard
+XOR-absorb covers framing and chain-value absorption. MRV15 Theorem 2 (FKD) applies to the entire sequence, with the
+outer-keyed initialization covered by ADMV15 (same argument as Section 6.2). By domain separation (Section 6.3, set
+$\mathcal{T}_f$), the final node's tag-squeeze $\pi$-call is disjoint from all leaf and KDF calls. The tag output is
+therefore pseudorandom with advantage at most $\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)$, where $\ell_f$
+covers all duplexing calls in the final node (init + encryption blocks + absorption blocks + tag squeeze).
 
 **Consequence.**
 By Lemma 3 (fixed-key bijection), distinct plaintexts produce distinct ciphertexts under a fixed key, so the tag can be
@@ -929,8 +943,8 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 ### 7.2 Chunk Reordering, Length Changes, and Empty Input
 
 - Reordering chunks changes leaf-index binding (`key || LEU64(index)`), so recomputed tag changes.
-- Truncation/extension changes chunk count $n$, changing `length_encode(n)` in final accumulation input.
-- Empty plaintext uses $n=1$: one leaf with `single_node_tag()`, no final accumulation node.
+- Truncation/extension changes chunk count $n$, changing `length_encode(n-1)` in the chaining-hop suffix.
+- Empty plaintext uses $n=1$: the final node encrypts the empty message and produces the tag via `pad_permute(0x07)`.
 
 ### 7.3 Side Channels
 
@@ -1009,19 +1023,18 @@ The following implementation decisions are performance-critical and align with h
   then `P1600x2`, then `P1600`, minimizing tail overhead and avoiding per-block feature checks inside inner loops.
 - **Parallelize independent finalizations when available.** If two independent TurboSHAKE/Keccak states must be
   finalized together, use a paired permutation path (`x2`) to reduce permutation-call overhead.
-- **Stream chain values incrementally.** Feed chain values into a running TurboSHAKE128 hasher as each batch completes;
+- **Stream chain values incrementally.** Absorb chain values into the final node's Duplex as each batch completes;
   only finalization depends on having absorbed all chain values.
 - **Preserve empty/single-chunk fast paths.** Keep dedicated empty-input and `n = 1` paths to avoid
   unnecessary tree-accumulation overhead on latency-sensitive inputs.
 - **Use incremental stateful processing.** Maintain chunk-local state across partial writes/reads so callers can stream
-  large messages without extra buffering copies. Note that the first chunk cannot be finalized until the implementation
-  knows whether a second chunk will follow: `n = 1` finalizes with `single_node_tag` (`0x0C`) while `n > 1` finalizes
-  with `chain_value` (`0x0A`). A streaming implementation must therefore buffer one byte past the chunk boundary (`B + 1`)
-  or wait for EOF before finalizing the first chunk.
+  large messages without extra buffering copies. With kangaroo hopping, the final node encrypts chunk 0 directly and
+  the n=1 vs n>1 decision is deferred to the final `pad_permute` (`0x07` vs `0x06`), when `n` is already known.
+  No lookahead buffering past the chunk boundary is required.
 - **Reuse one scheduling pipeline for both directions.** Encrypt and decrypt should share the same chunk scheduling,
   index binding, and chain-value accumulation pipeline.
-- **Keep domain bytes and index mapping exact.** `0x08`, `0x0A`, `0x09`, `0x0C`, `0x0E` constants and `key || LEU64(index)` binding (index 0
-  for the final node, indices 1..$n$ for leaves) are structural for interoperability and security analysis.
+- **Keep domain bytes and index mapping exact.** `0x08`, `0x0B`, `0x09`, `0x07`, `0x06` constants and `key || LEU64(index)` binding (index 0
+  for the final node, indices 1..$n-1$ for leaves) are structural for interoperability and security analysis.
 - **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
   patterns when constructing final-node inputs.
 - **No misuse resistance (MRAE).** TreeWrap128 is not an MRAE/SIV-style scheme: nonce reuse leaks
@@ -1356,12 +1369,15 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 ## Appendix A. Exact Per-Query $\sigma$ Formula
 
 For a single `TreeWrap128` query on a message of length $L$ bytes with
-$n = \max(1, \lceil L / B \rceil)$ chunks of sizes $\ell_1, \ldots, \ell_{n}$, the per-query contribution to
+$n = \max(1, \lceil L / B \rceil)$ chunks of sizes $\ell_0, \ldots, \ell_{n-1}$, the per-query contribution to
 $\sigma$ is:
 
-$$\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_input}|}{R} \right\rfloor + 1\right)}_{\text{KDF}} + \underbrace{\sum_{i=1}^{n}\left(2 + \left\lfloor \frac{\ell_i}{R} \right\rfloor\right)}_{\text{leaves}} + \underbrace{\mathbb{1}_{n>1} \cdot \left(\left\lfloor \frac{|\mathit{final\_input}|}{R} \right\rfloor + 1\right)}_{\text{tag accumulation}}$$
+$$\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_input}|}{R} \right\rfloor + 1\right)}_{\text{KDF}} + \underbrace{\left(1 + \left\lfloor \frac{\ell_0}{R} \right\rfloor + d_f\right)}_{\text{final node}} + \underbrace{\sum_{i=1}^{n-1}\left(2 + \left\lfloor \frac{\ell_i}{R} \right\rfloor\right)}_{\text{leaves}}$$
 
-where:
+where $d_f$ is the number of permutation calls during the final node's tag phase (1 for the tag `pad_permute`, plus
+any additional calls from absorbing HOP_FRAME, chain values, and the chaining-hop suffix when $n > 1$).
+
+More precisely:
 
 - **KDF term.** $|\mathit{kdf\_input}|$ is the byte length of
   `encode_string(K) || encode_string(N) || encode_string(AD)`.
@@ -1369,14 +1385,15 @@ where:
   32-byte key, 12-byte nonce, and empty AD, $|\mathit{kdf\_input}| = (3+32) + (2+12) + (2+0) = 51$ bytes, giving
   $\lfloor 51 / 168 \rfloor + 1 = 1$ Keccak-p call.
   (The `+1` accounts for TurboSHAKE's pad+permute step even when the absorb phase ends exactly on a rate boundary.)
-- **Leaf term.** Each leaf costs $2$ (init `pad_permute` + terminal `pad_permute` for `single_node_tag` or
+- **Final node term.** The final node (index 0) costs $1$ (init `pad_permute`) $+$
+  $\lfloor \ell_0 / R \rfloor$ (unpadded intermediate permutations during chunk-0 encryption) $+$ $d_f$ (tag phase).
+  For $n = 1$: $d_f = 1$ (one `pad_permute(0x07)`). For $n > 1$: $d_f$ accounts for absorbing the 8-byte HOP_FRAME,
+  $(n-1)$ chain values of $C$ bytes each, the chaining-hop suffix ($|\mathrm{length\_encode}(n-1)| + 2$ bytes), and the
+  final `pad_permute(0x06)`. These are XOR-absorbed contiguously into the rate starting from the position left after
+  chunk-0 encryption.
+- **Leaf term.** Each leaf (indices $1, \ldots, n-1$) costs $2$ (init `pad_permute` + terminal `pad_permute` for
   `chain_value`) $+$ $\lfloor \ell_i / R \rfloor$ (unpadded intermediate permutations on full-rate blocks). For a
-  full $B = 8192$-byte chunk: $2 + \lfloor 8192 / 168 \rfloor = 2 + 48 = 50$.
-- **Tag accumulation term.** Present only
-  when $n > 1$. $|\mathit{final\_input}| = (C + 8) + nC + |\mathrm{length\_encode}(n)| + 2$ bytes (the $C + 8 = 40$
-  byte key-and-index prefix, plus $n$ chain values and the Sakura suffix).
-  For $n = 2$: $|\mathit{final\_input}| = 40 + 64 + 2 + 2 = 108$ bytes, giving
-  $\lfloor 108 / 168 \rfloor + 1 = 1$.
+  full $B = 8192$-byte chunk: $2 + \lfloor 8192 / 168 \rfloor = 2 + 48 = 50$. The leaf sum is empty when $n = 1$.
 
 ## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
 
