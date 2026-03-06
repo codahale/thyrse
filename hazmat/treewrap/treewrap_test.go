@@ -223,11 +223,11 @@ type bareVector struct {
 		Len  int    `json:"len"`
 	} `json:"message"`
 	Expected struct {
-		TagHex          string `json:"tag_hex"`
-		CtHex           string `json:"ct_hex"`
-		CtPrefix32Hex   string `json:"ct_prefix32_hex"`
-		FlipTagHex      string `json:"flip_tag_hex"`
-		SwapTagHex      string `json:"swap_tag_hex"`
+		TagHex        string `json:"tag_hex"`
+		CtHex         string `json:"ct_hex"`
+		CtPrefix32Hex string `json:"ct_prefix32_hex"`
+		FlipTagHex    string `json:"flip_tag_hex"`
+		SwapTagHex    string `json:"swap_tag_hex"`
 	} `json:"expected"`
 }
 
