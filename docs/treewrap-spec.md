@@ -868,7 +868,7 @@ $$
 
 > *Note on construction type.* TreeWrap128 is structurally an encrypt-and-MAC scheme (the tag is derived from the
 > same sponge state as the ciphertext), not an Encrypt-then-MAC scheme with independent keys. The BN00 composition
-> theorem (Theorem 4.3) is a general result: it states that *any* symmetric encryption scheme satisfying both IND-CPA
+> theorem (Theorem 3.2) is a general result: it states that *any* symmetric encryption scheme satisfying both IND-CPA
 > and INT-CTXT also satisfies IND-CCA2. The theorem's only preconditions are these two properties of the composed
 > scheme, not any requirement on its internal structure (e.g., independent keys or separate MAC). Sections 6.7 and 6.8
 > establish IND-CPA and INT-CTXT for TreeWrap128 directly, so the theorem applies. The overwrite-mode sponge ensures
