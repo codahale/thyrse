@@ -76,7 +76,7 @@ C = 32    # Capacity (bytes); key and chain value size.
 TAU = 32  # Tag size (bytes).
 B = 8192  # Chunk size (bytes).
 
-class LeafCipher:
+class Duplex:
     def __init__(self):
         self.S = bytearray(200)
         self.pos = 0
@@ -117,22 +117,28 @@ class LeafCipher:
                 self.pos = 0
         return bytes(pt)
 
-    def single_node_tag(self) -> bytes:
-        self.pad_permute(0x0C)
-        return bytes(self.S[:TAU])
+    def absorb(self, data: bytes):
+        """XOR-absorb data into the rate."""
+        for b in data:
+            self.S[self.pos] ^= b
+            self.pos += 1
+            if self.pos == R:
+                keccak_p1600(self.S)
+                self.pos = 0
 
     def chain_value(self) -> bytes:
-        self.pad_permute(0x0A)
+        self.pad_permute(0x0B)
         return bytes(self.S[:C])
 ```
 
 > [!NOTE]
 > `pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $R-1$). `init` uses domain byte
-> `0x08`; `chain_value` uses `0x0A`; `single_node_tag` uses `0x0C`. Intermediate encrypt/decrypt blocks use the full
-> $R = 168$ byte rate and permute without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb
-> for non-final blocks. Both `encrypt` and `decrypt` overwrite the rate with ciphertext, so state evolution is
-> identical regardless of direction. `single_node_tag` and `chain_value` begin with `pad_permute` to mix all data
-> before squeezing; both outputs fit in a single squeeze block since $\max(\tau, C) = 32 \ll R = 168$.
+> `0x08`; `chain_value` uses `0x0B`. Intermediate encrypt/decrypt blocks use the full $R = 168$ byte rate and permute
+> without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb for non-final blocks. Both
+> `encrypt` and `decrypt` overwrite the rate with ciphertext, so state evolution is identical regardless of direction.
+> `absorb` XOR-absorbs data into the rate without padding, permuting via raw `keccak_p1600` when the rate is full.
+> `chain_value` calls `pad_permute` to mix all data before squeezing; the output fits in a single squeeze block since
+> $C = 32 \ll R = 168$.
 
 ## 5. TreeWrap128
 
@@ -217,6 +223,9 @@ derivation and tag verification.
 *Procedure:*
 
 ```python
+# K12 message-hop / chaining-hop framing: '110^{62}' packed LSB-first.
+HOP_FRAME = bytes([0x03]) + bytes(7)
+
 # Sakura interleaving block size for I = infinity (Section 5, Tree Topology).
 SAKURA_SUFFIX = b"\xff\xff"
 
@@ -225,26 +234,39 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
     n = max(1, -(-len(data) // B))
     chunks = [data[i * B : (i + 1) * B] for i in range(n)]
 
-    if n == 1:
-        L = LeafCipher()
-        L.init(key, 1)
-        out = L.encrypt(chunks[0]) if direction == "E" else L.decrypt(chunks[0])
-        return out, L.single_node_tag()
+    # Final node: always present, always encrypts chunk 0.
+    F = Duplex()
+    F.init(key, 0)
+    op = F.encrypt if direction == "E" else F.decrypt
+    out_parts = [op(chunks[0])]
 
-    out_parts, cvs = [], []
-    for i, chunk in enumerate(chunks, start=1):
-        L = LeafCipher()
+    if n == 1:
+        # Single node: message hop '11' -> 0x07
+        F.pad_permute(0x07)
+        return out_parts[0], bytes(F.S[:TAU])
+
+    # Multi-node: message hop framing '110^{62}'
+    F.absorb(HOP_FRAME)
+
+    # Leaves 1..n-1: independent, parallel.
+    cvs = []
+    for i, chunk in enumerate(chunks[1:], start=1):
+        L = Duplex()
         L.init(key, i)
-        out_parts.append(L.encrypt(chunk) if direction == "E" else L.decrypt(chunk))
+        out_parts.append(
+            L.encrypt(chunk) if direction == "E" else L.decrypt(chunk))
         cvs.append(L.chain_value())
 
-    final_input = key + int.to_bytes(0, 8, "little")
+    # Absorb chain values into final node.
     for cv in cvs:
-        final_input += cv
-    final_input += length_encode(n)
-    final_input += SAKURA_SUFFIX
-    tag = turboshake128(final_input, 0x0E, TAU)
-    return b"".join(out_parts), tag
+        F.absorb(cv)
+
+    # Chaining hop suffix.
+    F.absorb(length_encode(n - 1) + SAKURA_SUFFIX)
+
+    # Chaining hop '01' -> 0x06
+    F.pad_permute(0x06)
+    return b"".join(out_parts), bytes(F.S[:TAU])
 
 def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
     return _tree_process(key, plaintext, "E")
@@ -253,9 +275,9 @@ def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
     return _tree_process(key, ciphertext, "D")
 ```
 
-All leaf operations are independent and may execute in parallel. Tag computation begins as soon as all chain values are
-available. `decrypt_and_mac` produces the same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write
-ciphertext into the sponge rate (Section 4).
+The final node (index 0) always encrypts chunk 0. Leaf operations for chunks 1 through $n-1$ are independent and may
+execute in parallel. Tag computation begins as soon as all chain values are available. `decrypt_and_mac` produces the
+same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write ciphertext into the sponge rate (Section 4).
 
 > [!CAUTION]
 > For production implementations, avoid repeated byte-string concatenation (`final_input += ...`) when building the
