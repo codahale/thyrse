@@ -11,9 +11,8 @@
 
 TreeWrap128 is an authenticated-encryption scheme with associated data (AEAD) built on Keccak-p[1600,12]. It uses a
 TurboSHAKE128-based key derivation to produce a per-invocation key, then encrypts via a Sakura flat-tree topology that
-enables SIMD acceleration (NEON, AVX2, AVX-512) on large inputs. Each leaf encrypts by XORing plaintext with the Keccak
-sponge state and writing the ciphertext back into the rate, and leaf chain values are accumulated into a single MAC tag
-via a keyed TurboSHAKE128 final node.
+enables SIMD acceleration (NEON, AVX2, AVX-512) on large inputs. The final node encrypts the first chunk directly, then
+absorbs chain values from parallel leaves that process subsequent chunks, producing a single MAC tag.
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED",
 "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in
@@ -185,11 +184,11 @@ The Sakura frame bits at the tag are: chaining hop `'0'` + final `'1'` = `'01'`,
   exponent both `0xFF`.
 
 Each domain byte stores a variable-length suffix bit-string LSB-first, with a delimiter `1` bit immediately after the
-last suffix bit. The last suffix bit encodes the Sakura node type: `1` for final nodes, `0` for inner/leaf nodes. All
-five TreeWrap128 domain bytes use 3-bit suffixes (delimiter at bit 3). Final-node separability follows directly: the
-chaining-hop tag byte (`0x06`, suffix `'011'`) and single-node tag byte (`0x07`, suffix `'111'`) have last suffix
-bit `1` (final), while the leaf chain-value byte (`0x0B`, suffix `'110'`), init byte (`0x08`, suffix `'000'`), and
-KDF byte (`0x09`, suffix `'100'`) have last suffix bit `0` (inner).
+last suffix bit. The last suffix bit encodes the Sakura node type: `1` for final nodes, `0` for inner/leaf nodes. The
+inner-node bytes use 3-bit suffixes (delimiter at bit 3): init (`0x08`, suffix `'000'`), chain value (`0x0B`, suffix
+`'110'`), and KDF (`0x09`, suffix `'100'`). The final-node bytes use 2-bit suffixes (delimiter at bit 2): chaining-hop
+tag (`0x06`, suffix `'01'`) and single-node tag (`0x07`, suffix `'11'`). Final-node separability follows directly from
+the last suffix bit: `1` for final, `0` for inner.
 
 The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (Section 5.1).
 
