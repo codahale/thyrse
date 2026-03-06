@@ -150,7 +150,7 @@ Leaves are indexed 1 through $n$ (not 0 through $n-1$); index 0 is reserved for 
 leaf uses index 1 and produces the tag directly via `single_node_tag()` (no final node). For $n > 1$, every chunk is
 processed by an independent leaf cipher that produces a C-byte chain value. A keyed final node absorbs all chain values
 and produces the tag via a **keyed** TurboSHAKE128 call. The final-node input prepends the key and index 0 to the
-Sakura chaining hop (Figure 4):
+Sakura chaining hop (see Bertoni et al., ePrint 2013/231, §4):
 
 $$
 \underbrace{\mathit{key} \;\|\; \mathrm{LEU64}(0)}_{\text{final-node keying}} \;\|\; \underbrace{\mathit{cv}_1 \;\|\; \cdots \;\|\; \mathit{cv}_{n}}_{\text{chain values}} \;\|\; \underbrace{\mathrm{length\_encode}(n)}_{\text{coded nrCVs}} \;\|\; \underbrace{\mathtt{0xFF} \;\|\; \mathtt{0xFF}}_{\text{interleaving block size}}
@@ -988,7 +988,7 @@ The following implementation decisions are performance-critical and align with h
 - **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
   patterns when constructing final-node inputs.
 - **No misuse resistance (MRAE).** TreeWrap128 is not an MRAE/SIV-style scheme: nonce reuse leaks
-  plaintext XOR (see Section 6 CAUTION). Applications requiring nonce-misuse resistance should use a
+  plaintext XOR (Section 6.7 proves IND-CPA only for nonce-respecting adversaries). Applications requiring nonce-misuse resistance should use a
   dedicated MRAE construction (e.g., SIV or a commit-then-encrypt wrapper). TreeWrap128's design
   prioritizes single-pass streaming and parallelism over misuse tolerance.
 
@@ -1163,7 +1163,7 @@ Flipping bit 0 of `ct[0]` yields tag
 Flipping bit 0 of `ct[0]` yields tag
 `10d5020616f325689f4b136d785e2078dc2e38bcf08dda283d2b16d667e2cd9b`.
 
-Swapping chunks 0 and 1 (bytes 0-8,191 and 8,192-16,383) yields tag
+Swapping chunks 1 and 2 (bytes 0–8,191 and 8,192–16,383) yields tag
 `dbd26ca0213facb9f86b859d9b224da80ca4191ac8b3f2b1ce61a98e48f95eb7`.
 
 #### 10.1.6 Round-Trip Consistency
@@ -1229,7 +1229,8 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Reusing the same `(K, N, AD)` with a different message is deterministic and yields
-`ct1 xor ct2 = m1 xor m2` for equal-length messages (validated by this vector).
+`ct1 xor ct2 = m1 xor m2` within each rate block (168 bytes); overwrite mode causes
+keystream divergence at subsequent block boundaries (validated by this vector).
 Nonce reuse is out of scope for Section 6 nonce-respecting claims.
 
 #### 10.2.5 Swapped Nonce and AD Domains

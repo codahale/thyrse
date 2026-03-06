@@ -395,7 +395,7 @@ def render_section_9(vectors: dict[str, Any]) -> str:
             lines.append("")
 
         if "swap_tag_hex" in exp:
-            lines.append("Swapping chunks 0 and 1 (bytes 0-8,191 and 8,192-16,383) yields tag")
+            lines.append("Swapping chunks 1 and 2 (bytes 0\u20138,191 and 8,192\u201316,383) yields tag")
             lines.append(f"`{exp['swap_tag_hex']}`.")
             lines.append("")
 
@@ -449,7 +449,8 @@ def render_section_9(vectors: dict[str, Any]) -> str:
         checks = case.get("checks", {})
         if checks.get("nonce_reuse_xor_leak"):
             lines.append("Reusing the same `(K, N, AD)` with a different message is deterministic and yields")
-            lines.append("`ct1 xor ct2 = m1 xor m2` for equal-length messages (validated by this vector).")
+            lines.append("`ct1 xor ct2 = m1 xor m2` within each rate block (168 bytes); overwrite mode causes")
+            lines.append("keystream divergence at subsequent block boundaries (validated by this vector).")
             lines.append("Nonce reuse is out of scope for Section 6 nonce-respecting claims.")
         if checks.get("swap_nonce_ad"):
             lines.append("Swapping `N` and `AD` (same byte length) yields a different `ct‖tag` and does not")
