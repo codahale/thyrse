@@ -438,6 +438,43 @@ directly covered by Theorem 1 with $z = 1$.
 > $q^2\ell$ rather than $q^2\ell^2$, eliminating a factor of $\ell$ from the
 > dominant birthday-like term.
 
+### 6.3 Domain Separation Lemma
+
+**Lemma (Domain separation).** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$ (Section 6.1), the construction's $\pi$-calls partition into disjoint sets by role, such that no two calls from different roles share a full 1600-bit input.
+
+| Set | Role | Domain byte | Distinguishing mechanism |
+|-----|------|-------------|--------------------------|
+| $\mathcal{K}$ | KDF | `0x3B` | Padded, domain byte `0x3B` |
+| $\mathcal{I}$ | Leaf init | `0x33` | Padded, domain byte `0x33` |
+| $\mathcal{C}$ | Chain value | `0x2B` | Padded, domain byte `0x2B` |
+| $\mathcal{T}_s$ | Single-node tag | `0x27` | Padded, domain byte `0x27` |
+| $\mathcal{T}_f$ | Tag accumulation | `0x37` | Padded, domain byte `0x37` |
+| $\mathcal{U}$ | Unpadded intermediate | — | Secret capacity from keyed init |
+
+*Proof sketch.* Three cases:
+
+1. **Padded vs. padded (different domain bytes).** The domain byte occupies a fixed position in the TurboSHAKE padding frame (byte position `pos` in `pad_permute`). Two padded blocks with different domain bytes differ in that byte position, hence have different rate content and different full $\pi$-inputs regardless of capacity.
+
+2. **Padded vs. unpadded.** Unpadded intermediate blocks (set $\mathcal{U}$) carry no domain byte or `0x80` padding. Their capacity inputs are secret values inherited from the keyed init (via prior $\pi$-calls). Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, capacity outputs are pairwise distinct across all $\sigma + t$ evaluations, so unpadded blocks' capacity inputs are distinct from those of any padded block.
+
+3. **Within a set.** Calls within the same role are distinguished by either different keys (different rate content at init) or different capacity inputs inherited from prior calls in the chain (guaranteed distinct under $\neg\mathsf{Bad}_{\mathrm{perm}}$).
+
+**Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Sakura suffix (ePrint 2013/231) with the structure `11 || S || R_1 R_0 || 1` (6-bit suffix, LSB-first in byte), where bit 2 is the Sakura frame bit ($S = 1$ for final-node roles, $S = 0$ for inner/leaf roles):
+
+| Domain byte | Hex | Binary (LSB-first suffix) | Frame bit $S$ | Role type |
+|-------------|-----|--------------------------|---------------|-----------|
+| `0x33` | 0011 0011 | 11 **0** 01 1 | 0 | inner (leaf init) |
+| `0x2B` | 0010 1011 | 11 **0** 10 1 | 0 | inner (chain value) |
+| `0x3B` | 0011 1011 | 11 **0** 11 1 | 0 | inner (KDF) |
+| `0x27` | 0010 0111 | 11 **0** 00 1 | 0 | final (single-node tag, $n=1$ only) |
+| `0x37` | 0011 0111 | 11 **1** 01 1 | 1 | final (tag accumulation) |
+
+Inner/final node separability follows directly from Sakura Lemma 4: the tag-accumulation domain byte (`0x37`, $S = 1$) is distinguishable from all leaf domain bytes (`0x33`, `0x2B`, $S = 0$) and the KDF byte (`0x3B`, $S = 0$) by the frame bit alone. The single-node tag byte (`0x27`, $S = 0$) appears only in the $n = 1$ path where no final node exists, so no inner/final ambiguity arises.
+
+**Design constraint.** Future modifications to domain byte assignments MUST preserve Sakura suffix encoding compliance and the frame-bit partition between inner and final roles.
+
+**Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation) and Sections 6.5–6.6 (independent leaf and final-node analysis).
+
 ### 6.2 Bridge Theorem: KDF to Random Key
 
 This section executes the single game hop that replaces the TurboSHAKE128 KDF with a lazy random function. The
