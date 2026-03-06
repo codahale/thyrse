@@ -615,7 +615,7 @@ Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 For any keyed duplex initialized with `K_tw || LEU64(i)` (where $K_{tw}$ is a uniformly random secret key and $i$ is a
 public index), in the ideal-permutation model, the PRF advantage distinguishing the rate outputs (keystream bytes and
 terminal squeeze bytes) from uniformly random is at most $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$ is the
-number of duplexing calls for leaf $i$ and $t$ is the number of output blocks. This holds for both overwrite-mode
+number of duplexing calls for leaf $i$ and $t$ is the adversary offline Keccak-p budget (Section 6.1). This holds for both overwrite-mode
 absorption (used by leaves) and standard XOR-mode absorption (used by TurboSHAKE128, including the final node).
 
 *Proof.* Each leaf is a keyed duplex with uniformly random key $K_{tw}$ (from $\mathsf{G}_1$). By the Domain Separation
@@ -646,6 +646,14 @@ identical chunking.
 
 This bijection is used in Section 6.10 (CMT-4) to rule out two different plaintexts opening the same ciphertext under
 one key.
+
+**Final-node tag (n > 1).** For multi-chunk messages, the tag is produced by
+`turboshake128(final_input, 0x0E, TAU)` — a single-evaluation keyed sponge with key $K_{tw}$ absorbed at the start.
+By domain separation (Section 6.3, set $\mathcal{T}_f$), the final node's $\pi$-calls are disjoint from all leaf and
+KDF calls. MRV15 Theorem 1 (FKS) applies to this keyed sponge, with the outer-keyed initialization covered by ADMV15
+(same argument as Section 6.2). The tag output is therefore pseudorandom with advantage at most
+$\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)$, where $\ell_f$ is the number of absorbed blocks in the final-node
+input.
 
 **Consequence.**
 By Lemma 3 (fixed-key bijection), distinct plaintexts produce distinct ciphertexts under a fixed key, so the tag can be
@@ -936,9 +944,11 @@ Security interpretation remains the Section 6 bound family evaluated at observed
 parameter $t$ treated as an analysis parameter (not an operationally measurable quantity).
 
 **Multi-user security.** For deployments spanning $U$ independent master keys, the total advantage is at most $U$ times
-the per-key bound (union bound). The per-key bounds in Section 6 already account for the adversary's offline budget $t$,
-which is shared across all keys. Concretely, a deployment with $U$ keys achieves at most $U \cdot \varepsilon$ total
-advantage, where $\varepsilon$ is the single-key bound evaluated at the per-key workload counters.
+the per-key bound (union bound). The offline budget $t$ and the $\mathsf{Bad}_{\mathrm{perm}}$ event are global (shared
+across all keys under the same ideal permutation), so $\varepsilon_{\mathrm{cap}}$ must be evaluated with the global
+online query count $\sigma = \sum_u \sigma_u$ across all $U$ keys. Concretely, a deployment with $U$ keys achieves at
+most $U \cdot \varepsilon$ total advantage, where $\varepsilon$ is the single-key bound with $\sigma$ set to the global
+total and per-key workload counters for the remaining terms.
 
 Non-normative sensitivity profiles for reviewers:
 
