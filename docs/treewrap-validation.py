@@ -324,10 +324,10 @@ def render_section_9(vectors: dict[str, Any]) -> str:
     aead = vectors["aead"]
     lines: list[str] = []
 
-    lines.append("## 9. Test Vectors")
+    lines.append("## 10. Test Vectors")
     lines.append("")
 
-    lines.append("### 9.1 Internal Function Vectors")
+    lines.append("### 10.1 Internal Function Vectors")
     lines.append("")
 
     key = bytes_from_hex(bare["key_hex"])
@@ -344,7 +344,7 @@ def render_section_9(vectors: dict[str, Any]) -> str:
         # Renumber: 9.1 -> 9.1.1, 9.2 -> 9.1.2, etc.
         old_num = cid.split(" ")[0]  # e.g. "9.1"
         sub = old_num.split(".")[1]  # e.g. "1"
-        new_id = f"9.1.{sub}"
+        new_id = f"10.1.{sub}"
         title = case["title"]
         msg = make_message(case["message"])
         exp = case["expected"]
@@ -374,13 +374,13 @@ def render_section_9(vectors: dict[str, Any]) -> str:
             lines.append(f"`{exp['swap_tag_hex']}`.")
             lines.append("")
 
-    lines.append("#### 9.1.6 Round-Trip Consistency")
+    lines.append("#### 10.1.6 Round-Trip Consistency")
     lines.append("")
     lines.append("For all internal function vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as")
     lines.append("`EncryptAndMAC`.")
     lines.append("")
 
-    lines.append("### 9.2 TreeWrap128 Vectors")
+    lines.append("### 10.2 TreeWrap128 Vectors")
     lines.append("")
     lines.append("These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including SP 800-185")
     lines.append("`encode_string` key derivation.")
@@ -391,7 +391,7 @@ def render_section_9(vectors: dict[str, Any]) -> str:
         # Renumber: 9.7.1 -> 9.2.1, 9.7.2 -> 9.2.2, etc.
         old_num = cid.split(" ")[0]  # e.g. "9.7.1"
         sub = old_num.split(".")[2]  # e.g. "1"
-        new_id = f"9.2.{sub}"
+        new_id = f"10.2.{sub}"
         title = case["title"]
         key = bytes_from_hex(case["key_hex"])
         nonce = bytes_from_hex(case["nonce_hex"])
@@ -438,7 +438,7 @@ def render_section_9(vectors: dict[str, Any]) -> str:
 
 def render_spec(spec_path: Path, vectors: dict[str, Any]) -> None:
     md = spec_path.read_text(encoding="utf-8")
-    start = md.find("## 9. Test Vectors")
+    start = md.find("## 10. Test Vectors")
     end = md.find("## Appendix A.")
     if start == -1 or end == -1 or end <= start:
         raise RuntimeError("Could not locate Section 9 / Appendix A boundaries in spec")

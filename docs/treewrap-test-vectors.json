@@ -230,6 +230,65 @@
         "expected": {
           "ct_tag_hex": "0a611a56065902161736588f3f5aee00d4be61895a55c1996550fefb486ad366dc953f7868324e5674a650e4a5b24e2a6b"
         }
+      },
+      {
+        "id": "9.7.8",
+        "title": "Rate-Minus-One Message (167 Bytes, R-1 Boundary)",
+        "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+        "nonce_hex": "d0d1d2d3d4d5d6d7d8d9dadb",
+        "ad_hex": "202122",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 167
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true
+        },
+        "expected": {
+          "ct_prefix32_hex": "732973ac8c2fb9071bdb5892cfaefbc3a7565836528cc9f86b568b548c9a9f73",
+          "tag_hex": "cbb48596c87747402e24e41debd1987b01950bc749409f71161b05ec732d6878"
+        }
+      },
+      {
+        "id": "9.7.9",
+        "title": "Exact-Rate Message (168 Bytes, R Boundary)",
+        "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+        "nonce_hex": "d0d1d2d3d4d5d6d7d8d9dadb",
+        "ad_hex": "202122",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 168
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true
+        },
+        "expected": {
+          "ct_prefix32_hex": "732973ac8c2fb9071bdb5892cfaefbc3a7565836528cc9f86b568b548c9a9f73",
+          "tag_hex": "696bdcd1a42d3eacb5a499aa705869274e79732d652eac9877527bed23a89c86"
+        }
+      },
+      {
+        "id": "9.7.10",
+        "title": "Large Nonce (32 Bytes)",
+        "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+        "nonce_hex": "e0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        "ad_hex": "202122",
+        "message": {
+          "mode": "seq_mod256",
+          "len": 48
+        },
+        "checks": {
+          "bad_nonce": true,
+          "bad_ad": true,
+          "bad_tag": true
+        },
+        "expected": {
+          "ct_tag_hex": "1066ff2083d4da1e0efe6b42845a9bab31777a611e3691a9a26bf5125e6d6ffb92068f200418a5887e28bc72bd1859ae965e05b8e3bbab95af1aeb24c7b4842f0902a55ae8ab6bd41af30214060cc57f"
+        }
       }
     ]
   }

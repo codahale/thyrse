@@ -1262,6 +1262,47 @@ Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
+#### 10.2.8 Rate-Minus-One Message (167 Bytes, R-1 Boundary)
+
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `10 11 12 ... 2f` |
+| N | 12 bytes `d0 d1 d2 ... db` |
+| AD | 20 21 22 |
+| M len | 167 (`00 01 02 ... mod 256`) |
+| ct[:32] | `732973ac8c2fb9071bdb5892cfaefbc3a7565836528cc9f86b568b548c9a9f73` |
+| tag | `cbb48596c87747402e24e41debd1987b01950bc749409f71161b05ec732d6878` |
+
+`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+
+#### 10.2.9 Exact-Rate Message (168 Bytes, R Boundary)
+
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `10 11 12 ... 2f` |
+| N | 12 bytes `d0 d1 d2 ... db` |
+| AD | 20 21 22 |
+| M len | 168 (`00 01 02 ... mod 256`) |
+| ct[:32] | `732973ac8c2fb9071bdb5892cfaefbc3a7565836528cc9f86b568b548c9a9f73` |
+| tag | `696bdcd1a42d3eacb5a499aa705869274e79732d652eac9877527bed23a89c86` |
+
+`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+
+#### 10.2.10 Large Nonce (32 Bytes)
+
+| Field | Value |
+|-------|-------|
+| K | 32 bytes `10 11 12 ... 2f` |
+| N | 32 bytes `e0 e1 e2 ... ff` |
+| AD | 20 21 22 |
+| M len | 48 (`00 01 02 ... mod 256`) |
+| ct‖tag | `1066ff2083d4da1e0efe6b42845a9bab31777a611e3691a9a26bf5125e6d6ffb92068f200418a5887e28bc72bd1859ae965e05b8e3bbab95af1aeb24c7b4842f0902a55ae8ab6bd41af30214060cc57f` |
+
+`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+
 ## Appendix A. Exact Per-Query $\sigma$ Formula
 
 For a single `TreeWrap128` query on a message of length $L$ bytes with
