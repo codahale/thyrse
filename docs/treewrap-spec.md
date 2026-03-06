@@ -1131,7 +1131,7 @@ proof-bound figure alone.
   in the non-normative note in Section 6.2.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
   2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap128.
-- RFC 9861: TurboSHAKE and KangarooTwelve.
+- RFC 9861: KangarooTwelve and TurboSHAKE.
 - Bertoni, G., Daemen, J., Hoffert, S., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B. "TurboSHAKE." IACR ePrint 2023/342.
   Primary specification and design rationale for TurboSHAKE.
 - Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B. "KangarooTwelve: fast hashing based on
