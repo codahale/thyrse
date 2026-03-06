@@ -41,11 +41,11 @@ func TestVectors(t *testing.T) {
 		seal := p.Seal("message", nil, []byte("hello, world!"))
 		derive := p.Derive("output", nil, 32)
 
-		if got, want := hex.EncodeToString(seal), "6575e3876b0219f2a686eebd749200a586f1d26f432fd783696adee5ad9a6d8371116c771fded52b0678ec2e0e"; got != want {
+		if got, want := hex.EncodeToString(seal), "9c756dac34249238b2d9b6e1e80ba8f52b5c3513efdb22a6c07203e01c803706fde799fc37632b2f4f80a72d7c"; got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
 
-		if got, want := hex.EncodeToString(derive), "d7347283ee4277967e116c944cf920c3207ac5ca0e4c8247150741f7b2a60de3"; got != want {
+		if got, want := hex.EncodeToString(derive), "d17ca0c8f55c16a27cde9a59fb914fd3662709205ef1f85c1a9d9c6f689b07a8"; got != want {
 			t.Errorf("Derive = %s, want = %s", got, want)
 		}
 	})
@@ -57,10 +57,10 @@ func TestVectors(t *testing.T) {
 		mask := p.Mask("unauthenticated", nil, []byte("mask this data"))
 		seal := p.Seal("authenticated", nil, []byte("seal this data"))
 
-		if got, want := hex.EncodeToString(mask), "053316f985c11ca6a7a17e47c730"; got != want {
+		if got, want := hex.EncodeToString(mask), "664cfab3c70616512190c570fb48"; got != want {
 			t.Errorf("Mask = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(seal), "1c3a40fd2005162e83f5705393168a7784f6994be455a6388bf1bb74754bc69fa3e359af58d2902ebb1187033864"; got != want {
+		if got, want := hex.EncodeToString(seal), "7cfa9d55e33a88c9a8c7981c1020b3b2d2425fe2aa09d9d705a779e6b729c4b018f366fd9502dcdbe67d7b53f37c"; got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
 	})
@@ -153,16 +153,16 @@ func TestVectors(t *testing.T) {
 		}
 		openDerive := pOpen.Derive("confirm", nil, 32)
 
-		if got, want := hex.EncodeToString(sealed), "1a129733635a1c74cb2ac0e333092d93a88ed061157931bf87ba74333f22b4c101e5d05dea339a9f1b8432f840"; got != want {
+		if got, want := hex.EncodeToString(sealed), "917765a7fc3bbc419ff0e7bd2421f046c271efa6821eaa85189bcf7fef03c573db06d232fba2a84532b9e2bdc6"; got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
 		if !bytes.Equal(opened, plaintext) {
 			t.Errorf("Open plaintext = %x, want = %x", opened, plaintext)
 		}
-		if got, want := hex.EncodeToString(sealDerive), "799fecc5f0b8caf37e8462a8f1e93bccf6c64cbd648701eb4a921ccd8056ed36"; got != want {
+		if got, want := hex.EncodeToString(sealDerive), "b5f396cae3922fabe9e95dc693d43495f934b1b7bcb5bdc0eb49e714632ec2b1"; got != want {
 			t.Errorf("Seal-side Derive = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(openDerive), "799fecc5f0b8caf37e8462a8f1e93bccf6c64cbd648701eb4a921ccd8056ed36"; got != want {
+		if got, want := hex.EncodeToString(openDerive), "b5f396cae3922fabe9e95dc693d43495f934b1b7bcb5bdc0eb49e714632ec2b1"; got != want {
 			t.Errorf("Open-side Derive = %s, want = %s", got, want)
 		}
 	})
@@ -180,7 +180,7 @@ func TestVectors(t *testing.T) {
 		sealed := pSeal.Seal("message", nil, plaintext)
 		sealDerive := pSeal.Derive("after", nil, 32)
 
-		if got, want := hex.EncodeToString(sealed), "1109d74f77b6c1042fc1d0a8808a545f5eab14badb21aa34a948bd2e4178f23959b4ac63f5f6ea144cd4a5da45"; got != want {
+		if got, want := hex.EncodeToString(sealed), "bd579d0b0b0c599249ff814060e84b5ac1cc4986a3e56475d8919fc8a79a5ad2c3cb9ec2720b96fa8ec040fb60"; got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
 
@@ -199,10 +199,10 @@ func TestVectors(t *testing.T) {
 		}
 		openDerive := pOpen.Derive("after", nil, 32)
 
-		if got, want := hex.EncodeToString(sealDerive), "cf2346cd8215390302f0ddf7bfbddce69db99b6200bf8d1ca5a51a69679f2a4f"; got != want {
+		if got, want := hex.EncodeToString(sealDerive), "4489d6b22d87f426e6d4736462ad503f294c5303dc0b9449fca7781c4b76503c"; got != want {
 			t.Errorf("Seal-side Derive = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(openDerive), "423fb570826f9aad65cef6d4d0e77ee0de7d5f7c400b0a894321687ee6804ab7"; got != want {
+		if got, want := hex.EncodeToString(openDerive), "51a7b45f0ab22bb91e9651eb64e1fcc3b4f6bcc4ee17d0b4787e98cd2fdc3178"; got != want {
 			t.Errorf("Open-side Derive (desynchronized) = %s, want = %s", got, want)
 		}
 	})
@@ -216,13 +216,13 @@ func TestVectors(t *testing.T) {
 		seal2 := p.Seal("msg", nil, []byte("second message"))
 		seal3 := p.Seal("msg", nil, []byte("third message"))
 
-		if got, want := hex.EncodeToString(seal1), "928886931c90fcf68b6d7193420acf444c3310164db95d790029971b077b1f82e2efa31fca13fda81fb95f3f8f"; got != want {
+		if got, want := hex.EncodeToString(seal1), "4d77468e708f5eb9b077df3c35539615cf87ca19dff98a98ca27af9c03fe313195d0bf1c28f5979c36cdde7c96"; got != want {
 			t.Errorf("Seal 1 = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(seal2), "ec0fdeed2b4cfd43aee710ee16cd2e6fd15395e46da7b520d6dd6760dbe309f04730bb922cd8c491b568d530f0be"; got != want {
+		if got, want := hex.EncodeToString(seal2), "e879742b2273d5570bf1bae372ddeb1490c901dc8f609531a688fcdbde454a4e72f7b05f1f19391f49af6fe7bc75"; got != want {
 			t.Errorf("Seal 2 = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(seal3), "c6ee6e5173a6a7c5e37d928b84bb2de985a8d1ea13d6b94bc4123a35f2074191977ff4f532cc00d450f1bade4e"; got != want {
+		if got, want := hex.EncodeToString(seal3), "8f37a83a96a53474b2fc7c7a103f44b8f25309ea4476412f3d2d20e25ab40c1cbcdc826839fcb075961ec2f482"; got != want {
 			t.Errorf("Seal 3 = %s, want = %s", got, want)
 		}
 	})

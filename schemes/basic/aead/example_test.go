@@ -27,6 +27,6 @@ func Example() {
 	fmt.Printf("plaintext  = %s\n", decrypted)
 
 	// Output:
-	// ciphertext = e0252311b4a94f4a41e349565dbe27c824a7a6dd2025bf1bb739778cb896347d3aad9370439faf210a2fa3
+	// ciphertext = b05213cf4ca8dd0c7009246a1fc0b35f37bfde2c60c5381289f574963b9b56e687ea93989f5b83dd63bead
 	// plaintext  = hello world
 }
