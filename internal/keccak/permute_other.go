@@ -2,6 +2,8 @@
 
 package keccak
 
+const AvailableLanes = 1
+
 func permute12x1Arch(_ *State1) bool { return false }
 
 func permute12x2Arch(_ *State2) bool { return false }

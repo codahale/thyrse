@@ -1,9 +1,5 @@
 package keccak
 
-// AvailableLanes is the preferred lane width for this CPU.
-// It is set by platform-specific init() functions.
-var AvailableLanes = 1
-
 func (s *State1) Permute12() {
 	if permute12x1Arch(s) {
 		return

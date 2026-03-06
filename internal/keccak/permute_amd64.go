@@ -41,10 +41,4 @@ func permute12x8Arch(s *State8) bool {
 	return true
 }
 
-func init() {
-	if hasAVX512 {
-		AvailableLanes = 8
-	} else {
-		AvailableLanes = 4
-	}
-}
+const AvailableLanes = 8

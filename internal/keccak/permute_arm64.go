@@ -34,6 +34,4 @@ func permute12x8Arch(s *State8) bool {
 	return true
 }
 
-func init() {
-	AvailableLanes = 4
-}
+const AvailableLanes = 4
