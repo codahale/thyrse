@@ -995,10 +995,12 @@ $\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), $\ell \approx 49$ m
 evaluation, and per-key accounting (single key / key epoch). Figures are conditional on the Section 6 model assumptions
 for Keccak-p[1600,12] and the selected offline-work profile.
 
-Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term is $2q^2\ell / 2^c$. Setting
-this to $\le 2^{-50}$ with $\ell = 49$ and $c = 256$ gives $q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}$, so
-$q \lesssim 2^{99.5}$ messages. At 1500 bytes/message the proof-bound volume is approximately $2^{80}$ GiB per key
-epoch. This is an analytical upper bound, not the practical deployment limit when random nonces are used.
+Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term is $2q^2\ell / 2^c$. For a
+conservative estimate, set $q$ to the number of TreeWrap128 encryptions and $\ell = 49$ (worst-case blocks absorbed per
+message, which overstates the per-evaluation input length and is therefore safe). With $c = 256$ and target
+$p = 2^{-50}$: $q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}$, so $q \lesssim 2^{99.5}$ messages. At 1500
+bytes/message the proof-bound volume is approximately $2^{80}$ GiB per key epoch. This is an analytical upper bound,
+not the practical deployment limit when random nonces are used.
 
 For deployment planning, use:
 
@@ -1064,7 +1066,7 @@ proof-bound figure alone.
   indifferentiability assumption (Theorem 1) and gives overwrite-mode security (Section 6.2, Algorithm 5, Theorem 2:
   Overwrite is as secure as Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are
   covered by the duplex security bound.
-- Mennink, B., Reyhanitabar, R., and Vizar, D. "Security of Full-State Keyed Sponge and Duplex: Beyond the Birthday
+- Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Beyond the Birthday
   Bound." Eurocrypt 2015. Primary security framework for TreeWrap128. Proves beyond-birthday-bound security for the
   keyed sponge/duplex in the ideal-permutation model (Theorem 1). Used throughout Section 6.
 - Dinur, I., Dunkelman, O., and Shamir, A. "Improved practical attacks on round-reduced Keccak." Journal of
