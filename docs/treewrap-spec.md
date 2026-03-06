@@ -911,7 +911,7 @@ Required baseline profile (MUST):
   epoch; random-nonce deployments SHOULD use a large nonce space (e.g., 192 or 256 bits).
 - For deterministic nonces, choose $q_{\mathrm{enc,cap}}$ so nonce values cannot wrap or repeat within the epoch.
 - If random nonces are used, additionally enforce
-  $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b+1} \le p_{\mathrm{nonce}}$ for nonce bit-length $b$ and chosen nonce-collision target
+  $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b_n+1} \le p_{\mathrm{nonce}}$ for nonce bit-length $b_n$ and chosen nonce-collision target
   $p_{\mathrm{nonce}}$.
 - Define and enforce a failed-verification budget $S_{\mathrm{cap}}$ per key epoch (RECOMMENDED: $S_{\mathrm{cap}} = 2^{32}$).
   If $S > S_{\mathrm{cap}}$, implementations MUST stop accepting further decryption attempts for that epoch and rotate to
