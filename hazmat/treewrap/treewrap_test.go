@@ -6,7 +6,9 @@ import (
 	"crypto/cipher"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/codahale/thyrse/internal/keccak"
@@ -193,38 +195,74 @@ func TestDecryptAndMAC(t *testing.T) {
 	})
 }
 
-func TestEncryptAndMAC(t *testing.T) {
-	key := testKey()
-
-	// Test vectors generated from the reference x1 implementation.
-	// Each entry records the first min(32, len) bytes of ciphertext (hex) and the full tag (hex).
-	tests := []struct {
-		name    string
-		ptSize  int
-		wantCT  string
-		wantTag string
-	}{
-		{"empty", 0, "", "75c535a63e00491b6a63871da0e3c430bb42688ceb8ba05543e96386d55564b4"},
-		{"1 byte", 1, "fe", "a4fd753dd0787e772b08db6f1c9b0a6cc4864ed390784d5d65f037a4f708346c"},
-		{"one chunk", ChunkSize, "fe0aebeee41a66a6e3284247150dad651507b60cde3a23448df00abe9b47f029", "d44d8a31f0c566c370dbd49d45de196265a809d68ee3cb54e1df3db8b42ba81a"},
-		{"one chunk plus one", ChunkSize + 1, "fe0aebeee41a66a6e3284247150dad651507b60cde3a23448df00abe9b47f029", "3f0314010ba842961c0f300702bf3b5eac18dba67ba4214654c7e2db72e0c30b"},
-		{"four chunks", 4 * ChunkSize, "fe0aebeee41a66a6e3284247150dad651507b60cde3a23448df00abe9b47f029", "1018618a8e8f25e39f347db71f01e582803e802dce9afaef70f90be32d8b497c"},
+func loadTestVectors(t *testing.T) testVectorFile {
+	t.Helper()
+	data, err := os.ReadFile("../../docs/treewrap-test-vectors.json")
+	if err != nil {
+		t.Fatal(err)
 	}
+	var f testVectorFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pt := make([]byte, tt.ptSize)
+type testVectorFile struct {
+	Bare struct {
+		KeyHex  string       `json:"key_hex"`
+		Vectors []bareVector `json:"vectors"`
+	} `json:"bare"`
+}
+
+type bareVector struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Message struct {
+		Mode string `json:"mode"`
+		Len  int    `json:"len"`
+	} `json:"message"`
+	Expected struct {
+		TagHex          string `json:"tag_hex"`
+		CtHex           string `json:"ct_hex"`
+		CtPrefix32Hex   string `json:"ct_prefix32_hex"`
+		FlipTagHex      string `json:"flip_tag_hex"`
+		SwapTagHex      string `json:"swap_tag_hex"`
+	} `json:"expected"`
+}
+
+func TestEncryptAndMAC(t *testing.T) {
+	vf := loadTestVectors(t)
+	keyBytes, err := hex.DecodeString(vf.Bare.KeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := (*[KeySize]byte)(keyBytes)
+
+	for _, vec := range vf.Bare.Vectors {
+		t.Run(vec.ID+"_"+vec.Title, func(t *testing.T) {
+			pt := make([]byte, vec.Message.Len)
 			for j := range pt {
-				pt[j] = byte(j)
+				pt[j] = byte(j % 256)
 			}
 			ct, tag := EncryptAndMAC(nil, key, pt)
 
-			prefix := min(32, len(ct))
-			if ctHex := hex.EncodeToString(ct[:prefix]); ctHex != tt.wantCT {
-				t.Errorf("ct prefix = %s, want %s", ctHex, tt.wantCT)
+			// Check tag.
+			if tagHex := hex.EncodeToString(tag[:]); tagHex != vec.Expected.TagHex {
+				t.Errorf("tag = %s, want %s", tagHex, vec.Expected.TagHex)
 			}
-			if tagHex := hex.EncodeToString(tag[:]); tagHex != tt.wantTag {
-				t.Errorf("tag = %s, want %s", tagHex, tt.wantTag)
+
+			// Check ciphertext (full or prefix depending on what the vector provides).
+			if vec.Expected.CtHex != "" || vec.Message.Len == 0 {
+				if ctHex := hex.EncodeToString(ct); ctHex != vec.Expected.CtHex {
+					t.Errorf("ct = %s, want %s", ctHex, vec.Expected.CtHex)
+				}
+			}
+			if vec.Expected.CtPrefix32Hex != "" {
+				prefix := min(32, len(ct))
+				if ctHex := hex.EncodeToString(ct[:prefix]); ctHex != vec.Expected.CtPrefix32Hex {
+					t.Errorf("ct prefix = %s, want %s", ctHex, vec.Expected.CtPrefix32Hex)
+				}
 			}
 		})
 	}
