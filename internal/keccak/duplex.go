@@ -193,6 +193,55 @@ func (d *Duplex) PadPermute(ds byte) {
 	d.pos = 0
 }
 
+// Chain clones a into b, applies pad10*1 padding with dsA on a and dsB on b,
+// permutes both in parallel via State2, and leaves both at pos=0 ready to
+// squeeze.
+func (a *Duplex) Chain(b *Duplex, dsA, dsB byte) {
+	*b = *a
+	var s2 State2
+	for i := range Lanes {
+		s2.a[i] = [2]uint64{a.s.a[i], b.s.a[i]}
+	}
+	xorByteInWord(&s2.a[a.pos>>3][0], a.pos, dsA)
+	xorByteInWord(&s2.a[a.pos>>3][1], a.pos, dsB)
+	endLane := (Rate - 1) >> 3
+	xorByteInWord(&s2.a[endLane][0], Rate-1, 0x80)
+	xorByteInWord(&s2.a[endLane][1], Rate-1, 0x80)
+	s2.Permute12()
+	for i := range Lanes {
+		a.s.a[i] = s2.a[i][0]
+		b.s.a[i] = s2.a[i][1]
+	}
+	a.pos = 0
+	b.pos = 0
+}
+
+// Equal returns 1 if d and other represent identical states, 0 otherwise.
+// The comparison is constant-time with respect to the keccak state.
+func (d *Duplex) Equal(other *Duplex) int {
+	var acc uint64
+	for i := range Lanes {
+		acc |= d.s.a[i] ^ other.s.a[i]
+	}
+	acc |= acc >> 32
+	acc |= acc >> 16
+	acc |= acc >> 8
+	acc |= acc >> 4
+	acc |= acc >> 2
+	acc |= acc >> 1
+	lanesEq := int(1 - (acc & 1))
+
+	posAcc := d.pos ^ other.pos
+	posAcc |= posAcc >> 16
+	posAcc |= posAcc >> 8
+	posAcc |= posAcc >> 4
+	posAcc |= posAcc >> 2
+	posAcc |= posAcc >> 1
+	posEq := int(1 - (posAcc & 1))
+
+	return lanesEq & posEq
+}
+
 // Squeeze extracts bytes from the sponge state into dst, permuting at rate
 // boundaries for multi-block output.
 func (d *Duplex) Squeeze(dst []byte) {

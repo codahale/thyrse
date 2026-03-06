@@ -250,6 +250,40 @@ func TestDuplexAbsorbCV(t *testing.T) {
 	}
 }
 
+func TestDuplexChain(t *testing.T) {
+	var a Duplex
+	a.Absorb([]byte("hello"))
+
+	var b Duplex
+	a.Chain(&b, 0x20, 0x21)
+
+	if a.pos != 0 || b.pos != 0 {
+		t.Fatalf("pos after Chain: a=%d b=%d", a.pos, b.pos)
+	}
+
+	outA := make([]byte, 32)
+	outB := make([]byte, 32)
+	a.Squeeze(outA)
+	b.Squeeze(outB)
+	if string(outA) == string(outB) {
+		t.Fatal("Chain with different ds produced same output")
+	}
+}
+
+func TestDuplexEqual(t *testing.T) {
+	var a, b Duplex
+	a.Absorb([]byte("same"))
+	b.Absorb([]byte("same"))
+	if a.Equal(&b) != 1 {
+		t.Fatal("equal duplexes reported unequal")
+	}
+
+	b.Absorb([]byte("x"))
+	if a.Equal(&b) != 0 {
+		t.Fatal("different duplexes reported equal")
+	}
+}
+
 func TestPermuteVectorsState8(t *testing.T) {
 	vectors := loadVectors(t)
 	for i, tc := range vectors.Permute8 {
