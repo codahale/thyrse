@@ -314,7 +314,7 @@ permutation at the claimed workloads. This is a modeling assumption, not a proof
 > collision-style results are publicly known through 5 rounds in standard Keccak instances, with 6-round collision
 > solutions publicly reported for reduced-round contest instances, and structural distinguishers are known at higher
 > round counts in the raw-permutation setting (including 8-round distinguishers and 16-round zero-sum distinguishers).
-> (See the Keccak Team third-party table and reduced-round references in Section 8.)
+> (See the Keccak Team third-party table and reduced-round references in Section 9.)
 >
 > These results do not directly invalidate the TreeWrap128 heuristic because TreeWrap128 uses a keyed sponge/duplex setting
 > with 256-bit capacity, strict domain separation, and workload limits; nevertheless, future cryptanalysis could change
@@ -584,9 +584,10 @@ Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 
 **Lemma 1 (Keyed-sponge pseudorandomness).**
 For any keyed sponge initialized with `K_tw || LEU64(i)` (where $K_{tw}$ is a uniformly random secret key and $i$ is a
-public index), in the ideal-permutation model, the rate outputs (keystream bytes and terminal squeeze bytes) are
-pseudorandom. This holds for both overwrite-mode absorption (used by leaves) and standard XOR-mode absorption (used by
-TurboSHAKE128, including the final node).
+public index), in the ideal-permutation model, the PRF advantage distinguishing the rate outputs (keystream bytes and
+terminal squeeze bytes) from uniformly random is at most $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$ is the
+number of input blocks for leaf $i$ and $t$ is the number of output blocks. This holds for both overwrite-mode absorption
+(used by leaves) and standard XOR-mode absorption (used by TurboSHAKE128, including the final node).
 
 *Proof.* Each leaf is a keyed sponge with uniformly random key $K_{tw}$ (from $\mathsf{G}_1$). By the Domain Separation
 Lemma (Section 6.3), under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the leaf's $\pi$-calls are disjoint from all other
@@ -957,7 +958,7 @@ by the TurboSHAKE128-based KDF to derive a unique internal key, not passed to th
 necessarily pseudorandom. TreeWrap128's tag is a full PRF: under a random key, the tag is indistinguishable from a random
 string (Section 6.1). This stronger property is useful for protocols that derive further keying material from the tag.
 
-### 8.1. Operational Safety Limits
+### 8.1 Operational Safety Limits
 
 Operational planning assumptions used in this section: $p = 2^{-50}$, 1500-byte messages, TreeWrap128 cost
 $\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), $\ell \approx 49$ max input blocks per keyed-sponge
