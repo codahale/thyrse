@@ -730,7 +730,7 @@ value — a 512-bit pseudorandom string with no algebraic structure exploitable 
 An adversary targeting pre-ratchet key material must do so before the ratchet occurs. If a session
 ratchets every $W$ finalizing operations, the adversary must target a specific epoch rather than the full
 session lifetime. Ratcheting does not improve the initial key recovery bound, but it ensures that
-compromising any single epoch does not compromise the full session (forward secrecy, §13.2). For
+compromising any single epoch does not compromise the full session (forward secrecy, §13.6). For
 long-lived sessions, periodic ratcheting every few hundred operations is recommended.
 
 ## 14. Typical Usage: AEAD
