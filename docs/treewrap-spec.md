@@ -533,9 +533,10 @@ hop replaces only the KDF; all oracles and winning conditions are otherwise iden
    $q_{\mathrm{ctx}}$ is the number of distinct contexts, $\ell_{\mathrm{kdf}}$ is the maximum number of input blocks
    per KDF call, and $\mu_{\mathrm{kdf}}$ is the total KDF input blocks.
 
-3. **PRF-to-RF switching.** A PRF with $q_{\mathrm{ctx}}$ queries on distinct inputs is indistinguishable from a lazy
-   random function up to the birthday bound on output collisions:
-   $\varepsilon_{\mathrm{ctx\text{-}coll}} \le q_{\mathrm{ctx}}^2 / 2^{8C+1}$.
+3. **PRF-to-RF switching.** By the standard PRF-RF switching lemma, a PRF with $q_{\mathrm{ctx}}$ queries is
+   indistinguishable from a lazy random function with advantage at most
+   $\varepsilon_{\mathrm{ctx\text{-}coll}} \le q_{\mathrm{ctx}}^2 / 2^{8C+1}$
+   (the collision probability among $q_{\mathrm{ctx}}$ uniform $8C$-bit outputs).
 
 **Bound:**
 
