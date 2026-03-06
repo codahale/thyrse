@@ -21,6 +21,8 @@ jobs:
         fuzz:
           - { target: FuzzProtocolDivergence, package: . }
           - { target: FuzzProtocolReversibility, package: . }
+          - { target: FuzzFastLoopEncrypt168, package: ./internal/keccak }
+          - { target: FuzzFastLoopDecrypt168, package: ./internal/keccak }
 
     steps:
     - name: Checkout

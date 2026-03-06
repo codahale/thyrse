@@ -246,25 +246,31 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 		stride := n
 		pt := make([]byte, 2*stride)
 		rand.Read(pt)
-		seed := make([]byte, 200)
-		rand.Read(seed)
+
+		// Distinct seed per instance to detect state pointer corruption.
+		var seeds [2][]byte
+		for inst := range 2 {
+			seeds[inst] = make([]byte, 200)
+			rand.Read(seeds[inst])
+		}
 
 		// Run x1 generic on each instance independently.
-		var sGen0, sGen1 State1
-		seedState1(&sGen0, seed)
-		seedState1(&sGen1, seed)
+		var sGen [2]State1
 		ctGen := make([]byte, 2*stride)
-		genericEncrypt1(&sGen0, pt[:stride], ctGen[:stride])
-		genericEncrypt1(&sGen1, pt[stride:], ctGen[stride:])
+		for inst := range 2 {
+			seedState1(&sGen[inst], seeds[inst])
+			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride])
+		}
 
 		// Run x2 assembly.
 		var sAsm State2
 		for i := range 25 {
-			off := i * 8
-			v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
-				uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
-			sAsm.a[i][0] = v
-			sAsm.a[i][1] = v
+			for j := range 2 {
+				off := i * 8
+				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
+					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
+				sAsm.a[i][j] = v
+			}
 		}
 		ctAsm := make([]byte, 2*stride)
 		sAsm.FastLoopEncrypt168(pt, ctAsm, stride)
@@ -278,11 +284,10 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 			}
 		}
 		for i := range 25 {
-			if sAsm.a[i][0] != sGen0.a[i] {
-				t.Fatalf("state lane %d inst 0: gen=%016x asm=%016x", i, sGen0.a[i], sAsm.a[i][0])
-			}
-			if sAsm.a[i][1] != sGen1.a[i] {
-				t.Fatalf("state lane %d inst 1: gen=%016x asm=%016x", i, sGen1.a[i], sAsm.a[i][1])
+			for j := range 2 {
+				if sAsm.a[i][j] != sGen[j].a[i] {
+					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.a[i][j])
+				}
 			}
 		}
 	})
@@ -291,24 +296,29 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 		stride := n
 		pt := make([]byte, 4*stride)
 		rand.Read(pt)
-		seed := make([]byte, 200)
-		rand.Read(seed)
+
+		// Distinct seed per instance to detect state pointer corruption.
+		var seeds [4][]byte
+		for inst := range 4 {
+			seeds[inst] = make([]byte, 200)
+			rand.Read(seeds[inst])
+		}
 
 		// Run x1 generic on each instance.
 		var sGen [4]State1
 		ctGen := make([]byte, 4*stride)
 		for inst := range 4 {
-			seedState1(&sGen[inst], seed)
+			seedState1(&sGen[inst], seeds[inst])
 			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride])
 		}
 
 		// Run x4 assembly.
 		var sAsm State4
 		for i := range 25 {
-			off := i * 8
-			v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
-				uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
 			for j := range 4 {
+				off := i * 8
+				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
+					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
 				sAsm.a[i][j] = v
 			}
 		}
@@ -336,22 +346,27 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 		stride := n
 		pt := make([]byte, 8*stride)
 		rand.Read(pt)
-		seed := make([]byte, 200)
-		rand.Read(seed)
+
+		// Distinct seed per instance to detect state pointer corruption.
+		var seeds [8][]byte
+		for inst := range 8 {
+			seeds[inst] = make([]byte, 200)
+			rand.Read(seeds[inst])
+		}
 
 		var sGen [8]State1
 		ctGen := make([]byte, 8*stride)
 		for inst := range 8 {
-			seedState1(&sGen[inst], seed)
+			seedState1(&sGen[inst], seeds[inst])
 			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride])
 		}
 
 		var sAsm State8
 		for i := range 25 {
-			off := i * 8
-			v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
-				uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
 			for j := range 8 {
+				off := i * 8
+				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
+					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
 				sAsm.a[i][j] = v
 			}
 		}
@@ -410,23 +425,29 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 		stride := n
 		ct := make([]byte, 2*stride)
 		rand.Read(ct)
-		seed := make([]byte, 200)
-		rand.Read(seed)
 
-		var sGen0, sGen1 State1
-		seedState1(&sGen0, seed)
-		seedState1(&sGen1, seed)
+		// Distinct seed per instance to detect state pointer corruption.
+		var seeds [2][]byte
+		for inst := range 2 {
+			seeds[inst] = make([]byte, 200)
+			rand.Read(seeds[inst])
+		}
+
+		var sGen [2]State1
 		ptGen := make([]byte, 2*stride)
-		genericDecrypt1(&sGen0, ct[:stride], ptGen[:stride])
-		genericDecrypt1(&sGen1, ct[stride:], ptGen[stride:])
+		for inst := range 2 {
+			seedState1(&sGen[inst], seeds[inst])
+			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride])
+		}
 
 		var sAsm State2
 		for i := range 25 {
-			off := i * 8
-			v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
-				uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
-			sAsm.a[i][0] = v
-			sAsm.a[i][1] = v
+			for j := range 2 {
+				off := i * 8
+				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
+					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
+				sAsm.a[i][j] = v
+			}
 		}
 		ptAsm := make([]byte, 2*stride)
 		sAsm.FastLoopDecrypt168(ct, ptAsm, stride)
@@ -440,11 +461,10 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 			}
 		}
 		for i := range 25 {
-			if sAsm.a[i][0] != sGen0.a[i] {
-				t.Fatalf("state lane %d inst 0: gen=%016x asm=%016x", i, sGen0.a[i], sAsm.a[i][0])
-			}
-			if sAsm.a[i][1] != sGen1.a[i] {
-				t.Fatalf("state lane %d inst 1: gen=%016x asm=%016x", i, sGen1.a[i], sAsm.a[i][1])
+			for j := range 2 {
+				if sAsm.a[i][j] != sGen[j].a[i] {
+					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.a[i][j])
+				}
 			}
 		}
 	})
@@ -453,22 +473,27 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 		stride := n
 		ct := make([]byte, 4*stride)
 		rand.Read(ct)
-		seed := make([]byte, 200)
-		rand.Read(seed)
+
+		// Distinct seed per instance to detect state pointer corruption.
+		var seeds [4][]byte
+		for inst := range 4 {
+			seeds[inst] = make([]byte, 200)
+			rand.Read(seeds[inst])
+		}
 
 		var sGen [4]State1
 		ptGen := make([]byte, 4*stride)
 		for inst := range 4 {
-			seedState1(&sGen[inst], seed)
+			seedState1(&sGen[inst], seeds[inst])
 			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride])
 		}
 
 		var sAsm State4
 		for i := range 25 {
-			off := i * 8
-			v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
-				uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
 			for j := range 4 {
+				off := i * 8
+				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
+					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
 				sAsm.a[i][j] = v
 			}
 		}
@@ -496,22 +521,27 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 		stride := n
 		ct := make([]byte, 8*stride)
 		rand.Read(ct)
-		seed := make([]byte, 200)
-		rand.Read(seed)
+
+		// Distinct seed per instance to detect state pointer corruption.
+		var seeds [8][]byte
+		for inst := range 8 {
+			seeds[inst] = make([]byte, 200)
+			rand.Read(seeds[inst])
+		}
 
 		var sGen [8]State1
 		ptGen := make([]byte, 8*stride)
 		for inst := range 8 {
-			seedState1(&sGen[inst], seed)
+			seedState1(&sGen[inst], seeds[inst])
 			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride])
 		}
 
 		var sAsm State8
 		for i := range 25 {
-			off := i * 8
-			v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
-				uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
 			for j := range 8 {
+				off := i * 8
+				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
+					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
 				sAsm.a[i][j] = v
 			}
 		}
