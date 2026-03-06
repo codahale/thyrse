@@ -559,11 +559,11 @@ $$
 where $\mathrm{Adv}_{\Pi}^{\mathrm{bare}}$ is the advantage against the internal functions under independent uniformly
 random keys.
 
-### 6.3 Leaf Security Lemmas
+### 6.5 Leaf Security Lemmas
 
-> **Conditioning scope.** All analyses in Sections 6.3–6.8 work in $\mathsf{G}_1$ conditioned on
-> $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. The costs of these events ($\varepsilon_{\mathrm{indiff}}$
-> and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge theorem (Section 6.2) and do not recur in
+> **Conditioning scope.** All analyses in Sections 6.5–6.10 work in $\mathsf{G}_1$ conditioned on
+> $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. The costs of these events ($\varepsilon_{\mathrm{cap}}$
+> and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge theorem (Section 6.4) and do not recur in
 > subsequent sections.
 
 Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
@@ -571,20 +571,14 @@ Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
 **Lemma 1 (Keyed-sponge pseudorandomness).**
 For any keyed sponge initialized with `K_tw || LEU64(i)` (where $K_{tw}$ is a uniformly random secret key and $i$ is a
 public index), in the ideal-permutation model, the rate outputs (keystream bytes and terminal squeeze bytes) are
-pseudorandom up to $\varepsilon_{\mathrm{indiff}}$. This holds for both overwrite-mode absorption (used by leaves) and
-standard XOR-mode absorption (used by TurboSHAKE128, including the final node).
+pseudorandom. This holds for both overwrite-mode absorption (used by leaves) and standard XOR-mode absorption (used by
+TurboSHAKE128, including the final node).
 
-*Proof.* Mennink-Reyhanitabar-Vizar (MRV15, Eurocrypt 2015, Theorem 1) directly establish keyed-duplex
-pseudorandomness in the ideal-permutation model: for a keyed sponge initialized with a uniformly random key, the rate
-outputs are indistinguishable from random with advantage at most $(\sigma + t)^2 / 2^{c+1}$. This single result covers
-our setting exactly — a keyed sponge initialized with a uniformly random $K_{tw}$ operating in the ideal-permutation
-model.
-
-The MRV15 result is stated for XOR-absorb mode. Overwrite-mode leaves use the encrypt operation
-$S[j] \leftarrow \mathit{pt}[j] \oplus S[j] = \mathit{ct}[j]$, which is algebraically identical to XOR-absorbing the
-plaintext (the resulting state byte $\mathit{ct}[j]$ is the same in both modes). MRV15 therefore applies directly to
-overwrite-mode leaves without requiring a separate reduction. (BDPVA11, Theorem 2, independently confirms that
-overwrite mode achieves the same indifferentiability bound.)
+*Proof.* Each leaf is a keyed sponge with uniformly random key $K_{tw}$ (from $\mathsf{G}_1$). By the Domain Separation
+Lemma (Section 6.3), under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the leaf's $\pi$-calls are disjoint from all other
+roles. Applying the MRV15 framework (Section 6.2) — including the key-loading equivalence and overwrite-mode coverage
+established there — the PRF advantage for leaf $i$ is at most $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$
+is the number of input blocks for leaf $i$.
 
 **Lemma 2 (State-direction equivalence).**
 For fixed $(K_{tw}, i)$ and any plaintext-ciphertext pair of equal length, `encrypt` and `decrypt` induce identical
@@ -606,20 +600,12 @@ per-leaf outputs) is also a bijection between equal-length plaintexts and cipher
 Chunking is determined solely by total message length (ceiling division by $B$), so equal-length messages always have
 identical chunking.
 
-This bijection is used in Section 6.8 (CMT-4) to rule out two different plaintexts opening the same ciphertext under
+This bijection is used in Section 6.10 (CMT-4) to rule out two different plaintexts opening the same ciphertext under
 one key.
 
 **Consequence.**
 By Lemma 3 (fixed-key bijection), distinct plaintexts produce distinct ciphertexts under a fixed key, so the tag can be
-viewed equivalently as a function of plaintext or ciphertext. Tag pseudorandomness is established separately in Section 6.4.
-
-> **Remark** (ideal permutation sampling). In the ideal permutation model, outputs are sampled without replacement
-> (permutation, not function). This introduces a negligible PRP/PRF distinction (standard PRP/PRF switching lemma):
-> after $k$ queries, the next output is uniform over $2^{1600} - k$ values rather than $2^{1600}$, giving a statistical
-> distance of at most $\sigma^2 / 2^{1601}$ from truly independent uniform outputs. This term is asymptotically
-> swallowed by $\varepsilon_{\mathrm{indiff}} = (\sigma+t)^2/2^{c+1}$ (since $c = 256 \ll 1600$). Wherever the
-> analysis claims "uniform" or "independent" outputs from the ideal permutation on distinct inputs, the PRP/PRF
-> switching cost is implicitly absorbed into the dominant $\varepsilon_{\mathrm{indiff}}$ term.
+viewed equivalently as a function of plaintext or ciphertext. Tag pseudorandomness is established separately in Section 6.6.
 
 ### 6.4 Tag Security
 
