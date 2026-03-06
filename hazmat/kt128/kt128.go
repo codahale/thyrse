@@ -8,6 +8,7 @@ package kt128
 import (
 	"slices"
 
+	"github.com/codahale/thyrse/internal/encoding"
 	"github.com/codahale/thyrse/internal/keccak"
 )
 
@@ -20,12 +21,14 @@ const (
 
 // Hasher is an incremental KT128 instance that implements hash.Hash and io.Reader.
 type Hasher struct {
-	suffix    []byte               // C || lengthEncode(|C|), precomputed at construction, immutable
-	buf       []byte               // buffered message/leaf data
-	ts        keccak.TurboSHAKE128 // final-node TurboSHAKE128 state
-	leafCount int                  // total leaf CVs written to ts so far
-	treeMode  bool                 // true once S_0 has been flushed to ts
-	finalized bool                 // true once finalize has completed
+	suffix    []byte        // C || lengthEncode(|C|), precomputed at construction, immutable
+	buf       []byte        // buffered message/leaf data
+	ts        keccak.Duplex // final-node duplex sponge state
+	leafCount int           // total leaf CVs written to ts so far
+	ds        byte          // domain separator for finalization (0x07 single-node, 0x06 tree-mode)
+	treeMode  bool          // true once S_0 has been flushed to ts
+	finalized bool          // true once finalize has completed
+	squeezed  bool          // true once PadPermute has been called
 }
 
 // emptySuffix is the suffix for empty customization: lengthEncode(0) = [0x00].
@@ -40,7 +43,7 @@ func New() *Hasher {
 func NewCustom(c []byte) *Hasher {
 	suffix := make([]byte, 0, len(c)+9)
 	suffix = append(suffix, c...)
-	suffix = append(suffix, lengthEncode(uint64(len(c)))...)
+	suffix = append(suffix, encoding.LengthEncode(uint64(len(c)))...)
 	return &Hasher{suffix: suffix}
 }
 
@@ -60,9 +63,10 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		// Enter tree mode: flush S_0 from buf + start of p.
 		h.buf = append(h.buf, p[:need]...)
 		p = p[need:]
-		h.ts.Reset(0x06)
-		_, _ = h.ts.Write(h.buf[:BlockSize])
-		_, _ = h.ts.Write(kt12Marker[:])
+		h.ts.Reset()
+		h.ds = 0x06
+		h.ts.Absorb(h.buf[:BlockSize])
+		h.ts.Absorb(kt12Marker[:])
 		// Keep the one overflow byte.
 		h.buf[0] = h.buf[BlockSize]
 		h.buf = h.buf[:1]
@@ -132,28 +136,28 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 	for idx+8 <= nLeaves {
 		off := idx * BlockSize
 		leafStateX8(data[off:off+8*BlockSize], &s8)
-		h.ts.WriteCVx8(&s8)
+		h.ts.AbsorbCVx8(&s8)
 		idx += 8
 	}
 
 	for idx+4 <= nLeaves {
 		off := idx * BlockSize
 		leafStateX4(data[off:off+4*BlockSize], &s4)
-		h.ts.WriteCVx4(&s4)
+		h.ts.AbsorbCVx4(&s4)
 		idx += 4
 	}
 
 	for idx+2 <= nLeaves {
 		off := idx * BlockSize
 		leafStateX2(data[off:off+2*BlockSize], &s2)
-		h.ts.WriteCVx2(&s2)
+		h.ts.AbsorbCVx2(&s2)
 		idx += 2
 	}
 
 	for idx < nLeaves {
 		off := idx * BlockSize
 		leafStateX1(data[off:off+BlockSize], &s1)
-		h.ts.WriteCV(&s1)
+		h.ts.AbsorbCV(&s1)
 		idx++
 	}
 
@@ -163,7 +167,12 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 // Read squeezes output from the XOF. On the first call, it finalizes absorption.
 func (h *Hasher) Read(p []byte) (int, error) {
 	h.finalize()
-	return h.ts.Read(p)
+	if !h.squeezed {
+		h.ts.PadPermute(h.ds)
+		h.squeezed = true
+	}
+	h.ts.Squeeze(p)
+	return len(p), nil
 }
 
 // Sum appends the current 32-byte hash to b without changing the underlying state.
@@ -173,13 +182,15 @@ func (h *Hasher) Sum(b []byte) []byte {
 		buf:       slices.Clone(h.buf),
 		ts:        h.ts,
 		leafCount: h.leafCount,
+		ds:        h.ds,
 		treeMode:  h.treeMode,
 		finalized: h.finalized,
+		squeezed:  h.squeezed,
 	}
 	clone.finalize()
 
 	out := make([]byte, 32)
-	_, _ = clone.ts.Read(out)
+	_, _ = clone.Read(out)
 	return append(b, out...)
 }
 
@@ -190,18 +201,22 @@ func (h *Hasher) Clone() *Hasher {
 		buf:       slices.Clone(h.buf),
 		ts:        h.ts,
 		leafCount: h.leafCount,
+		ds:        h.ds,
 		treeMode:  h.treeMode,
 		finalized: h.finalized,
+		squeezed:  h.squeezed,
 	}
 }
 
 // Reset resets the Hasher to its initial state, retaining the customization string.
 func (h *Hasher) Reset() {
 	h.buf = h.buf[:0]
-	h.ts.Reset(0)
+	h.ts.Reset()
+	h.ds = 0
 	h.leafCount = 0
 	h.treeMode = false
 	h.finalized = false
+	h.squeezed = false
 }
 
 // Size returns the default output size in bytes.
@@ -223,15 +238,17 @@ func (h *Hasher) finalize() {
 	if !h.treeMode {
 		if len(h.buf) <= BlockSize {
 			// Single-node: TurboSHAKE128(S, 0x07, L).
-			h.ts.Reset(0x07)
-			_, _ = h.ts.Write(h.buf)
+			h.ts.Reset()
+			h.ds = 0x07
+			h.ts.Absorb(h.buf)
 			return
 		}
 
 		// Enter tree mode: flush S_0.
-		h.ts.Reset(0x06)
-		_, _ = h.ts.Write(h.buf[:BlockSize])
-		_, _ = h.ts.Write(kt12Marker[:])
+		h.ts.Reset()
+		h.ds = 0x06
+		h.ts.Absorb(h.buf[:BlockSize])
+		h.ts.Absorb(kt12Marker[:])
 		remaining := copy(h.buf, h.buf[BlockSize:])
 		h.buf = h.buf[:remaining]
 		h.treeMode = true
@@ -250,40 +267,18 @@ func (h *Hasher) finalize() {
 			var s1 keccak.State1
 			off := fullLeaves * BlockSize
 			leafStateX1(h.buf[off:], &s1)
-			h.ts.WriteCV(&s1)
+			h.ts.AbsorbCV(&s1)
 			h.leafCount++
 		}
 	}
 
 	// Terminator: lengthEncode(leafCount) || 0xFF || 0xFF.
-	_, _ = h.ts.Write(lengthEncode(uint64(h.leafCount)))
-	_, _ = h.ts.Write([]byte{0xFF, 0xFF})
+	h.ts.Absorb(encoding.LengthEncode(uint64(h.leafCount)))
+	h.ts.Absorb([]byte{0xFF, 0xFF})
 }
 
 // kt12Marker is the 8-byte KangarooTwelve marker written after S_0.
 var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-
-// lengthEncode encodes x as in KangarooTwelve: big-endian with no leading zeros,
-// followed by a byte giving the length of the encoding.
-func lengthEncode(x uint64) []byte {
-	if x == 0 {
-		return []byte{0x00}
-	}
-
-	n := 0
-	for v := x; v > 0; v >>= 8 {
-		n++
-	}
-
-	buf := make([]byte, n+1)
-	for i := n - 1; i >= 0; i-- {
-		buf[i] = byte(x)
-		x >>= 8
-	}
-	buf[n] = byte(n)
-
-	return buf
-}
 
 // leafStateX1 computes a single leaf state for TurboSHAKE128(data, 0x0B, 32).
 func leafStateX1(data []byte, s *keccak.State1) {
