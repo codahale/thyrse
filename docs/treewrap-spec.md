@@ -304,7 +304,8 @@ Keccak-p[1600,12]. The argument has two layers:
 
 All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $c = 256$ bits and $\tau = 32$ tag
 bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
-adversary.
+adversary. Related-key security is also out of scope: all claims assume the master key $K$ is uniformly random and
+independent of any other keys in the system.
 
 > [!CAUTION]
 > **Nonce reuse is catastrophic.** Reusing the same $(K, N, AD)$ triple with different equal-length
