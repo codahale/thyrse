@@ -124,6 +124,28 @@ func stateNFromHex[T ~int](t *testing.T, in []string, width T) [][]byte {
 	return out
 }
 
+func TestDuplexSpongeVectors(t *testing.T) {
+	vectors := loadVectors(t)
+	for i, tc := range vectors.Sponge {
+		if tc.Rate != Rate {
+			continue
+		}
+		msg := mustHex(t, tc.Msg)
+		want := mustHex(t, tc.Out)
+
+		var d Duplex
+		d.Absorb(msg)
+		d.PadPermute(tc.DS)
+
+		got := make([]byte, tc.OutLen)
+		d.Squeeze(got)
+		if string(got) != string(want) {
+			t.Fatalf("sponge[%d] mismatch: msg_len=%d ds=0x%02x out_len=%d",
+				i, len(msg), tc.DS, tc.OutLen)
+		}
+	}
+}
+
 func TestPermuteVectorsState1(t *testing.T) {
 	vectors := loadVectors(t)
 	for i, tc := range vectors.Permute1 {
