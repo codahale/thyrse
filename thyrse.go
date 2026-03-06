@@ -375,7 +375,7 @@ func (p *Protocol) Clear() {
 func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
 
-	oh := p.h
+	var oh keccak.TurboSHAKE128
 	if outputDS == dsRatchet {
 		p.h.Chain(&oh, dsRatchet)
 		_, _ = oh.Read(cv[:])
