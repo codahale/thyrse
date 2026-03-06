@@ -120,6 +120,61 @@ func (s *State1) ExtractBytes(dst []byte) {
 	}
 }
 
+// XORBytesAt XOR-absorbs data into the state starting at byte position pos.
+// It does not apply padding or permute; the caller manages rate boundaries.
+func (s *State1) XORBytesAt(pos int, data []byte) {
+	lane := pos >> 3
+	off := pos & 7
+
+	if off != 0 {
+		n := min(8-off, len(data))
+		shift := uint(off) << 3
+		s.a[lane] ^= loadPartialLE(data[:n]) << shift
+		data = data[n:]
+		lane++
+	}
+
+	full := len(data) >> 3
+	for i := range full {
+		base := i << 3
+		s.a[lane+i] ^= binary.LittleEndian.Uint64(data[base : base+8])
+	}
+	if rem := len(data) & 7; rem > 0 {
+		base := full << 3
+		s.a[lane+full] ^= loadPartialLE(data[base : base+rem])
+	}
+}
+
+// ExtractCV extracts a 32-byte chain value (lanes 0-3) from instance inst of a State2.
+func (s *State2) ExtractCV(inst int) [32]byte {
+	var cv [32]byte
+	binary.LittleEndian.PutUint64(cv[0:8], s.a[0][inst])
+	binary.LittleEndian.PutUint64(cv[8:16], s.a[1][inst])
+	binary.LittleEndian.PutUint64(cv[16:24], s.a[2][inst])
+	binary.LittleEndian.PutUint64(cv[24:32], s.a[3][inst])
+	return cv
+}
+
+// ExtractCV extracts a 32-byte chain value (lanes 0-3) from instance inst of a State4.
+func (s *State4) ExtractCV(inst int) [32]byte {
+	var cv [32]byte
+	binary.LittleEndian.PutUint64(cv[0:8], s.a[0][inst])
+	binary.LittleEndian.PutUint64(cv[8:16], s.a[1][inst])
+	binary.LittleEndian.PutUint64(cv[16:24], s.a[2][inst])
+	binary.LittleEndian.PutUint64(cv[24:32], s.a[3][inst])
+	return cv
+}
+
+// ExtractCV extracts a 32-byte chain value (lanes 0-3) from instance inst of a State8.
+func (s *State8) ExtractCV(inst int) [32]byte {
+	var cv [32]byte
+	binary.LittleEndian.PutUint64(cv[0:8], s.a[0][inst])
+	binary.LittleEndian.PutUint64(cv[8:16], s.a[1][inst])
+	binary.LittleEndian.PutUint64(cv[16:24], s.a[2][inst])
+	binary.LittleEndian.PutUint64(cv[24:32], s.a[3][inst])
+	return cv
+}
+
 // EncryptBytesAt performs overwrite-mode encryption starting at byte position pos:
 func (s *State1) EncryptBytesAt(pos int, src, dst []byte) {
 	lane := pos >> 3
