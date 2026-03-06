@@ -475,12 +475,12 @@ Inner/final node separability follows directly from Sakura Lemma 4: the tag-accu
 
 **Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation) and Sections 6.5–6.6 (independent leaf and final-node analysis).
 
-### 6.2 Bridge Theorem: KDF to Random Key
+### 6.4 Bridge Theorem: KDF to Random Key
 
-This section executes the single game hop that replaces the TurboSHAKE128 KDF with a lazy random function. The
-derived-key outputs are then consumed by the leaf-level security lemmas in Section 6.3.
+This section executes the single game hop that replaces the TurboSHAKE128 KDF with a lazy random function, using the
+MRV15 framework (Section 6.2) and domain separation (Section 6.3).
 
-Define the AEAD context encoding:
+**Context encoding and derived-key map.** Define the AEAD context encoding:
 
 $$
 X = \mathrm{encode\_string}(K)\,\|\,\mathrm{encode\_string}(N)\,\|\,\mathrm{encode\_string}(AD),
@@ -494,110 +494,70 @@ $$
 
 **Games.**
 
-- Game $\mathsf{G}_0$: real `TreeWrap128`, i.e., per-context key $F(X)$.
-- Game $\mathsf{G}_1$: replace $F$ with a lazy-sampled random function $R:\{0,1\}^* \to \{0,1\}^{8C}$ on contexts.
-  Only the KDF invocation is replaced; all leaf ciphers and the final-node keyed TurboSHAKE128 continue to call the
-  shared ideal permutation $\pi$.
+```
+Game G0(A):                          Game G1(A):
+  K <-$ {0,1}^{8C}                     K <-$ {0,1}^{8C}
+  b <-$ {0,1}                          b <-$ {0,1}
+  b' <- A^{Enc,Dec}                    b' <- A^{Enc,Dec}
+  return b'                            return b'
 
-The adversary's oracle access depends on the goal: encryption oracle for IND-CPA; encryption + decryption oracles for
-IND-CCA2; encryption + forgery oracle for INT-CTXT/CMT-4. The game hop replaces only the KDF; all oracles and winning
-conditions are otherwise identical to the standard definitions.
+Enc/Dec use:                         Enc/Dec use:
+  X <- ES(K)||ES(N)||ES(AD)           X <- ES(K)||ES(N)||ES(AD)
+  tw_key <- TS128(X, 0x3B, C)         tw_key <- R(X)
+  [proceed with tw_key]               [proceed with tw_key]
+```
 
-**Domain separation.** The KDF uses domain byte 0x3B, which is exclusive to the KDF among the five domain bytes
-(0x33, 0x2B, 0x3B, 0x27, 0x37). Absent a capacity-part collision, KDF sponge absorptions produce capacity states distinct from those of
-any internal leaf or tag-accumulation computation (different domain bytes yield different padded blocks — the domain byte
-occupies a fixed position in the TurboSHAKE padding frame, so two absorptions with distinct domain bytes always differ
-in their final padded byte — hence different permutation inputs). Intermediate encrypt/decrypt blocks use unpadded
-permutations (no domain byte); their capacity states are distinguished from padded roles by the secret capacity derived
-from the keyed init, not by rate-level domain separation. Cross-component capacity collisions can occur only under
-$\mathsf{Bad}_{\mathrm{perm}}$. The probability of $\mathsf{Bad}_{\mathrm{perm}}$ is bounded by
-$\varepsilon_{\mathrm{indiff}}$ independently of the domain-separation property (it is a birthday bound over
-$\sigma + t$ random permutation outputs).
+Where $\mathrm{ES} = \mathrm{encode\_string}$, $\mathrm{TS128} = \mathrm{TurboSHAKE128}$, $R$ is a lazy random
+function $\{0,1\}^* \to \{0,1\}^{8C}$. The adversary's oracle access depends on the security goal (encryption oracle
+for IND-CPA, encryption + decryption oracles for IND-CCA2, encryption + forgery oracle for INT-CTXT/CMT-4). The game
+hop replaces only the KDF; all oracles and winning conditions are otherwise identical to the standard definitions.
 
-**Hop justification.** Let $\mathsf{Bad}_{\mathrm{perm}}$ be the event that the ideal permutation exhibits a
-capacity-part collision among any pair of the $\sigma + t$ total evaluations (online construction calls and adversary
-offline calls). A *capacity-part collision* occurs when two distinct Keccak-p evaluations produce equal 256-bit capacity
-outputs (the low $c$ bits of the 1600-bit state). By the birthday bound,
-$\Pr[\mathsf{Bad}_{\mathrm{perm}}] \leq \binom{\sigma+t}{2} \cdot 2^{-c} \leq (\sigma+t)^2/2^{c+1} = \varepsilon_{\mathrm{indiff}}$.
-Because the capacity output of one permutation call becomes the
-capacity input to the next call (with fresh rate data overwritten or XORed into the rate portion), no capacity-output
-collision implies no capacity-input collision for any subsequent call — the two properties are equivalent in the
-sponge/duplex setting. This equivalence is used throughout Sections 6.3–6.8, where arguments about "fresh permutation
-inputs" and "distinct capacity states" both follow from $\neg\mathsf{Bad}_{\mathrm{perm}}$.
+**Hop justification.**
 
-Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, all *construction-generated* $\pi$-calls (KDF, leaf sponges, final-node
-TurboSHAKE128) have pairwise distinct capacity states: each call's capacity input is the capacity output of the
-preceding call (by the capacity-preservation property above), and $\neg\mathsf{Bad}_{\mathrm{perm}}$ guarantees no
-capacity-output collision. Since the capacity occupies a fixed 256-bit subset of the 1600-bit state, two inputs with
-distinct capacity portions are necessarily distinct as 1600-bit strings, so every construction-generated $\pi$-call has
-a unique input. The ideal permutation on these unique inputs produces individually uniform outputs.
+1. **Domain separation (Section 6.3).** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the KDF's $\pi$-calls (set
+   $\mathcal{K}$, domain byte `0x3B`) are on inputs disjoint from all other components' $\pi$-calls. The KDF sponge
+   evaluation is therefore functionally independent of the leaf ciphers and final-node sponge.
 
-$\mathsf{Bad}_{\mathrm{perm}}$ covers all $\binom{\sigma+t}{2}$ pairs, including adversary-vs-construction pairs. Under
-$\neg\mathsf{Bad}_{\mathrm{perm}}$, adversary offline queries also have capacity outputs distinct from construction
-capacity outputs. However, unlike construction-generated queries (whose capacity *inputs* are secret), the adversary
-can freely choose its query inputs. The adversary's ability to *target* construction capacity states is limited by
-secrecy: each construction capacity state is a 256-bit output of a previous $\pi$-call, unknown to the adversary. The
-probability that any of the adversary's $t$ offline queries matches any of the $\sigma$ construction capacity inputs
-is at most $t\sigma / 2^c$ (union bound). For init calls specifically, the capacity input is zero (public), but the
-rate contains the secret key $K_{tw}$, so each adversary query matches a specific init call's *full input* with
-probability at most $2^{-8C}$ (guessing the key portion). Both costs are absorbed by
-$\varepsilon_{\mathrm{indiff}}$ since $t\sigma/2^c \leq (\sigma+t)^2/2^{c+1}$.
+2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a keyed sponge with uniformly random master key $K$. By the
+   key-loading equivalence (Section 6.2), after the init permutation the state is uniformly random. Theorem 1 applies:
+   the KDF's output on distinct context strings $X$ is indistinguishable from a PRF with advantage at most
+   $\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$, where
+   $q_{\mathrm{ctx}}$ is the number of distinct contexts, $\ell_{\mathrm{kdf}}$ is the maximum number of input blocks
+   per KDF call, and $\mu_{\mathrm{kdf}}$ is the total KDF input blocks.
 
-The game hop is justified by MRH composition (Maurer-Renner-Holenstein, TCC 2004; applied to indifferentiability by
-Coron-Dodis-Malinaud-Puniya, CRYPTO 2005). TurboSHAKE128 is sponge-indifferentiable from a random oracle (BDPVA07);
-MRH composition guarantees that replacing TurboSHAKE128 with a lazy random function in any single-stage game costs at
-most the indifferentiability bound. The AEAD security games (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) are single-stage, so
-the hop is justified. Only the KDF invocation is replaced; all leaf ciphers and the final-node sponge retain their
-original access to the shared ideal permutation $\pi$.
+3. **PRF-to-RF switching.** A PRF with $q_{\mathrm{ctx}}$ queries on distinct inputs is indistinguishable from a lazy
+   random function up to the birthday bound on output collisions:
+   $\varepsilon_{\mathrm{ctx\text{-}coll}} \le q_{\mathrm{ctx}}^2 / 2^{8C+1}$.
 
-The indifferentiability bound $\varepsilon_{\mathrm{indiff}}$ is defined over the total evaluation count $\sigma + t$
-(all $\pi$-calls: KDF, leaves, tag accumulation, and adversary offline queries), so no additional per-component charge
-is needed. By MRH composition, the game hop gap is bounded by the TurboSHAKE128 indifferentiability bound:
+**Bound:**
 
 $$
-\left|\Pr[\mathsf{G}_0=1]-\Pr[\mathsf{G}_1=1]\right| \le \varepsilon_{\mathrm{indiff}} = \frac{(\sigma+t)^2}{2^{c+1}},
+\left|\Pr[\mathsf{G}_0=1]-\Pr[\mathsf{G}_1=1]\right| \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}},
 $$
 
-where $\varepsilon_{\mathrm{indiff}}$ is the concrete sponge indifferentiability bound from BDPVA07, numerically equal to the capacity birthday bound. The event
-$\mathsf{Bad}_{\mathrm{perm}}$ satisfies $\Pr[\mathsf{Bad}_{\mathrm{perm}}] \le \varepsilon_{\mathrm{indiff}}$ as a
-consequence: the probability that any pair among $\sigma + t$ ideal-permutation evaluations produces a capacity-part
-collision is bounded by the same birthday term. This identification is used in later sections when conditioning on
-$\neg\mathsf{Bad}_{\mathrm{perm}}$.
+where $\varepsilon_{\mathrm{cap}}$ covers $\mathsf{Bad}_{\mathrm{perm}}$ (needed for domain separation),
+$\varepsilon_{\mathrm{ks}}$ is the MRV15 PRF bound for the KDF, and
+$\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}$ covers derived-key collisions.
+
+Let $\mathsf{CtxColl}$ denote the event of a derived-key collision among distinct contexts. This context-collision term
+is per experiment/per key epoch.
 
 > [!NOTE]
-> The Ristenpart-Shacham-Shrimpton (RSS11) result shows that indifferentiability does not compose in multi-stage games.
-> TreeWrap128's AEAD security games (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) are all single-stage: the adversary runs in
-> one stage with oracle access and produces a single output. The RSS caveat therefore does not apply here. The explicit
-> game hop above is not a workaround for RSS; it is the standard application of indifferentiability composition to a
-> single-stage game.
+> The MRV15-based approach replaces the indifferentiability composition argument (MRH/CDMP) used in earlier versions of
+> this analysis. Because MRV15 is a direct PRF result in the ideal-permutation model, no composition theorem is needed,
+> and the Ristenpart-Shacham-Shrimpton (RSS11) multi-stage caveat does not arise.
 
-With the game hop established, the remaining analysis works entirely in $\mathsf{G}_1$ and addresses key collisions
-among distinct contexts.
-
-**Context collisions.** Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$ in $\mathsf{G}_1$, contexts map as a lazy
-random function on distinct strings $X$. For $q_{\mathrm{ctx}}$ distinct contexts, the probability of a derived-key collision is bounded by:
-
-$$
-\varepsilon_{\mathrm{ctx\text{-}coll}} \le \frac{q_{\mathrm{ctx}}^2}{2^{8C+1}}.
-$$
-
-This is the standard birthday bound for a lazy random function with range $\{0,1\}^{8C}$.
-Let $\mathsf{CtxColl}$ denote this event (a derived-key collision among distinct contexts).
-
-This context-collision term is per experiment/per key epoch; multi-key or multi-user deployment totals are obtained by
-summing per-key-epoch probabilities (union bound).
-
-**Summary.** All AEAD goals below (Sections 6.5–6.8) are analyzed in $\mathsf{G}_1$, conditioned on
+**Summary.** All AEAD goals below (Sections 6.7–6.10) are analyzed in $\mathsf{G}_1$, conditioned on
 $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. The costs of these events
-($\varepsilon_{\mathrm{indiff}}$ and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge hop and
+($\varepsilon_{\mathrm{cap}}$ and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge hop and
 do not recur. Each theorem decomposes as:
 
 $$
-\mathrm{Adv}_{\Pi} \le \underbrace{\varepsilon_{\mathrm{indiff}}}_{\text{bridge hop}} + \underbrace{\varepsilon_{\mathrm{ctx\text{-}coll}}}_{\text{key collision}} + \underbrace{\mathrm{Adv}_{\Pi}^{\mathrm{bare}}}_{\text{random-key game}},
+\mathrm{Adv}_{\Pi} \le \underbrace{\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}}_{\text{bridge hop}} + \underbrace{\varepsilon_{\mathrm{ctx\text{-}coll}}}_{\text{key collision}} + \underbrace{\mathrm{Adv}_{\Pi}^{\mathrm{bare}}}_{\text{random-key game}},
 $$
 
 where $\mathrm{Adv}_{\Pi}^{\mathrm{bare}}$ is the advantage against the internal functions under independent uniformly
-random keys, bounded explicitly for each goal.
+random keys.
 
 ### 6.3 Leaf Security Lemmas
 
@@ -614,27 +574,17 @@ public index), in the ideal-permutation model, the rate outputs (keystream bytes
 pseudorandom up to $\varepsilon_{\mathrm{indiff}}$. This holds for both overwrite-mode absorption (used by leaves) and
 standard XOR-mode absorption (used by TurboSHAKE128, including the final node).
 
-*Proof.* The argument proceeds in three steps: an absorption-mode equivalence, a direct
-ideal-permutation argument for pseudorandomness, and a supporting reference to MRV15.
+*Proof.* Mennink-Reyhanitabar-Vizar (MRV15, Eurocrypt 2015, Theorem 1) directly establish keyed-duplex
+pseudorandomness in the ideal-permutation model: for a keyed sponge initialized with a uniformly random key, the rate
+outputs are indistinguishable from random with advantage at most $(\sigma + t)^2 / 2^{c+1}$. This single result covers
+our setting exactly — a keyed sponge initialized with a uniformly random $K_{tw}$ operating in the ideal-permutation
+model.
 
-1. **Absorption-mode equivalence.** Both overwrite and XOR-absorb modes yield the same
-   $\varepsilon_{\mathrm{indiff}}$ bound. The standard sponge indifferentiability result (BDPVA07/08) covers XOR-absorb;
-   BDPVA11 (Theorem 2) extends to overwrite mode. For overwrite-mode leaves, the encrypt operation
-   $S[j] \leftarrow \mathit{pt}[j] \oplus S[j] = \mathit{ct}[j]$ is algebraically identical to XOR-absorbing the
-   plaintext, so the distinction is moot.
-
-2. **Direct ideal-permutation argument.** Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$, rate outputs are
-   pseudorandom by a direct argument from the definition of an ideal permutation:
-   - The init step absorbs the truly random key $K_{tw}$ into the rate and applies $\pi$. The rate — containing the
-     random key material — makes this first permutation input unique. The output capacity is therefore uniform.
-   - $\neg\mathsf{Bad}_{\mathrm{perm}}$ guarantees that every subsequent capacity state is unique across all
-     $\pi$-calls. Since the capacity occupies a fixed 256-bit subset of the 1600-bit state, distinct capacity portions
-     imply distinct full inputs, regardless of rate content.
-   - An ideal permutation applied to a fresh input produces a uniformly random 1600-bit output.
-   - Therefore all rate outputs (keystream bytes and terminal squeeze bytes) are uniformly random.
-
-3. **Supporting reference (MRV15).** Mennink-Reyhanitabar-Vizar (Eurocrypt 2015) independently confirm the same
-   $(\sigma + t)^2 / 2^{c+1}$ bound for the keyed duplex via a more general framework.
+The MRV15 result is stated for XOR-absorb mode. Overwrite-mode leaves use the encrypt operation
+$S[j] \leftarrow \mathit{pt}[j] \oplus S[j] = \mathit{ct}[j]$, which is algebraically identical to XOR-absorbing the
+plaintext (the resulting state byte $\mathit{ct}[j]$ is the same in both modes). MRV15 therefore applies directly to
+overwrite-mode leaves without requiring a separate reduction. (BDPVA11, Theorem 2, independently confirms that
+overwrite mode achieves the same indifferentiability bound.)
 
 **Lemma 2 (State-direction equivalence).**
 For fixed $(K_{tw}, i)$ and any plaintext-ciphertext pair of equal length, `encrypt` and `decrypt` induce identical
@@ -712,6 +662,8 @@ $$
 \varepsilon_{\mathrm{coll}} \le \varepsilon_{\mathrm{indiff}} + \frac{Q^2}{2^{8\tau+1}}.
 $$
 
+The $\varepsilon_{\mathrm{indiff}}$ term accounts for the event $\mathsf{Bad}_{\mathrm{perm}}$ (which is conditioned
+away in the $Q^2/2^{8\tau+1}$ term); combining these via a union bound gives the unconditional bound.
 Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$, tags are pseudorandom $\tau$-byte outputs (Section 6.4.1). The
 second term is the birthday bound on collisions among $Q$ approximately independent, uniformly random $8\tau$-bit
 strings.
@@ -742,7 +694,8 @@ independent uniformly random per-context keys.
 
 **Claim.** Within $\mathsf{G}_1$ conditioned on
 $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$, the IND-CPA advantage of the internal functions is
-exactly zero: $\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0$. The unconditional real-world bound is
+negligible: $\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}$ (the PRP/PRF switching
+distance, absorbed by $\varepsilon_{\mathrm{indiff}}$). The unconditional real-world bound is
 $\varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$.
 
 *Justification.* In $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
@@ -754,7 +707,7 @@ $\varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$.
   The argument proceeds by induction over rate blocks, showing that each ciphertext block is uniformly distributed
   regardless of the plaintext:
   - *Block 0:* The `init` step absorbed the truly random key $K_{tw}$ and applied $\pi$ via `pad_permute` (one
-    permutation call); the resulting state is uniformly random (see Lemma 1, step 2). The first rate block of
+    permutation call); the resulting state is uniformly random (see Lemma 1). The first rate block of
     keystream bytes — $S[0]$ through $S[R{-}1]$ — comes directly from this post-init permutation output, so they are
     uniform. (The next $\pi$-call occurs only when `pos` reaches $R$ during encryption, producing the state for
     Block 1.) The ciphertext byte
@@ -771,9 +724,16 @@ $\varepsilon_{\mathrm{indiff}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$.
     state via the overwrite rule, the state evolution is determined by the uniform ciphertext sequence, not by the
     adversary's plaintext choice. Two different plaintexts produce different ciphertext values but with identical
     (uniform) distributions.
+  - **Final partial block.** The last block may contain $0 \le k < R$ ciphertext bytes followed by `pad_permute`. The
+    $k$ ciphertext bytes are uniform by the same XOR-with-uniform-state argument as intra-block bytes above. The
+    `pad_permute` call writes the domain byte and 0x80 padding into fixed rate positions and applies $\pi$. Under
+    $\neg\mathsf{Bad}_{\mathrm{perm}}$, the resulting capacity state is fresh (distinct from all prior capacity
+    outputs), so the squeeze output (tag or chain value) is also approximately uniform. The partial block therefore
+    inherits the same uniformity guarantee as full blocks.
 
-The adversary therefore receives uniformly random ciphertexts regardless of which plaintext it submits, giving zero
-distinguishing advantage within this conditioned game.
+The adversary therefore receives approximately uniformly random ciphertexts regardless of which plaintext it submits.
+The only deviation from perfect uniformity is the PRP/PRF switching distance $\sigma^2/2^{1601}$ (the ideal permutation
+samples without replacement; see the Remark before Section 6.4), which is absorbed by $\varepsilon_{\mathrm{indiff}}$.
 
 Therefore:
 
@@ -826,7 +786,8 @@ $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}$), so it provides no us
 encryption oracle already reveals. Removing the decryption oracle reduces the game to IND-CPA.
 
 **Step 2: Substitute bare bounds.** From Sections 6.5 and 6.6:
-$\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0$ and
+$\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}$ (absorbed by
+$\varepsilon_{\mathrm{indiff}}$) and
 $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}$. Therefore:
 
 $$
@@ -885,8 +846,14 @@ Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
   $\varepsilon_{\mathrm{indiff}}$). For $n > 1$: different keys produce different first permutation inputs across all
   leaves and final nodes. Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, no capacity collision occurs between any pair of
   calls from the two contexts, so by Lemma 1 the two final-node tags are approximately independent uniform $\tau$-byte
-  strings. The probability that two approximately independent uniform $\tau$-byte tags collide is upper-bounded by the
-  $Q$-comparison birthday term.
+  strings.
+
+  **Adversary strategy and birthday bound.** The adversary's optimal strategy is to find a tag collision among the $Q$
+  AEAD outputs (encryption-oracle responses plus the two openings in $C^\star$). A dual valid opening under different
+  contexts requires $T = T'$ where $T$ and $T'$ are the tags computed under two independent derived keys. Under
+  $\neg\mathsf{Bad}_{\mathrm{perm}}$, these tags are approximately independent uniform $\tau$-byte strings (by
+  Lemma 1 / tag PRF security from Section 6.4.1). The adversary wins only if such a collision exists among some pair
+  of the $Q$ outputs. By the birthday bound, $\Pr[\exists\ \text{collision}] \leq Q^2/2^{8\tau+1}$.
 
 Therefore:
 
