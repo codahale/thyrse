@@ -298,7 +298,7 @@ Keccak-p[1600,12]. The argument has two layers:
 
 - **Layer A (Section 6.4).** A single game hop replaces the TurboSHAKE128 KDF with a lazy random function, using the
   MRV15 keyed-sponge PRF security framework (Section 6.2) to bound the distinguishing advantage.
-- **Layer B (Sections 6.5–6.10).** Under random keys, each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) decomposes
+- **Layer B (Sections 6.6–6.10).** Under random keys, each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) decomposes
   into keyed-sponge PRF properties of the internal functions: pseudorandomness of rate outputs, structural state
   equivalence, and fixed-key bijection.
 
@@ -327,7 +327,7 @@ Let:
 - $\sigma$: total online Keccak-p calls performed by the construction across all oracle queries
   (including KDF, leaf-sponge, and tag-accumulation permutation calls).
 - $t$: adversary offline Keccak-p calls (an analysis parameter representing direct access to the ideal
-  permutation $\pi$ in the ideal-permutation model, not a deployment-controlled quantity; Section 6.14 provides
+  permutation $\pi$ in the ideal-permutation model, not a deployment-controlled quantity; Section 7.4 provides
   operational guidance on choosing $t$ for bound evaluation).
 - $S$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
 - $Q$: total number of AEAD outputs (encryption-oracle responses plus any outputs the adversary compares in a forgery or
@@ -650,9 +650,9 @@ distance, absorbed by $\varepsilon_{\mathrm{cap}}$ per the Section 6.1 conventio
 - Under a truly random key $K_{tw}$ (from the lazy RF in $\mathsf{G}_1$) and the ideal permutation conditioned on
   $\neg\mathsf{Bad}_{\mathrm{perm}}$, the ciphertext distribution is independent of the adversary's plaintext choice.
   The argument proceeds by induction over rate blocks (using the keyed-sponge pseudorandomness from Section 6.2 and
-  Lemma 1, Section 6.5), showing that each ciphertext block is uniformly distributed regardless of the plaintext:
+  Lemma 1, Section 6.6), showing that each ciphertext block is uniformly distributed regardless of the plaintext:
   - *Block 0:* The `init` step absorbed the truly random key $K_{tw}$ and applied $\pi$ via `pad_permute` (one
-    permutation call); the resulting state is uniformly random (see Lemma 1, Section 6.5). The first rate block of
+    permutation call); the resulting state is uniformly random (see Lemma 1, Section 6.6). The first rate block of
     keystream bytes — $S[0]$ through $S[R{-}1]$ — comes directly from this post-init permutation output, so they are
     uniform. (The next $\pi$-call occurs only when `pos` reaches $R$ during encryption, producing the state for
     Block 1.) The ciphertext byte
@@ -768,7 +768,7 @@ IND-CCA2 formulations.
 
 ### 6.10 CMT-4 (Fixed Master Key)
 
-This theorem follows the standard Bellare-Hoang committing-security notion (CMT-4, see Section 8): a ciphertext should not
+This theorem follows the standard Bellare-Hoang committing-security notion (CMT-4, see Section 9): a ciphertext should not
 admit two distinct valid openings under one fixed secret key. The proof is a composition argument over Section 6.4 plus
 fixed-key injectivity of the internal functions (Lemma 3).
 
@@ -955,7 +955,7 @@ by the TurboSHAKE128-based KDF to derive a unique internal key, not passed to th
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs -- they prove authenticity but are not
 necessarily pseudorandom. TreeWrap128's tag is a full PRF: under a random key, the tag is indistinguishable from a random
-string (Section 6.6.1). This stronger property is useful for protocols that derive further keying material from the tag.
+string (Section 6.1). This stronger property is useful for protocols that derive further keying material from the tag.
 
 ### 8.1. Operational Safety Limits
 
@@ -998,7 +998,7 @@ Example planning table (collision target $p = 2^{-50}$, record size = 1500 bytes
 For a different record size, scale the nonce-collision-limited rows linearly with bytes/record and then apply the same
 minimum rule against the proof-bound volume.
 
-Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (Section 6.14), not by the asymptotic
+Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (Section 7.4), not by the asymptotic
 proof-bound figure alone.
 
 ## 9. References
@@ -1384,7 +1384,7 @@ sigma_total = sigma_treewrap128 + sigma_turboshake + sigma_k12 + sigma_other_kec
 ```
 
 where each term is the count of online Keccak-p[1600,12] calls made by that component in the window.
-This is the same $\sigma_{\mathrm{total}}$ counter model used normatively in Section 6.14.
+This is the same $\sigma_{\mathrm{total}}$ counter model used normatively in Section 7.4.
 
 Then evaluate:
 
