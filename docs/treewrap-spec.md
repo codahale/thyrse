@@ -306,6 +306,12 @@ All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capaci
 bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
 adversary.
 
+> [!CAUTION]
+> **Nonce reuse is catastrophic.** Reusing the same $(K, N, AD)$ triple with different equal-length
+> messages produces identical keystreams, leaking the XOR of all plaintexts (two-time pad). This
+> enables full plaintext recovery given one known plaintext. Nonce uniqueness per $(K, AD)$ pair is a
+> hard security requirement (Section 7.4), not a quality-of-implementation concern.
+
 **Assumption scope.** Concrete bounds in this section are conditional on Keccak-p[1600,12] behaving as an ideal
 permutation at the claimed workloads. This is a modeling assumption, not a proof about reduced-round Keccak-p itself.
 
@@ -901,8 +907,8 @@ Required baseline profile (MUST):
 
 - Enforce $\sigma_{\mathrm{total}} \le 2^{60}$.
 - Define and enforce an encryption-invocation cap $q_{\mathrm{enc}} \le q_{\mathrm{enc,cap}}$ per key epoch.
-- Enforce nonce uniqueness per key epoch (deterministic nonces such as counters/sequences are RECOMMENDED; random-nonce
-  deployments SHOULD use a large nonce space, e.g., 192 or 256 bits).
+- Enforce nonce uniqueness per key epoch. Deterministic nonces (counters or sequences) MUST NOT repeat within one key
+  epoch; random-nonce deployments SHOULD use a large nonce space (e.g., 192 or 256 bits).
 - For deterministic nonces, choose $q_{\mathrm{enc,cap}}$ so nonce values cannot wrap or repeat within the epoch.
 - If random nonces are used, additionally enforce
   $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b+1} \le p_{\mathrm{nonce}}$ for nonce bit-length $b$ and chosen nonce-collision target
