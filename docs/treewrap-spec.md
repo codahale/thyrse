@@ -1032,6 +1032,7 @@ Required baseline profile (MUST):
 - Define and enforce an encryption-invocation cap $q_{\mathrm{enc}} \le q_{\mathrm{enc,cap}}$ per key epoch.
 - Enforce nonce uniqueness per key epoch. Deterministic nonces (counters or sequences) MUST NOT repeat within one key
   epoch; random-nonce deployments SHOULD use a large nonce space (e.g., 192 or 256 bits).
+- Nonces MUST be at least 16 bytes. Random nonces SHOULD be at least 192 bits.
 - For deterministic nonces, choose $q_{\mathrm{enc,cap}}$ so nonce values cannot wrap or repeat within the epoch.
 - If random nonces are used, additionally enforce
   $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b_n+1} \le p_{\mathrm{nonce}}$ for nonce bit-length $b_n$ and chosen nonce-collision target
