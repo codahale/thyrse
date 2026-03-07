@@ -42,8 +42,8 @@ func TestPake(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if pInitiator.Equal(pResponder) == 1 {
-			t.Error("different passwords should lead to different states")
+		if got, want := pInitiator.Equal(pResponder), 0; got != want {
+			t.Error("Equal() = true, want false")
 		}
 	})
 
@@ -59,7 +59,7 @@ func TestPake(t *testing.T) {
 		}
 
 		if got, want := pInitiator.String(), pResponder.String(); got == want {
-			t.Error("different domains should lead to different states")
+			t.Errorf("Initiate/Respond() states equal, want different")
 		}
 	})
 
@@ -68,7 +68,7 @@ func TestPake(t *testing.T) {
 
 		_, err := finish(make([]byte, 31)) // invalid length
 		if !errors.Is(err, pake.ErrInvalidHandshake) {
-			t.Errorf("expected ErrInvalidHandshake, got %v", err)
+			t.Errorf("finish() err = %v, want ErrInvalidHandshake", err)
 		}
 	})
 
@@ -76,7 +76,7 @@ func TestPake(t *testing.T) {
 		finish, _ := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), r1)
 		_, err := finish(ristretto255.NewIdentityElement().Bytes())
 		if !errors.Is(err, pake.ErrInvalidHandshake) {
-			t.Errorf("expected ErrInvalidHandshake, got %v", err)
+			t.Errorf("finish() err = %v, want ErrInvalidHandshake", err)
 		}
 	})
 }
