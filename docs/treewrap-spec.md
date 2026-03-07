@@ -1039,34 +1039,81 @@ Appendix C remains non-normative operational guidance for instrumentation and bu
 
 ### 7.5 Implementation Design Callouts (Non-Normative)
 
-The following implementation decisions are performance-critical and align with high-throughput production designs:
+TreeWrap128's tree topology exists to exploit data-level parallelism: independent leaf chunks can be encrypted or
+decrypted simultaneously using SIMD permutation kernels. A scalar implementation that processes leaves one at a time
+will be bottlenecked by permutation latency; a vectorized implementation that processes 4–8 leaves per kernel
+invocation can achieve roughly 20× higher throughput on contemporary hardware. The guidance below describes the
+techniques that make this possible, progressing from data layout through scheduling.
 
-- **Batch leaves by SIMD width.** Process complete chunks in vector batches (for example, x4 then x2 then x1) to keep
-  permutation backends saturated.
-- **Use runtime-dispatched Keccak backends.** Provide architecture-specific permutation paths and dispatch at runtime:
-  amd64 (AVX-512/AVX2/SSE2), arm64 (FEAT_SHA3 where available), with a constant-time scalar fallback for portability.
-- **Match scheduling to permutation kernels.** Structure worker loops so the hot path maps directly onto `P1600x4`,
-  then `P1600x2`, then `P1600`, minimizing tail overhead and avoiding per-block feature checks inside inner loops.
-- **Parallelize independent finalizations when available.** If two independent TurboSHAKE/Keccak states must be
-  finalized together, use a paired permutation path (`x2`) to reduce permutation-call overhead.
-- **Stream chain values incrementally.** Absorb chain values into the final node's Duplex as each batch completes;
-  only finalization depends on having absorbed all chain values.
-- **Preserve empty/single-chunk fast paths.** Keep dedicated empty-input and `n = 1` paths to avoid
-  unnecessary tree-accumulation overhead on latency-sensitive inputs.
-- **Use incremental stateful processing.** Maintain chunk-local state across partial writes/reads so callers can stream
-  large messages without extra buffering copies. With kangaroo hopping, the final node encrypts chunk 0 directly and
-  the n=1 vs n>1 decision is deferred to the final `pad_permute` (`0x07` vs `0x06`), when `n` is already known.
-  No lookahead buffering past the chunk boundary is required.
-- **Reuse one scheduling pipeline for both directions.** Encrypt and decrypt should share the same chunk scheduling,
-  index binding, and chain-value accumulation pipeline.
-- **Keep domain bytes and index mapping exact.** `0x08`, `0x0B`, `0x09`, `0x07`, `0x06` constants and `key || LEU64(index)` binding (index 0
-  for the final node, indices 1..$n-1$ for leaves) are structural for interoperability and security analysis.
-- **Treat reference code as correctness-first.** For production throughput, avoid repeated byte-string concatenation
-  patterns when constructing final-node inputs.
-- **No misuse resistance (MRAE).** TreeWrap128 is not an MRAE/SIV-style scheme: nonce reuse leaks
-  plaintext XOR (Section 6.7 proves IND-CPA only for nonce-respecting adversaries). Applications requiring nonce-misuse resistance should use a
-  dedicated MRAE construction (e.g., SIV or a commit-then-encrypt wrapper). TreeWrap128's design
-  prioritizes single-pass streaming and parallelism over misuse tolerance.
+**High-level principles:**
+
+- **Saturate the widest available permutation kernel.** Throughput scales with the number of parallel Keccak states
+  processed per instruction. Prefer the widest kernel the platform supports, falling back to narrower kernels for
+  remainders.
+- **Keep chunk 0 on the fast path.** Chunk 0 is encrypted directly through the final node's duplex (the kangaroo
+  message hop). Single-chunk messages never enter the tree machinery.
+- **Share one scheduling pipeline for encrypt and decrypt.** Both directions use the same chunk batching, index
+  binding, and chain-value accumulation logic; only the XOR direction differs.
+- **Keep domain bytes and index mapping exact.** The constants `0x08`, `0x0B`, `0x09`, `0x07`, `0x06` and the
+  `key ‖ LEU64(index)` binding (index 0 for the final node, 1 through $n$ for leaves) are structural for
+  interoperability and security analysis.
+- **No misuse resistance (MRAE).** TreeWrap128 is not SIV-style: nonce reuse leaks plaintext XOR (Section 6.7).
+  Applications requiring nonce-misuse resistance should use a dedicated MRAE construction.
+
+**PlSnP lane-major state layout.** The key data structure for parallel Keccak is an N-way interleaved state, following
+the pattern the Keccak team calls "Parallel Lanes, Serial N Permutations" (PlSnP). Rather than storing N independent
+200-byte Keccak states, a PlSnP layout groups the same lane across all N instances into a single contiguous vector:
+
+```
+State4 layout (N = 4, 25 lanes × 32 bytes):
+
+  lane 0:  [ a₀  a₁  a₂  a₃ ]   ← 4 × uint64, one per instance
+  lane 1:  [ b₀  b₁  b₂  b₃ ]
+    ⋮
+  lane 24: [ y₀  y₁  y₂  y₃ ]
+```
+
+Each row is one SIMD register wide (32 bytes for 4×64-bit on AVX2, 64 bytes for 8×64-bit on AVX-512). This layout has
+two critical properties:
+
+1. **Absorb is a single vector XOR per lane.** To absorb a rate block across all N instances, load the corresponding
+   plaintext bytes from N input streams into a vector and `VPXOR` it into the lane — one instruction for N states.
+2. **Permutation rounds operate on all N states simultaneously.** Every θ/ρ/π/χ/ι step is the same vector operation
+   applied to 25 registers, processing N permutations for the cost of one.
+
+The N input streams are typically laid out at a fixed stride (the chunk size, 8192 bytes), so absorbing lane `i` across
+all instances is a gather from `input + instance × stride + i × 8`. On platforms where explicit gather is expensive
+(AVX2 `VPGATHERQQ` at width 4 is slower than discrete loads), loading each instance's lane individually and packing
+into a vector with insert or shuffle instructions is faster.
+
+**Cascade scheduling.** Given a batch of complete chunks, process them widest-first using the largest available kernel,
+then fall back to narrower kernels for the remainder. For example, 11 chunks would be scheduled as one x8 batch
+followed by one x2 batch and one x1. Each batch initializes an N-way PlSnP state by absorbing
+`key ‖ LEU64(leaf_index)` into each instance, runs the fused absorb-permute loop over the chunk data, then extracts N
+chain values. Chain values are absorbed into the final node incrementally — there is no need to buffer them all before
+finalizing.
+
+The maximum useful kernel width is platform-dependent:
+
+| Platform | Native ceiling | x8 strategy |
+|----------|---------------|-------------|
+| amd64 + AVX-512 | x8 (ZMM, state-resident in Z0–Z24) | Native |
+| amd64 + AVX2 | x4 (YMM) | 2 × x4 cascade |
+| arm64 + NEON | x2 (ASIMD 2×uint64) | 4 × x2 cascade |
+| Scalar fallback | x1 | Serial |
+
+An x8 kernel implemented as two sequential x4 invocations still outperforms four sequential x2 invocations because the
+PlSnP state stays hot in registers across the two halves.
+
+**Fused absorb-permute loops.** The inner loop of each leaf processes a full rate block (168 bytes = 21 lanes) per
+iteration. A fused implementation absorbs the block and immediately permutes without storing and reloading the PlSnP
+state between iterations. This eliminates 25×N loads and 25×N stores per block that a non-fused design would require to
+move the PlSnP state between separate absorb and permute functions. At x8 width on AVX-512, where the state occupies
+all 25 ZMM registers, the savings are substantial.
+
+**Preserve empty and single-chunk fast paths.** Empty inputs and single-chunk messages (≤ 8192 bytes) never enter the
+tree — they are processed entirely through the final node's duplex. Keep these paths free of tree-scheduling overhead,
+as they dominate latency-sensitive workloads.
 
 ## 8. Comparison with Traditional AEAD
 
