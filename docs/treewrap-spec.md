@@ -498,11 +498,24 @@ byte-string $K \| \mathrm{LEU64}(\mathit{index})$ is XOR'd into rate positions,
 followed by pad-and-permute with domain byte $\mathtt{0x08}$. This is the
 *outer-keyed sponge* construction $\mathrm{Sponge}(K \| M)$. Andreeva, Daemen,
 Mennink, and Van Assche (ADMV15, FSE 2015) prove PRF security of both inner-
-and outer-keyed sponges using a modular proof approach, obtaining bounds with the
-same dominant terms as MRV15 ($M^2/2^c$ and $\mu N/2^c$). The ADMV15 outer-keyed
-bound includes additional key-derivation terms ($\lambda(N)$ and a $2(k/r)N/2^b$
-term from the root-key derivation step); both are negligible at TreeWrap128's
-parameters ($k/r < 1$, $b = 1600$). After the init permutation call, the full state is
+and outer-keyed sponges using a modular proof approach. The single-target
+outer-keyed sponge bound (Theorems 5 + 6, combined in the ideal-permutation
+model) is:
+
+$$
+\mathrm{Adv}^{\mathrm{ind}[1]}_{\mathrm{OKS}}(M,\mu,N)
+  \;\leq\; \frac{M^2 + 2\mu N}{2^c} + \lambda(N) + \frac{2\!\left(\frac{k}{r}\right)\!N}{2^b},
+$$
+
+where $M$ is the data complexity (number of construction calls to $\pi$), $\mu$ is the
+total maximum multiplicity, $N$ is the adversary's offline $\pi$-query budget,
+and $\lambda(N)$ is a key-recovery term bounded in ADMV15 Lemma 2. The dominant
+terms — $M^2/2^c$ (online-vs-online) and $2\mu N/2^c$ (online-vs-offline) — are
+the same form as MRV15's capacity and online-vs-offline terms, differing only
+by a factor of 2 on the $\mu N$ term. The additional key-derivation terms
+($\lambda(N)$ and $2(k/r)N/2^b$) arise from the root-key derivation step in the
+outer-keyed construction and are negligible at TreeWrap128's parameters
+($k/r < 1$, $b = 1600$). After the init permutation call, the full state is
 $\pi(K \| \mathit{index} \| \mathtt{0x08}\text{-pad} \| 0^c)$; since $K$ is
 secret and uniform, this $\pi$-input is unique with overwhelming probability,
 and the resulting state is uniformly random over the adversary's view. The
@@ -848,10 +861,9 @@ If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$.
 
 ### 6.9 IND-CCA2 (Nonce-Respecting)
 
-IND-CCA2 follows from IND-CPA and INT-CTXT via the generic composition theorem of Bellare and Namprempre (BN00;
-extended to the nonce-based setting by Namprempre, Rogaway, and Shrimpton, NRS14).
+IND-CCA2 follows from IND-CPA and INT-CTXT via the generic composition theorem of Bellare and Namprempre (BN00).
 
-**Step 1: Bare-level composition.** By the BN00/NRS14 composition theorem, for the internal functions under a fixed
+**Step 1: Bare-level composition.** By BN00 Theorem 3.2, for the internal functions under a fixed
 random key:
 
 $$
@@ -1186,57 +1198,57 @@ proof-bound figure alone.
 
 ## 9. References
 
-- Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007. Establishes
-  the flat sponge claim (a heuristic generic security bound for random sponges based on inner-collision analysis). Referenced
-  in the non-normative note in Section 6.2.
-- Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing." IACR ePrint
-  2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap128.
-- RFC 9861: KangarooTwelve and TurboSHAKE.
-- Bertoni, G., Daemen, J., Hoffert, S., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B. "TurboSHAKE." IACR ePrint 2023/342.
-  Primary specification and design rationale for TurboSHAKE.
-- Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B. "KangarooTwelve: fast hashing based on
-  Keccak-p." IACR ePrint 2016/770. Security and design context for the Sakura-based tree structure.
-- Keccak Team. "Third-party cryptanalysis." https://keccak.team/third_party.html. Curated summary table of published
-  cryptanalysis results and round counts across Keccak-family modes and raw permutations.
-- Maurer, U., Renner, R., and Holenstein, C. "Indifferentiability, Impossibility Results on Reductions, and
+- **[ADMV15]** Andreeva, E., Daemen, J., Mennink, B., and Van Assche, G. "Security of Keyed Sponge Constructions Using
+  a Modular Proof Approach." FSE 2015. Proves PRF security of both inner-keyed and outer-keyed sponge variants. The
+  outer-keyed result covers TreeWrap128's rate-absorbed key initialization (Section 6.2).
+- **[AM09]** Aumasson, J.-P. and Meier, W. "Zero-sum distinguishers for reduced Keccak-f and for the core functions of
+  Luffa and Hamsi." 2009. https://www.aumasson.jp/data/papers/AM09.pdf. Presents zero-sum distinguishers up to 16 rounds.
+- **[BDPVA07]** Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007.
+  Establishes the flat sponge claim (a heuristic generic security bound for random sponges based on inner-collision
+  analysis). Referenced in the non-normative note in Section 6.2.
+- **[BDPVA11]** Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass
+  Authenticated Encryption and Other Applications." SAC 2011. IACR ePrint 2011/499. Establishes the duplex-sponge
+  equivalence (Lemma 3: each duplex output equals a sponge evaluation on concatenated padded inputs), proves SpongeWrap
+  AEAD security bounds (Theorem 1), and gives overwrite-mode security (BDPVA11 §6.2, Algorithm 5, Theorem 2: Overwrite
+  is as secure as Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are covered by
+  the duplex security bound.
+- **[BDPVA13]** Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing."
+  IACR ePrint 2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap128.
+- **[BDPVAVK16]** Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B.
+  "KangarooTwelve: fast hashing based on Keccak-p." IACR ePrint 2016/770. Security and design context for the
+  Sakura-based tree structure.
+- **[BDPVAVK23]** Bertoni, G., Daemen, J., Hoffert, S., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B.
+  "TurboSHAKE." IACR ePrint 2023/342. Primary specification and design rationale for TurboSHAKE.
+- **[BH22]** Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT 2022.
+  Defines the CMT-4 committing security notion (§3, E-notion with $\ell = 4$). Section 6.10 uses this game directly.
+- **[BN00]** Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the
+  Generic Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2; used in Section 6.9.
+- **[CDMP05]** Coron, J.-S., Dodis, Y., Malinaud, C., and Puniya, P. "Merkle-Damgård Revisited: How to Construct a Hash
+  Function." CRYPTO 2005. Applies the MRH indifferentiability composition theorem to hash function constructions;
+  referenced in the non-normative note in Section 6.4.
+- **[DDS14]** Dinur, I., Dunkelman, O., and Shamir, A. "New attacks on Keccak-224 and Keccak-256." FSE 2012; published
+  as "Improved practical attacks on round-reduced Keccak" in Journal of Cryptology 27(4), 2014. Reports practical
+  4-round collisions and 5-round near-collision results in standard Keccak-224/256 settings.
+- **[DGPW11]** Duc, A., Guo, J., Peyrin, T., and Wei, L. "Unaligned Rebound Attack - Application to Keccak." IACR
+  ePrint 2011/420. Gives differential distinguishers up to 8 rounds of Keccak internal permutations.
+- **[MRH04]** Maurer, U., Renner, R., and Holenstein, C. "Indifferentiability, Impossibility Results on Reductions, and
   Applications to the Random Oracle Methodology." TCC 2004. Introduces indifferentiability and the core composition
   theorem framework used for random-oracle replacement arguments.
-- Coron, J.-S., Dodis, Y., Malinaud, C., and Puniya, P. "Merkle-Damgård Revisited: How to Construct a Hash Function."
-  CRYPTO 2005. Applies the MRH indifferentiability composition theorem to hash function constructions; referenced in the
-  non-normative note in Section 6.4.
-- Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT 2022. Defines the
-  CMT-4 committing security notion (§3, E-notion with $\ell = 4$). Section 6.10 uses this game directly.
-- Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the Generic
-  Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2; used in Section 6.9.
-- Namprempre, C., Rogaway, P., and Shrimpton, T. "Reconsidering Generic Composition." EUROCRYPT 2014. Extends the
-  BN00 composition theorem to the nonce-based setting; used in Section 6.9.
-- Ristenpart, T., Shacham, H., and Shrimpton, T. "Careful with Composition: Limitations of the Indifferentiability
-  Framework." Eurocrypt 2011 (ePrint 2011/339 as "Careful with Composition: Limitations of Indifferentiability and Universal Composability").
-  Highlights multi-stage composition caveats; motivates explicit game-hop arguments in composed proofs.
-- Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
-  and Other Applications." SAC 2011. IACR ePrint 2011/499. Establishes the duplex-sponge equivalence (Lemma 3: each
-  duplex output equals a sponge evaluation on concatenated padded inputs), proves SpongeWrap AEAD security bounds
-  (Theorem 1), and gives overwrite-mode security (BDPVA11 §6.2, Algorithm 5, Theorem 2: Overwrite is as secure as
-  Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are covered by the duplex
-  security bound.
-- Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Applications to
-  Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Primary security framework for TreeWrap128. Proves
-  beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state keyed duplex
-  (Theorem 2, FKD) in the ideal-permutation model. Theorem 2 (FKD) is used for leaf ciphers; Theorem 1 (FKS) is used
-  for the KDF sponge. Used throughout Section 6.
-- Andreeva, E., Daemen, J., Mennink, B., and Van Assche, G. "Security of Keyed Sponge Constructions Using a Modular
-  Proof Approach." FSE 2015. Proves PRF security of both inner-keyed and outer-keyed sponge variants. The outer-keyed
-  result covers TreeWrap128's rate-absorbed key initialization (Section 6.2).
-- Dinur, I., Dunkelman, O., and Shamir, A. "New attacks on Keccak-224 and Keccak-256." FSE 2012; published as
-  "Improved practical attacks on round-reduced Keccak" in Journal of Cryptology 27(4), 2014. Reports practical 4-round
-  collisions and 5-round near-collision results in standard Keccak-224/256 settings.
+- **[MRV15]** Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex:
+  Applications to Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Primary security framework for
+  TreeWrap128. Proves beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state
+  keyed duplex (Theorem 2, FKD) in the ideal-permutation model. Theorem 2 (FKD) is used for leaf ciphers; Theorem 1
+  (FKS) is used for the KDF sponge. Used throughout Section 6.
+- **[RFC 9861]** KangarooTwelve and TurboSHAKE.
+- **[RSS11]** Ristenpart, T., Shacham, H., and Shrimpton, T. "Careful with Composition: Limitations of the
+  Indifferentiability Framework." Eurocrypt 2011 (ePrint 2011/339 as "Careful with Composition: Limitations of
+  Indifferentiability and Universal Composability"). Highlights multi-stage composition caveats; motivates explicit
+  game-hop arguments in composed proofs.
 - Keccak Team. "Keccak Crunchy Crypto Collision and Pre-image Contest."
   https://keccak.team/crunchy_contest.html. Public contest record for reduced-round Keccak[c=160] instances, including
   6-round collision solutions.
-- Duc, A., Guo, J., Peyrin, T., and Wei, L. "Unaligned Rebound Attack - Application to Keccak." IACR ePrint 2011/420.
-  Gives differential distinguishers up to 8 rounds of Keccak internal permutations.
-- Aumasson, J.-P. and Meier, W. "Zero-sum distinguishers for reduced Keccak-f and for the core functions of Luffa and
-  Hamsi." 2009. https://www.aumasson.jp/data/papers/AM09.pdf. Presents zero-sum distinguishers up to 16 rounds.
+- Keccak Team. "Third-party cryptanalysis." https://keccak.team/third_party.html. Curated summary table of published
+  cryptanalysis results and round counts across Keccak-family modes and raw permutations.
 
 ## 10. Test Vectors
 
