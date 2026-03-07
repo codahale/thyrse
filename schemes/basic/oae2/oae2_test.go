@@ -17,7 +17,7 @@ func TestNewReader(t *testing.T) {
 	t.Run("invalid block size", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
-				t.Errorf("expected panic for blockSize=0")
+				t.Fatal("NewReader() did not panic")
 			}
 		}()
 		oae2.NewReader(thyrse.New("test"), nil, 0)
@@ -34,30 +34,26 @@ func TestNewReader(t *testing.T) {
 
 		input := []byte(strings.Repeat("this is a test of the oae2 stream.", 10))
 
-		// Write data
 		n, err := w.Write(input)
 		if err != nil {
-			t.Fatalf("unexpected error during write: %v", err)
+			t.Fatal(err)
 		}
-		if n != len(input) {
-			t.Fatalf("wrote %d bytes, expected %d", n, len(input))
-		}
-
-		// Close writer
-		err = w.Close()
-		if err != nil {
-			t.Fatalf("unexpected error during close: %v", err)
+		if got, want := n, len(input); got != want {
+			t.Fatalf("Write() = %d, want %d", got, want)
 		}
 
-		// Read data
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+
 		r := oae2.NewReader(pReader, &buf, blockSize)
 		output, err := io.ReadAll(r)
 		if err != nil {
-			t.Fatalf("unexpected error during read: %v", err)
+			t.Fatal(err)
 		}
 
-		if !bytes.Equal(input, output) {
-			t.Fatalf("expected output %q, got %q", input, output)
+		if got, want := output, input; !bytes.Equal(got, want) {
+			t.Fatalf("ReadAll() = %q, want %q", got, want)
 		}
 	})
 
@@ -69,22 +65,18 @@ func TestNewReader(t *testing.T) {
 		blockSize := 64
 
 		w := oae2.NewWriter(pWriter, &buf, blockSize)
-
-		// Close writer
-		err := w.Close()
-		if err != nil {
-			t.Fatalf("unexpected error during close: %v", err)
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
 		}
 
-		// Read data
 		r := oae2.NewReader(pReader, &buf, blockSize)
 		output, err := io.ReadAll(r)
 		if err != nil {
-			t.Fatalf("unexpected error during read: %v", err)
+			t.Fatal(err)
 		}
 
-		if len(output) != 0 {
-			t.Fatalf("expected empty output, got %q", output)
+		if got, want := len(output), 0; got != want {
+			t.Fatalf("ReadAll() len = %d, want %d", got, want)
 		}
 	})
 
@@ -99,30 +91,26 @@ func TestNewReader(t *testing.T) {
 
 		input := bytes.Repeat([]byte("A"), blockSize)
 
-		// Write data
 		n, err := w.Write(input)
 		if err != nil {
-			t.Fatalf("unexpected error during write: %v", err)
+			t.Fatal(err)
 		}
-		if n != len(input) {
-			t.Fatalf("wrote %d bytes, expected %d", n, len(input))
-		}
-
-		// Close writer
-		err = w.Close()
-		if err != nil {
-			t.Fatalf("unexpected error during close: %v", err)
+		if got, want := n, len(input); got != want {
+			t.Fatalf("Write() = %d, want %d", got, want)
 		}
 
-		// Read data
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+
 		r := oae2.NewReader(pReader, &buf, blockSize)
 		output, err := io.ReadAll(r)
 		if err != nil {
-			t.Fatalf("unexpected error during read: %v", err)
+			t.Fatal(err)
 		}
 
-		if !bytes.Equal(input, output) {
-			t.Fatalf("expected output %q, got %q", input, output)
+		if got, want := output, input; !bytes.Equal(got, want) {
+			t.Fatalf("ReadAll() = %q, want %q", got, want)
 		}
 	})
 
@@ -143,8 +131,8 @@ func TestNewReader(t *testing.T) {
 
 		r := oae2.NewReader(pReader, bytes.NewReader(data), blockSize)
 		_, err := io.ReadAll(r)
-		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Fatalf("expected ErrInvalidCiphertext, got %v", err)
+		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Fatalf("ReadAll() err = %v, want %v", got, want)
 		}
 	})
 
@@ -175,8 +163,8 @@ func TestNewReader(t *testing.T) {
 
 		r := oae2.NewReader(pReader, bytes.NewReader(data), blockSize)
 		_, err := io.ReadAll(r)
-		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Fatalf("expected ErrInvalidCiphertext, got %v", err)
+		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Fatalf("ReadAll() err = %v, want %v", got, want)
 		}
 	})
 
@@ -197,8 +185,8 @@ func TestNewReader(t *testing.T) {
 
 		r := oae2.NewReader(pReader, bytes.NewReader(data), blockSize)
 		_, err := io.ReadAll(r)
-		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Fatalf("expected thyrse.ErrInvalidCiphertext, got %v", err)
+		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Fatalf("ReadAll() err = %v, want %v", got, want)
 		}
 	})
 
@@ -221,8 +209,8 @@ func TestNewReader(t *testing.T) {
 
 		r := oae2.NewReader(pReader, bytes.NewReader(data), blockSize)
 		_, err := io.ReadAll(r)
-		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Fatalf("expected ErrInvalidCiphertext, got %v", err)
+		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Fatalf("ReadAll() err = %v, want %v", got, want)
 		}
 	})
 }
@@ -234,8 +222,8 @@ func TestWriter_Write(t *testing.T) {
 
 		// Write enough to trigger a flush (>= blockSize).
 		_, err := w.Write(bytes.Repeat([]byte("A"), 64))
-		if !errors.Is(err, ew.Err) {
-			t.Errorf("expected %v, got %v", ew.Err, err)
+		if got, want := err, ew.Err; !errors.Is(got, want) {
+			t.Errorf("Write() err = %v, want %v", got, want)
 		}
 	})
 }
@@ -251,7 +239,7 @@ func TestWriter_Close(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := w.Close(); err != nil {
-			t.Errorf("expected nil on second close, got %v", err)
+			t.Errorf("Close() err = %v, want nil", err)
 		}
 	})
 }
@@ -260,8 +248,11 @@ func TestReader_Read(t *testing.T) {
 	t.Run("empty read", func(t *testing.T) {
 		r := oae2.NewReader(thyrse.New("example"), bytes.NewReader(nil), 64)
 		n, err := r.Read(nil)
-		if n != 0 || err != nil {
-			t.Errorf("expected 0, nil; got %d, %v", n, err)
+		if got, want := n, 0; got != want {
+			t.Errorf("Read() = %d, want %d", got, want)
+		}
+		if err != nil {
+			t.Errorf("Read() err = %v, want nil", err)
 		}
 	})
 
@@ -270,8 +261,8 @@ func TestReader_Read(t *testing.T) {
 		r := oae2.NewReader(thyrse.New("example"), er, 64)
 
 		_, err := r.Read(make([]byte, 100))
-		if !errors.Is(err, er.Err) {
-			t.Errorf("expected %v, got %v", er.Err, err)
+		if got, want := err, er.Err; !errors.Is(got, want) {
+			t.Errorf("Read() err = %v, want %v", got, want)
 		}
 	})
 }
@@ -280,7 +271,7 @@ func TestNewWriter(t *testing.T) {
 	t.Run("invalid block size", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
-				t.Errorf("expected panic for blockSize=0")
+				t.Fatal("NewWriter() did not panic")
 			}
 		}()
 		oae2.NewWriter(thyrse.New("test"), nil, 0)
@@ -350,29 +341,15 @@ func Example() {
 	// plaintext  = hello world
 }
 
-var lengths = []struct {
-	name string
-	n    int
-}{
-	{"16B", 16},
-	{"32B", 32},
-	{"64B", 64},
-	{"128B", 128},
-	{"256B", 256},
-	{"1KiB", 1024},
-	{"16KiB", 16 * 1024},
-	{"1MiB", 1024 * 1024},
-}
-
 func BenchmarkWriter(b *testing.B) {
 	p := thyrse.New("example")
 	p.Mix("key", []byte("it's a key"))
 
-	for _, length := range lengths {
-		b.Run(length.name, func(b *testing.B) {
-			plaintext := make([]byte, length.n)
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			plaintext := make([]byte, size.N)
 
-			b.SetBytes(int64(length.n))
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
 				w := oae2.NewWriter(p.Clone(), io.Discard, 64)
@@ -392,10 +369,10 @@ func BenchmarkReader(b *testing.B) {
 	p := thyrse.New("example")
 	p.Mix("key", []byte("it's a key"))
 
-	for _, length := range lengths {
-		b.Run(length.name, func(b *testing.B) {
-			plaintext := make([]byte, length.n)
-			ciphertext := bytes.NewBuffer(make([]byte, 0, length.n))
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			plaintext := make([]byte, size.N)
+			ciphertext := bytes.NewBuffer(make([]byte, 0, size.N))
 			w := oae2.NewWriter(p.Clone(), ciphertext, 64)
 			r := bytes.NewReader(plaintext)
 			if _, err := io.Copy(w, r); err != nil {
@@ -405,7 +382,7 @@ func BenchmarkReader(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			b.SetBytes(int64(length.n))
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 
 			for b.Loop() {
@@ -428,7 +405,7 @@ func FuzzReader(f *testing.F) {
 		r := oae2.NewReader(thyrse.New("fuzz"), bytes.NewReader(data), 64)
 		v, err := io.ReadAll(r)
 		if err == nil {
-			t.Errorf("ReadAll(data=%x) = plaintext=%x, want = err", data, v)
+			t.Errorf("ReadAll(data=%x) = plaintext=%x, want error", data, v)
 		}
 	})
 }
