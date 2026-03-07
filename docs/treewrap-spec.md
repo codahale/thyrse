@@ -617,7 +617,7 @@ hop replaces only the KDF; all oracles and winning conditions are otherwise iden
    evaluation is therefore functionally independent of the leaf ciphers and final-node Duplex.
 
 2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a single-evaluation keyed sponge (absorb context, squeeze
-   once) with uniformly random master key $K$. By the outer-keyed sponge result (ADMV15, Section 6.2), after the
+   once) with uniformly random master key $K$. By the outer-keyed sponge result (ADMV15; see Section 6.2), after the
    init permutation the state is uniformly random. MRV15 Theorem 1 (FKS) applies: the KDF's output on distinct
    context strings $X$ is indistinguishable from a PRF with advantage at most
    $\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$, where
