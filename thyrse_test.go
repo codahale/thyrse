@@ -14,8 +14,8 @@ func TestDerive(t *testing.T) {
 		p := New("test")
 		out := p.Derive("output", nil, 32)
 
-		if len(out) != 32 {
-			t.Fatalf("got %d bytes, want 32", len(out))
+		if got, want := len(out), 32; got != want {
+			t.Fatalf("Derive() len = %d, want %d", got, want)
 		}
 	})
 
@@ -51,8 +51,8 @@ func TestDerive(t *testing.T) {
 		p.Mix("nonce", []byte("nonce-value"))
 		out := p.Derive("output", nil, 64)
 
-		if len(out) != 64 {
-			t.Fatalf("got %d bytes, want 64", len(out))
+		if got, want := len(out), 64; got != want {
+			t.Fatalf("Derive() len = %d, want %d", got, want)
 		}
 
 		p2 := New("test")
@@ -136,8 +136,8 @@ func TestSeal(t *testing.T) {
 			t.Fatalf("Open: %v", err)
 		}
 
-		if len(opened) != 0 {
-			t.Fatalf("got %d bytes, want 0", len(opened))
+		if got, want := len(opened), 0; got != want {
+			t.Fatalf("Open() len = %d, want %d", got, want)
 		}
 	})
 
@@ -263,8 +263,8 @@ func TestMask(t *testing.T) {
 		dec.Mix("key", key)
 		pt := dec.Unmask("msg", nil, ct)
 
-		if len(pt) != 0 {
-			t.Fatalf("got %d bytes, want 0", len(pt))
+		if got, want := len(pt), 0; got != want {
+			t.Fatalf("Unmask() len = %d, want %d", got, want)
 		}
 	})
 
@@ -600,8 +600,8 @@ func TestFork(t *testing.T) {
 		p.Mix("key", []byte("shared-key"))
 
 		clones := p.ForkN("role", []byte("alice"), []byte("bob"))
-		if len(clones) != 2 {
-			t.Fatalf("got %d clones, want 2", len(clones))
+		if got, want := len(clones), 2; got != want {
+			t.Fatalf("ForkN() len = %d, want %d", got, want)
 		}
 
 		outBase := p.Derive("output", nil, 32)
