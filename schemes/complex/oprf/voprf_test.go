@@ -66,14 +66,14 @@ func TestVerifiableFinalize(t *testing.T) {
 	t.Run("valid proof", func(t *testing.T) {
 		_, err := oprf.VerifiableFinalize("example", input, blind, q, evaluatedElement, blindedElement, c, s, 16)
 		if err != nil {
-			t.Errorf("VerifiableFinalize failed: %v", err)
+			t.Errorf("VerifiableFinalize() err = %v, want nil", err)
 		}
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
 		_, err := oprf.VerifiableFinalize("wrong domain", input, blind, q, evaluatedElement, blindedElement, c, s, 16)
 		if err == nil {
-			t.Error("should have failed with wrong domain")
+			t.Error("VerifiableFinalize() err = nil, want error")
 		}
 	})
 
@@ -81,7 +81,7 @@ func TestVerifiableFinalize(t *testing.T) {
 		badC, _ := ristretto255.NewScalar().SetUniformBytes(bytes.Repeat([]byte{1}, 64))
 		_, err := oprf.VerifiableFinalize("example", input, blind, q, evaluatedElement, blindedElement, badC, s, 16)
 		if err == nil {
-			t.Error("should have failed with wrong c")
+			t.Error("VerifiableFinalize() err = nil, want error")
 		}
 	})
 
@@ -89,7 +89,7 @@ func TestVerifiableFinalize(t *testing.T) {
 		badS, _ := ristretto255.NewScalar().SetUniformBytes(bytes.Repeat([]byte{2}, 64))
 		_, err := oprf.VerifiableFinalize("example", input, blind, q, evaluatedElement, blindedElement, c, badS, 16)
 		if err == nil {
-			t.Error("should have failed with wrong s")
+			t.Error("VerifiableFinalize() err = nil, want error")
 		}
 	})
 
@@ -104,13 +104,13 @@ func TestVerifiableFinalize(t *testing.T) {
 
 		_, err := oprf.VerifiableFinalize("example", input, blind, q, evaluatedElement, blindedElement, c, s, 16)
 		if err == nil {
-			t.Error("should have failed with identity public key")
+			t.Error("VerifiableFinalize() err = nil, want error")
 		}
 
 		q = ristretto255.NewGeneratorElement()
 		_, err = oprf.VerifiableFinalize("example", input, blind, q, evaluatedElement, blindedElement, c, s, 16)
 		if err == nil {
-			t.Error("should have failed with identity blinded/evaluated elements")
+			t.Error("VerifiableFinalize() err = nil, want error")
 		}
 	})
 }
@@ -122,7 +122,7 @@ func TestVerifiableBlindEvaluate(t *testing.T) {
 
 		_, _, _, err := oprf.VerifiableBlindEvaluate("example", d, blindedElement)
 		if err == nil {
-			t.Error("should have failed with identity blinded element")
+			t.Error("VerifiableBlindEvaluate() err = nil, want error")
 		}
 	})
 }

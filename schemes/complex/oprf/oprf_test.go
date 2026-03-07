@@ -55,10 +55,10 @@ func TestBlind(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got, want := blind.Equal(ristretto255.NewScalar()), 0; got != want {
-			t.Error("blind should not be zero")
+			t.Error("Blind() blind = zero, want non-zero")
 		}
 		if got, want := blindedElement.Equal(ristretto255.NewIdentityElement()), 0; got != want {
-			t.Error("blindedElement should not be identity")
+			t.Error("Blind() blindedElement = identity, want non-identity")
 		}
 	})
 }
@@ -69,7 +69,7 @@ func TestBlindEvaluate(t *testing.T) {
 		blindedElement := ristretto255.NewIdentityElement()
 		_, err := oprf.BlindEvaluate(d, blindedElement)
 		if err == nil {
-			t.Error("should have failed with identity blinded element")
+			t.Error("BlindEvaluate() err = nil, want error")
 		}
 	})
 }
@@ -83,7 +83,7 @@ func TestFinalize(t *testing.T) {
 		evaluatedElement := ristretto255.NewIdentityElement()
 		_, err := oprf.Finalize("example", input, blind, evaluatedElement, 16)
 		if err == nil {
-			t.Error("should have failed with identity evaluated element")
+			t.Error("Finalize() err = nil, want error")
 		}
 	})
 
@@ -93,7 +93,7 @@ func TestFinalize(t *testing.T) {
 		evaluatedElement := ristretto255.NewGeneratorElement()
 		_, err := oprf.Finalize("example", input, blind, evaluatedElement, 16)
 		if err == nil {
-			t.Error("should have failed with zero blind")
+			t.Error("Finalize() err = nil, want error")
 		}
 	})
 }
@@ -104,7 +104,7 @@ func TestEvaluate(t *testing.T) {
 		input := []byte("input")
 		_, err := oprf.Evaluate("example", d, input, 16)
 		if err == nil {
-			t.Error("should have failed with zero private key (results in identity element)")
+			t.Error("Evaluate() err = nil, want error")
 		}
 	})
 
