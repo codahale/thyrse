@@ -8,7 +8,10 @@ from .kt128 import turboshake128
 from .encodings import encode_string, length_encode
 
 # region: internal_functions
+# Sakura message-hop / chaining-hop framing: '110^{62}' packed LSB-first.
 HOP_FRAME = bytes([0x03]) + bytes(7)
+
+# Sakura interleaving block size for I = infinity (Section 5, Tree Topology).
 SAKURA_SUFFIX = b"\xff\xff"
 
 def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes]:
@@ -18,6 +21,7 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
 
     op = _duplex_encrypt if direction == "E" else _duplex_decrypt
 
+    # Final node: absorb key || LEU64(0) and pad to key the duplex.
     F = _DuplexState(bytearray(200), 0)
     F = _duplex_absorb(F, key + (0).to_bytes(8, "little"))
     F = _duplex_pad_permute(F, 0x08)
@@ -25,13 +29,17 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
     out_parts = [ct0]
 
     if n == 1:
+        # Single node: message hop '11' -> 0x07
         F = _duplex_pad_permute(F, 0x07)
         return out_parts[0], bytes(F.S[:TAU])
 
+    # Multi-node: message hop framing '110^{62}'
     F = _duplex_absorb(F, HOP_FRAME)
 
+    # Leaves 1..n-1: independent, parallel.
     cvs = []
     for i, chunk in enumerate(chunks[1:], start=1):
+        # Absorb key || LEU64(i) and pad to key the leaf duplex.
         L = _DuplexState(bytearray(200), 0)
         L = _duplex_absorb(L, key + i.to_bytes(8, "little"))
         L = _duplex_pad_permute(L, 0x08)
@@ -40,11 +48,14 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
         L = _duplex_pad_permute(L, 0x0B)
         cvs.append(bytes(L.S[:C]))
 
+    # Absorb chain values into final node.
     for cv in cvs:
         F = _duplex_absorb(F, cv)
 
+    # Chaining hop suffix.
     F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
 
+    # Chaining hop '01' -> 0x06
     F = _duplex_pad_permute(F, 0x06)
     return b"".join(out_parts), bytes(F.S[:TAU])
 
@@ -56,6 +67,8 @@ def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
 # endregion
 
 # region: aead_functions
+import hmac
+
 def treewrap128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
     assert len(K) == C, "K must be exactly 32 bytes"
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)

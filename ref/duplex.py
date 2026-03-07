@@ -1,12 +1,14 @@
-from collections import namedtuple
 from .keccak import keccak_p1600
 
 # region: duplex_all
+from collections import namedtuple
+
 R = 168   # Sponge rate (bytes).
 C = 32    # Capacity (bytes); key and chain value size.
 TAU = 32  # Tag size (bytes).
 B = 8192  # Chunk size (bytes).
 
+# S: 200-byte Keccak state (bytearray). pos: current offset into the rate.
 _DuplexState = namedtuple("_DuplexState", ["S", "pos"])
 
 def _duplex_pad_permute(D: _DuplexState, domain_byte: int) -> _DuplexState:
