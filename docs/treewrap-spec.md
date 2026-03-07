@@ -946,7 +946,12 @@ $$
 | IND-CPA  | $0$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$ |
 | INT-CTXT | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
 | IND-CCA2 | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
-| CMT-4    | $Q / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + Q / 2^{8\tau}$ |
+
+CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the bridge decomposition:
+
+$$
+\mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{1}{2^{8\tau}}.
+$$
 
 Where $\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}$,
 $\varepsilon_{\mathrm{ks}} = \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$
@@ -970,7 +975,7 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 | IND-CPA-like confidentiality | Ensure key uniqueness per `EncryptAndMAC` invocation.                                         |
 | INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.                                  |
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
-| CMT-4                        | Ensure derived keys are independent across distinct AEAD contexts.                                |
+| CMT-4                        | Derive `EncryptAndMAC` keys via a collision-resistant mapping from caller-level inputs. The CMT-4 bound for the caller's scheme is $\varepsilon_{\mathrm{cr}}(\text{KDF}) + 1/2^{8\tau}$; see Section 6.10 Cases 2–3. |
 
 ### 7.2 Chunk Reordering, Length Changes, and Empty Input
 
@@ -1197,8 +1202,8 @@ proof-bound figure alone.
 - Coron, J.-S., Dodis, Y., Malinaud, C., and Puniya, P. "Merkle-Damgård Revisited: How to Construct a Hash Function."
   CRYPTO 2005. Applies the MRH indifferentiability composition theorem to hash function constructions; referenced in the
   non-normative note in Section 6.4.
-- Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT 2022. Defines the CMT-4 committing
-  security notion.
+- Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT 2022. Defines the
+  CMT-4 committing security notion (§3, E-notion with $\ell = 4$). Section 6.10 uses this game directly.
 - Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the Generic
   Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2; used in Section 6.9.
 - Namprempre, C., Rogaway, P., and Shrimpton, T. "Reconsidering Generic Composition." EUROCRYPT 2014. Extends the
