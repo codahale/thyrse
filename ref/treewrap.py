@@ -1,10 +1,9 @@
-import hmac
 from .duplex import (
-    R, C, TAU, B,
+    C, TAU, B,
     _DuplexState, _duplex_pad_permute, _duplex_encrypt,
     _duplex_decrypt, _duplex_absorb,
 )
-from .kt128 import turboshake128
+from .turboshake import turboshake128
 from .encodings import encode_string, length_encode
 
 # region: internal_functions

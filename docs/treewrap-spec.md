@@ -1558,7 +1558,7 @@ def keccak_p1600(state: bytearray, rounds: int = 12):
 
 ### TurboSHAKE128
 
-<!-- begin:code:ref/kt128.py:turboshake128 -->
+<!-- begin:code:ref/turboshake.py:turboshake128 -->
 ```python
 def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
     """TurboSHAKE128(M, D, ell) as specified in RFC 9861."""
@@ -1588,7 +1588,7 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
         pos += n
     return bytes(out)
 ```
-<!-- end:code:ref/kt128.py:turboshake128 -->
+<!-- end:code:ref/turboshake.py:turboshake128 -->
 
 ### Integer and String Encodings
 
