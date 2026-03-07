@@ -1061,12 +1061,15 @@ to $2^{64}$, using the same counter model.
 Security interpretation remains the Section 6 bound family evaluated at observed counters, with adversary offline budget
 parameter $t$ treated as an analysis parameter (not an operationally measurable quantity).
 
-**Multi-user security.** For deployments spanning $U$ independent master keys, the total advantage is at most $U$ times
-the per-key bound (union bound). The offline budget $t$ and the $\mathsf{Bad}_{\mathrm{perm}}$ event are global (shared
-across all keys under the same ideal permutation), so $\varepsilon_{\mathrm{cap}}$ must be evaluated with the global
-online query count $\sigma = \sum_u \sigma_u$ across all $U$ keys. Concretely, a deployment with $U$ keys achieves at
-most $U \cdot \varepsilon$ total advantage, where $\varepsilon$ is the single-key bound with $\sigma$ set to the global
-total and per-key workload counters for the remaining terms.
+**Multi-user security.** For deployments spanning $U$ independent master keys, the
+$\mathsf{Bad}_{\mathrm{perm}}$ event is global (a capacity collision among *any* pair of the system-wide
+$\sigma + t$ evaluations), so $\varepsilon_{\mathrm{cap}}$ is charged once with $\sigma = \sum_u \sigma_u$.
+The remaining per-key terms (online-vs-offline key recovery, context collisions, and bare advantages)
+are independent across keys and summed via union bound. The total multi-user advantage is:
+
+$$
+\mathrm{Adv}_{\mathrm{multi}} \le \varepsilon_{\mathrm{cap}}(\sigma_{\mathrm{global}}, t) + U \cdot \left(\frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\right).
+$$
 
 Non-normative sensitivity profiles for reviewers:
 
