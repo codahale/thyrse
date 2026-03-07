@@ -30,12 +30,12 @@ func TestKeyGen(t *testing.T) {
 			t.Error("group key is identity")
 		}
 
-		if got := len(signers); got != 5 {
-			t.Errorf("got %d signers, want 5", got)
+		if got, want := len(signers), 5; got != want {
+			t.Errorf("len(signers) = %d, want %d", got, want)
 		}
 
-		if got := len(verifyingShares); got != 5 {
-			t.Errorf("got %d verifying shares, want 5", got)
+		if got, want := len(verifyingShares), 5; got != want {
+			t.Errorf("len(verifyingShares) = %d, want %d", got, want)
 		}
 
 		for i, s := range signers {
@@ -56,21 +56,21 @@ func TestKeyGen(t *testing.T) {
 	t.Run("threshold too low", func(t *testing.T) {
 		_, _, _, err := frost.KeyGen(kgDomain, 5, 1, drbg.Data(64))
 		if err == nil {
-			t.Error("expected error for threshold < 2")
+			t.Error("KeyGen() err = nil, want error")
 		}
 	})
 
 	t.Run("threshold exceeds max signers", func(t *testing.T) {
 		_, _, _, err := frost.KeyGen(kgDomain, 2, 3, drbg.Data(64))
 		if err == nil {
-			t.Error("expected error for threshold > maxSigners")
+			t.Error("KeyGen() err = nil, want error")
 		}
 	})
 
 	t.Run("insufficient randomness", func(t *testing.T) {
 		_, _, _, err := frost.KeyGen(kgDomain, 5, 3, drbg.Data(32))
 		if err == nil {
-			t.Error("expected error for insufficient randomness")
+			t.Error("KeyGen() err = nil, want error")
 		}
 	})
 }
@@ -100,11 +100,11 @@ func TestSignAndVerify(t *testing.T) {
 		for i, idx := range subset {
 			shares[i], err = signers[idx].Sign(signDomain, nonces[i], message, commitments)
 			if err != nil {
-				t.Fatalf("signer %d failed: %v", signers[idx].Identifier(), err)
+				t.Fatalf("Sign() err = %v, want nil", err)
 			}
 
-			if got := len(shares[i]); got != frost.ShareSize {
-				t.Errorf("share size = %d, want %d", got, frost.ShareSize)
+			if got, want := len(shares[i]), frost.ShareSize; got != want {
+				t.Errorf("len(Sign()) = %d, want %d", got, want)
 			}
 		}
 
@@ -114,13 +114,13 @@ func TestSignAndVerify(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if got := len(signature); got != frost.SignatureSize {
-			t.Errorf("signature size = %d, want %d", got, frost.SignatureSize)
+		if got, want := len(signature), frost.SignatureSize; got != want {
+			t.Errorf("len(Aggregate()) = %d, want %d", got, want)
 		}
 
 		// Verify with frost.Verify.
 		if !frost.Verify(signDomain, groupKey, message, signature) {
-			t.Error("frost.Verify failed for valid signature")
+			t.Error("Verify() = false, want true")
 		}
 	})
 
@@ -152,7 +152,7 @@ func TestSignAndVerify(t *testing.T) {
 		}
 
 		if !frost.Verify(signDomain, groupKey, message, signature) {
-			t.Error("frost.Verify failed for valid 2-of-3 signature")
+			t.Error("Verify() = false, want true")
 		}
 	})
 
@@ -225,7 +225,7 @@ func TestSigVerifyCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !valid {
-		t.Error("sig.Verify failed for FROST signature — challenge derivation mismatch")
+		t.Error("Verify() = false, want true")
 	}
 }
 
@@ -259,7 +259,7 @@ func TestVerifyShare(t *testing.T) {
 			id := signers[idx].Identifier()
 			valid := frost.VerifyShare(signDomain, verifyingShares[idx], groupKey, id, message, commitments, shares[i])
 			if !valid {
-				t.Errorf("share from signer %d should be valid", id)
+				t.Errorf("VerifyShare() = false, want true for signer %d", id)
 			}
 		}
 	})
@@ -270,7 +270,7 @@ func TestVerifyShare(t *testing.T) {
 		id := signers[subset[0]].Identifier()
 		valid := frost.VerifyShare(signDomain, verifyingShares[subset[0]], groupKey, id, message, commitments, bad)
 		if valid {
-			t.Error("corrupted share should not verify")
+			t.Error("VerifyShare() = true, want false")
 		}
 	})
 
@@ -279,7 +279,7 @@ func TestVerifyShare(t *testing.T) {
 		// Use signer 1's verifying share for signer 0's share.
 		valid := frost.VerifyShare(signDomain, verifyingShares[subset[1]], groupKey, id, message, commitments, shares[0])
 		if valid {
-			t.Error("share with wrong verifying share should not verify")
+			t.Error("VerifyShare() = true, want false")
 		}
 	})
 }
@@ -314,20 +314,20 @@ func TestVerifyInvalid(t *testing.T) {
 
 	t.Run("wrong message", func(t *testing.T) {
 		if frost.Verify(signDomain, groupKey, []byte("wrong message"), signature) {
-			t.Error("should not verify with wrong message")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
 		if frost.Verify("wrong-domain", groupKey, message, signature) {
-			t.Error("should not verify with wrong domain")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
 	t.Run("wrong group key", func(t *testing.T) {
 		otherGroupKey, _, _, _ := frost.KeyGen(kgDomain, 3, 2, drbg.Data(64))
 		if frost.Verify(signDomain, otherGroupKey, message, signature) {
-			t.Error("should not verify with wrong group key")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -335,7 +335,7 @@ func TestVerifyInvalid(t *testing.T) {
 		bad := slices.Clone(signature)
 		bad[0] ^= 0xff
 		if frost.Verify(signDomain, groupKey, message, bad) {
-			t.Error("should not verify with corrupted R")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -343,19 +343,19 @@ func TestVerifyInvalid(t *testing.T) {
 		bad := slices.Clone(signature)
 		bad[34] ^= 0xff
 		if frost.Verify(signDomain, groupKey, message, bad) {
-			t.Error("should not verify with corrupted s")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
 	t.Run("short signature", func(t *testing.T) {
 		if frost.Verify(signDomain, groupKey, message, signature[:frost.SignatureSize-1]) {
-			t.Error("should not verify short signature")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
 	t.Run("long signature", func(t *testing.T) {
 		if frost.Verify(signDomain, groupKey, message, append(signature, 0)) {
-			t.Error("should not verify long signature")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -365,7 +365,7 @@ func TestVerifyInvalid(t *testing.T) {
 			bad[i] = 0xff
 		}
 		if frost.Verify(signDomain, groupKey, message, bad) {
-			t.Error("should not verify non-canonical s")
+			t.Error("Verify() = true, want false")
 		}
 	})
 }
@@ -389,7 +389,7 @@ func TestSignErrors(t *testing.T) {
 		// Signer 4 (index 3) is not in commitments for signers 1,2,3.
 		_, err := signers[3].Sign(signDomain, nonces[0], message, commitments)
 		if err == nil {
-			t.Error("expected error for missing signer")
+			t.Error("Sign() err = nil, want error")
 		}
 	})
 
@@ -397,7 +397,7 @@ func TestSignErrors(t *testing.T) {
 		dupes := []frost.Commitment{commitments[0], commitments[0], commitments[1]}
 		_, err := signers[0].Sign(signDomain, nonces[0], message, dupes)
 		if err == nil {
-			t.Error("expected error for duplicate identifiers")
+			t.Error("Sign() err = nil, want error")
 		}
 	})
 }
@@ -414,7 +414,7 @@ func TestAggregateErrors(t *testing.T) {
 		commitments := []frost.Commitment{{Identifier: 1, Hiding: make([]byte, 32), Binding: make([]byte, 32)}}
 		_, err := frost.Aggregate(signDomain, groupKey, []byte("msg"), commitments, [][]byte{})
 		if err == nil {
-			t.Error("expected error for mismatched lengths")
+			t.Error("Aggregate() err = nil, want error")
 		}
 	})
 
@@ -423,7 +423,7 @@ func TestAggregateErrors(t *testing.T) {
 		badShare := bytes.Repeat([]byte{0xff}, 32)
 		_, err := frost.Aggregate(signDomain, groupKey, []byte("msg"), commitments, [][]byte{badShare})
 		if err == nil {
-			t.Error("expected error for invalid share encoding")
+			t.Error("Aggregate() err = nil, want error")
 		}
 	})
 }
