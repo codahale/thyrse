@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
@@ -16,10 +17,11 @@ func TestLengthEncode(t *testing.T) {
 		{256, []byte{0x01, 0x00, 0x02}},
 		{0x123456, []byte{0x12, 0x34, 0x56, 0x03}},
 	}
-	for _, tc := range tests {
-		got := LengthEncode(tc.x)
-		if !bytes.Equal(got, tc.want) {
-			t.Errorf("LengthEncode(%d) = %x, want %x", tc.x, got, tc.want)
-		}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%d", tt.x), func(t *testing.T) {
+			if got, want := LengthEncode(tt.x), tt.want; !bytes.Equal(got, want) {
+				t.Errorf("LengthEncode(%d) = %x, want %x", tt.x, got, want)
+			}
+		})
 	}
 }
