@@ -873,7 +873,7 @@ IND-CCA2 follows from IND-CPA and INT-CTXT via the generic composition theorem o
 random key:
 
 $$
-\mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} + \mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}.
+\mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} + 2\,\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}.
 $$
 
 An IND-CCA2 adversary has access to both an encryption oracle and a decryption oracle. By INT-CTXT, the decryption
@@ -887,7 +887,7 @@ $\varepsilon_{\mathrm{cap}}$ per the Section 6.1 convention) and
 $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}$. Therefore:
 
 $$
-\mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \frac{S}{2^{8\tau}}.
+\mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \frac{2S}{2^{8\tau}}.
 $$
 
 **Step 3: Total bound.** The total bound follows from the decomposition in Section 6.5.
@@ -965,7 +965,7 @@ $$
 |----------|-------------------------------|-------|
 | IND-CPA  | $0$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$ |
 | INT-CTXT | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
-| IND-CCA2 | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
+| IND-CCA2 | $2S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}$ |
 
 CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the bridge decomposition:
 
