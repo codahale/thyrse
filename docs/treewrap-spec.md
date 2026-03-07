@@ -38,107 +38,92 @@ and an output length `l` in bytes.
 
 ## 4. Duplex
 
-A Duplex operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
-TurboSHAKE128. It uses five domain separation bytes, reserved for TreeWrap128:
-
-| Byte   | Usage                           | Procedure(s)                     | Node type |
-|--------|---------------------------------|----------------------------------|-----------|
-| `0x08` | Init (key/index absorption)     | `init`                           | inner     |
-| `0x0B` | Leaf chain value (Sakura inner)  | `chain_value`                    | inner     |
-| `0x09` | AEAD key derivation             | `TreeWrap128`                    | inner     |
-| `0x07` | Tag, n=1 (Sakura single final)  | `EncryptAndMAC`, `DecryptAndMAC` | final     |
-| `0x06` | Tag, n>1 (Sakura chaining final)| `EncryptAndMAC`, `DecryptAndMAC` | final     |
-
-> [!NOTE]
-> **Operational budgeting guidance.** For deployment-level guidance on budgeting Keccak-p calls across multiple
-> components (TreeWrap128, TurboSHAKE128, KangarooTwelve), see Appendix C (non-normative).
+The duplex operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
+TurboSHAKE128. The `domain_byte` parameter to `_duplex_pad_permute` is supplied by the caller; Section 5 defines
+the five domain separation bytes used by TreeWrap128.
 
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
 into the rate rather than XORing plaintext into it. This is the Overwrite-mode style analyzed in Bertoni et al.
 (Section 6.2, Algorithm 5; Theorem 2) and used in Section 6. Intermediate (non-final) encrypt/decrypt blocks fill the
-full R = 168 byte rate and permute without padding; only terminal operations (`init`, `chain_value`, and the tag
-`pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply TurboSHAKE-style padding via `pad_permute`. For full-rate
+full R = 168 byte rate and permute without padding; only terminal operations (initialization, chain value finalization, and the tag
+`_duplex_pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply TurboSHAKE-style padding via `pad_permute`. For full-rate
 blocks, a write-only state update is also faster than read-XOR-write on most architectures.
 
-> **Rate distinction.** The `init` operation absorbs at effective rate R-1 = 167 bytes: padding (domain byte at `pos`,
+> **Rate distinction.** Initialization absorbs at effective rate R-1 = 167 bytes: padding (domain byte at `pos`,
 > `0x80` at position R-1) requires one byte reserved for the domain/padding frame, so `pad_permute` triggers when `pos`
 > reaches R-1. Intermediate encrypt/decrypt blocks use the full R = 168 byte rate with no padding overhead, permuting
-> via raw `keccak_p1600` when `pos` reaches R. Terminal operations (`chain_value` and the tag `pad_permute`) call
+> via raw `keccak_p1600` when `pos` reaches R. Terminal operations (chain value finalization and the tag `_duplex_pad_permute`) call
 > `pad_permute` at whatever `pos` the final partial block leaves, accommodating both full and partial final blocks.
 
-The Duplex is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
+The duplex is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
 Appendix B.
 
 ```python
+from collections import namedtuple
+
 R = 168   # Sponge rate (bytes).
 C = 32    # Capacity (bytes); key and chain value size.
 TAU = 32  # Tag size (bytes).
 B = 8192  # Chunk size (bytes).
 
-class Duplex:
-    def __init__(self):
-        self.S = bytearray(200)
-        self.pos = 0
+# S: 200-byte Keccak state (bytearray). pos: current offset into the rate.
+_DuplexState = namedtuple("_DuplexState", ["S", "pos"])
 
-    def pad_permute(self, domain_byte: int):
-        self.S[self.pos] ^= domain_byte
-        self.S[R - 1] ^= 0x80
-        keccak_p1600(self.S)
-        self.pos = 0
+def _duplex_pad_permute(D: _DuplexState, domain_byte: int) -> _DuplexState:
+    """Apply TurboSHAKE padding and permute. Resets pos to 0."""
+    S = bytearray(D.S)
+    S[D.pos] ^= domain_byte
+    S[R - 1] ^= 0x80
+    keccak_p1600(S)
+    return _DuplexState(S, 0)
 
-    def init(self, key: bytes, index: int):
-        for b in key + index.to_bytes(8, "little"):
-            self.S[self.pos] ^= b
-            self.pos += 1
-            if self.pos == R - 1:
-                self.pad_permute(0x08)
-        self.pad_permute(0x08)
+def _duplex_encrypt(D: _DuplexState, plaintext: bytes) -> tuple[_DuplexState, bytes]:
+    """Encrypt plaintext, overwriting the rate with ciphertext."""
+    S, pos = bytearray(D.S), D.pos
+    ct = bytearray()
+    for p in plaintext:
+        ct.append(p ^ S[pos])
+        S[pos] = ct[-1]
+        pos += 1
+        if pos == R:
+            keccak_p1600(S)
+            pos = 0
+    return _DuplexState(S, pos), bytes(ct)
 
-    def encrypt(self, plaintext: bytes) -> bytes:
-        ct = bytearray()
-        for p in plaintext:
-            ct.append(p ^ self.S[self.pos])
-            self.S[self.pos] = ct[-1]
-            self.pos += 1
-            if self.pos == R:
-                keccak_p1600(self.S)
-                self.pos = 0
-        return bytes(ct)
+def _duplex_decrypt(D: _DuplexState, ciphertext: bytes) -> tuple[_DuplexState, bytes]:
+    """Decrypt ciphertext, overwriting the rate with ciphertext."""
+    S, pos = bytearray(D.S), D.pos
+    pt = bytearray()
+    for c in ciphertext:
+        pt.append(c ^ S[pos])
+        S[pos] = c
+        pos += 1
+        if pos == R:
+            keccak_p1600(S)
+            pos = 0
+    return _DuplexState(S, pos), bytes(pt)
 
-    def decrypt(self, ciphertext: bytes) -> bytes:
-        pt = bytearray()
-        for c in ciphertext:
-            pt.append(c ^ self.S[self.pos])
-            self.S[self.pos] = c
-            self.pos += 1
-            if self.pos == R:
-                keccak_p1600(self.S)
-                self.pos = 0
-        return bytes(pt)
-
-    def absorb(self, data: bytes):
-        """XOR-absorb data into the rate."""
-        for b in data:
-            self.S[self.pos] ^= b
-            self.pos += 1
-            if self.pos == R:
-                keccak_p1600(self.S)
-                self.pos = 0
-
-    def chain_value(self) -> bytes:
-        self.pad_permute(0x0B)
-        return bytes(self.S[:C])
+def _duplex_absorb(D: _DuplexState, data: bytes) -> _DuplexState:
+    """XOR-absorb data into the rate."""
+    S, pos = bytearray(D.S), D.pos
+    for b in data:
+        S[pos] ^= b
+        pos += 1
+        if pos == R:
+            keccak_p1600(S)
+            pos = 0
+    return _DuplexState(S, pos)
 ```
 
 > [!NOTE]
-> `pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $R-1$). `init` uses domain byte
-> `0x08`; `chain_value` uses `0x0B`; the tag `pad_permute` in `EncryptAndMAC`/`DecryptAndMAC` uses `0x07` (n=1) or
-> `0x06` (n>1). Intermediate encrypt/decrypt blocks use the full $R = 168$ byte rate and permute without padding
-> (`keccak_p1600` directly), matching standard unpadded sponge absorb for non-final blocks. Both `encrypt` and
-> `decrypt` overwrite the rate with ciphertext, so state evolution is identical regardless of direction. `absorb`
-> XOR-absorbs data into the rate without padding, permuting via raw `keccak_p1600` when the rate is full. `chain_value`
-> calls `pad_permute` to mix all data before squeezing; the output fits in a single squeeze block since
-> $C = 32 \ll R = 168$.
+> `_duplex_pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $R-1$). Initialization
+> uses domain byte `0x08`; chain value finalization uses `0x0B`; the tag `_duplex_pad_permute` in
+> `EncryptAndMAC`/`DecryptAndMAC` uses `0x07` (n=1) or `0x06` (n>1). Intermediate encrypt/decrypt blocks use the full
+> $R = 168$ byte rate and permute without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb
+> for non-final blocks. Both `_duplex_encrypt` and `_duplex_decrypt` overwrite the rate with ciphertext, so state
+> evolution is identical regardless of direction. `_duplex_absorb` XOR-absorbs data into the rate without padding,
+> permuting via raw `keccak_p1600` when the rate is full. Chain value finalization calls `_duplex_pad_permute` to mix
+> all data before squeezing; the output fits in a single squeeze block since $C = 32 \ll R = 168$.
 
 ## 5. TreeWrap128
 
@@ -153,13 +138,13 @@ The encodings used here (`left_encode`, `encode_string`, `length_encode`) are de
 ### Tree Topology
 
 TreeWrap128 uses the Sakura final-node-growing topology with kangaroo hopping, following KangarooTwelve (ePrint
-2016/770, Sections 1 and 3.3). The final node (index 0) is a Duplex that encrypts chunk 0 directly (the "message
+2016/770, Sections 1 and 3.3). The final node (index 0) is a duplex that encrypts chunk 0 directly (the "message
 hop"). Chunks 1 through $n-1$ are processed by independent leaf Duplexes that produce chain values (the "chaining hop").
 
 For $n = 1$, the final node encrypts the entire message and produces the tag via `pad_permute(0x07)`. The Sakura frame
 bits are: message hop `'1'` + final `'1'` = `'11'`, yielding domain byte `0x07` (delimited suffix `'111'`).
 
-For $n > 1$, the final node is a Duplex that:
+For $n > 1$, the final node is a duplex that:
 
 1. Inits with `key || LEU64(0)` via `pad_permute(0x08)`.
 2. Encrypts chunk 0 (the message hop).
@@ -191,6 +176,16 @@ tag (`0x06`, suffix `'01'`) and single-node tag (`0x07`, suffix `'11'`). Final-n
 the last suffix bit: `1` for final, `0` for inner.
 
 The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (Section 5.1).
+
+The following table summarizes the five domain separation bytes used by TreeWrap128:
+
+| Byte   | Usage                           | Sakura suffix | Node type |
+|--------|---------------------------------|---------------|-----------|
+| `0x07` | Tag, n=1 (single final)         | `11`          | final     |
+| `0x06` | Tag, n>1 (chaining final)       | `01`          | final     |
+| `0x0B` | Leaf chain value                | `110`         | inner     |
+| `0x08` | Init (key/index absorption)     | `000`         | inner     |
+| `0x09` | AEAD key derivation             | `100`         | inner     |
 
 **Domain separation.** The key is in the sponge state via `init` (domain byte `0x08`), not prepended to an input
 string. Both the final node and every leaf call `init(key, index)` with distinct indices: the final node uses index 0,
@@ -237,38 +232,44 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
     n = max(1, -(-len(data) // B))
     chunks = [data[i * B : (i + 1) * B] for i in range(n)]
 
-    # Final node: always present, always encrypts chunk 0.
-    F = Duplex()
-    F.init(key, 0)
-    op = F.encrypt if direction == "E" else F.decrypt
-    out_parts = [op(chunks[0])]
+    op = _duplex_encrypt if direction == "E" else _duplex_decrypt
+
+    # Final node: absorb key || LEU64(0) and pad to key the duplex.
+    F = _DuplexState(bytearray(200), 0)
+    F = _duplex_absorb(F, key + (0).to_bytes(8, "little"))
+    F = _duplex_pad_permute(F, 0x08)
+    F, ct0 = op(F, chunks[0])
+    out_parts = [ct0]
 
     if n == 1:
         # Single node: message hop '11' -> 0x07
-        F.pad_permute(0x07)
+        F = _duplex_pad_permute(F, 0x07)
         return out_parts[0], bytes(F.S[:TAU])
 
     # Multi-node: message hop framing '110^{62}'
-    F.absorb(HOP_FRAME)
+    F = _duplex_absorb(F, HOP_FRAME)
 
     # Leaves 1..n-1: independent, parallel.
     cvs = []
     for i, chunk in enumerate(chunks[1:], start=1):
-        L = Duplex()
-        L.init(key, i)
-        out_parts.append(
-            L.encrypt(chunk) if direction == "E" else L.decrypt(chunk))
-        cvs.append(L.chain_value())
+        # Absorb key || LEU64(i) and pad to key the leaf duplex.
+        L = _DuplexState(bytearray(200), 0)
+        L = _duplex_absorb(L, key + i.to_bytes(8, "little"))
+        L = _duplex_pad_permute(L, 0x08)
+        L, ct_i = op(L, chunk)
+        out_parts.append(ct_i)
+        L = _duplex_pad_permute(L, 0x0B)
+        cvs.append(bytes(L.S[:C]))
 
     # Absorb chain values into final node.
     for cv in cvs:
-        F.absorb(cv)
+        F = _duplex_absorb(F, cv)
 
     # Chaining hop suffix.
-    F.absorb(length_encode(n - 1) + SAKURA_SUFFIX)
+    F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
 
     # Chaining hop '01' -> 0x06
-    F.pad_permute(0x06)
+    F = _duplex_pad_permute(F, 0x06)
     return b"".join(out_parts), bytes(F.S[:TAU])
 
 def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
