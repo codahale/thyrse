@@ -1,0 +1,53 @@
+name: TreeWrap Spec Validation
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'docs/treewrap-spec.md'
+      - 'docs/treewrap-test-vectors.json'
+      - 'ref/**'
+      - 'tools/embed_treewrap.py'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'docs/treewrap-spec.md'
+      - 'docs/treewrap-test-vectors.json'
+      - 'ref/**'
+      - 'tools/embed_treewrap.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test-vectors:
+    name: Test Reference Implementation
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.x'
+
+    - name: Run test vectors
+      run: python3 -m unittest ref.test_treewrap -v
+
+  spec-freshness:
+    name: Check Spec Freshness
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.x'
+
+    - name: Embed and check for changes
+      run: |
+        python3 tools/embed_treewrap.py docs/treewrap-spec.md
+        git diff --exit-code docs/treewrap-spec.md
