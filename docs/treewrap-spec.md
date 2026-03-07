@@ -419,6 +419,7 @@ away (at cost $\varepsilon_{\mathrm{cap}}$), the remaining advantage reduces to 
 probabilities over truly uniform values.
 
 Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
+Section 6.10 (CMT-4) is an exception: the adversary controls the keys in that game.
 
 ### 6.2 Keyed-Duplex PRF Framework (MRV15)
 
@@ -610,8 +611,9 @@ Enc/Dec use:                         Enc/Dec use:
 
 Where $\mathrm{ES} = \mathrm{encode\_string}$, $\mathrm{TS128} = \mathrm{TurboSHAKE128}$, $R$ is a lazy random
 function $\{0,1\}^* \to \{0,1\}^{8C}$. The adversary's oracle access depends on the security goal (encryption oracle
-for IND-CPA, encryption + decryption oracles for IND-CCA2, encryption + forgery oracle for INT-CTXT/CMT-4). The game
+for IND-CPA, encryption + decryption oracles for IND-CCA2, encryption + forgery oracle for INT-CTXT). The game
 hop replaces only the KDF; all oracles and winning conditions are otherwise identical to the standard definitions.
+CMT-4 (Section 6.10) does not use this bridge; see that section for its standalone game definition.
 
 **Hop justification.**
 
