@@ -497,8 +497,11 @@ byte-string $K \| \mathrm{LEU64}(\mathit{index})$ is XOR'd into rate positions,
 followed by pad-and-permute with domain byte $\mathtt{0x08}$. This is the
 *outer-keyed sponge* construction $\mathrm{Sponge}(K \| M)$. Andreeva, Daemen,
 Mennink, and Van Assche (ADMV15, FSE 2015) prove PRF security of both inner-
-and outer-keyed sponges using a modular proof approach, obtaining bounds of the
-same form as MRV15. After the init permutation call, the full state is
+and outer-keyed sponges using a modular proof approach, obtaining bounds with the
+same dominant terms as MRV15 ($M^2/2^c$ and $\mu N/2^c$). The ADMV15 outer-keyed
+bound includes additional key-derivation terms ($\lambda(N)$ and a $2(k/r)N/2^b$
+term from the root-key derivation step); both are negligible at TreeWrap128's
+parameters ($k/r < 1$, $b = 1600$). After the init permutation call, the full state is
 $\pi(K \| \mathit{index} \| \mathtt{0x08}\text{-pad} \| 0^c)$; since $K$ is
 secret and uniform, this $\pi$-input is unique with overwhelming probability,
 and the resulting state is uniformly random over the adversary's view. The
