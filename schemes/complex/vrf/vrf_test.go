@@ -20,55 +20,55 @@ func TestVerify(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		valid, got := vrf.Verify("domain", q, []byte("message"), proof, 32)
 		if !valid {
-			t.Errorf("Verify() = false, want = true")
+			t.Errorf("Verify() = false, want true")
 		}
 
 		if got, want := got, prf; !bytes.Equal(got, want) {
-			t.Errorf("Verify() output = %x, want = %x", got, want)
+			t.Errorf("Verify() output = %x, want %x", got, want)
 		}
 	})
 
 	t.Run("wrong prover", func(t *testing.T) {
 		valid, got := vrf.Verify("domain", qX, []byte("message"), proof, 32)
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Errorf("Verify() = true, want false")
 		}
 
 		if got != nil {
-			t.Errorf("Verify() output = %x, want = nil", got)
+			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
 		valid, got := vrf.Verify("other domain", q, []byte("message"), proof, 32)
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Errorf("Verify() = true, want false")
 		}
 
 		if got != nil {
-			t.Errorf("got = %x, want = nil", got)
+			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
 
 	t.Run("wrong message", func(t *testing.T) {
 		valid, got := vrf.Verify("domain", q, []byte("other message"), proof, 32)
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Errorf("Verify() = true, want false")
 		}
 
 		if got != nil {
-			t.Errorf("got = %x, want = nil", got)
+			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
 
 	t.Run("wrong length", func(t *testing.T) {
 		valid, got := vrf.Verify("domain", q, []byte("message"), proof, 22)
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Errorf("Verify() = true, want false")
 		}
 
 		if got != nil {
-			t.Errorf("got = %x, want = nil", got)
+			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
 
@@ -78,11 +78,11 @@ func TestVerify(t *testing.T) {
 
 		valid, got := vrf.Verify("domain", q, []byte("message"), badC, 32)
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Errorf("Verify() = true, want false")
 		}
 
 		if got != nil {
-			t.Errorf("got = %x, want = nil", got)
+			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
 
@@ -92,11 +92,11 @@ func TestVerify(t *testing.T) {
 
 		valid, got := vrf.Verify("domain", q, []byte("message"), badR, 32)
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Errorf("Verify() = true, want false")
 		}
 
 		if got != nil {
-			t.Errorf("got = %x, want = nil", got)
+			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
 
@@ -106,11 +106,11 @@ func TestVerify(t *testing.T) {
 
 		valid, got := vrf.Verify("domain", q, []byte("message"), badGamma, 32)
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Errorf("Verify() = true, want false")
 		}
 
 		if got != nil {
-			t.Errorf("got = %x, want = nil", got)
+			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
 }
@@ -126,7 +126,7 @@ func FuzzVerify(f *testing.F) {
 	f.Fuzz(func(t *testing.T, proof, message []byte) {
 		valid, prf := vrf.Verify("fuzz", q, message, proof, 32)
 		if valid {
-			t.Errorf("Verify(message=%x, proof=%x) = (true, prf=%x), want = false", message, proof, prf)
+			t.Errorf("Verify(message=%x, proof=%x) = (true, prf=%x), want false", message, proof, prf)
 		}
 	})
 }
