@@ -883,53 +883,53 @@ $$
 Nonce reuse for the same $(K,N,AD)$ is out of scope for this claim and breaks standard nonce-respecting
 IND-CCA2 formulations.
 
-### 6.10 CMT-4 (Fixed Master Key)
+### 6.10 CMT-4
 
-This theorem follows the standard Bellare-Hoang committing-security notion (CMT-4, see Section 9): a ciphertext should not
-admit two distinct valid openings under one fixed secret key. The proof is a composition argument over Section 6.4 plus
-fixed-key injectivity of the internal functions (Lemma 3).
+This theorem follows the Bellare–Hoang CMT-4 committing-security notion [BH22, §3]: a ciphertext should not admit
+two distinct valid openings under any choice of keys. Unlike the fixed-key properties in Sections 6.7–6.9, this is a
+multi-key notion — the adversary controls all inputs including the master keys — and the proof does not flow through
+the bridge theorem (Section 6.4).
 
 ```
 Game CMT-4(A):
-  K <-$ {0,1}^{|K|}
-  (C*, (N, AD, M), (N', AD', M')) <- A^{Enc}
-  require (N, AD, M) != (N', AD', M')
-  require |M| = |M'| = |C*| - tau
-  return Dec(K, N, AD, C*) = M and Dec(K, N', AD', C*) = M'
-
-Oracle Enc(N, AD, M):
-  return TreeWrap128.Encrypt(K, N, AD, M)
+  (C*, (K, N, AD, M), (K', N', AD', M')) <- A^{pi, pi^{-1}}
+  require (K, N, AD, M) != (K', N', AD', M')
+  require |M| = |M'|
+  return TreeWrap128.Encrypt(K, N, AD, M) = C*
+     and TreeWrap128.Encrypt(K', N', AD', M') = C*
 ```
 
-Working in $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$ (Section 6.5):
+The adversary has direct access to the ideal permutation $\pi$ and its inverse (no encryption oracle is needed since the
+scheme is deterministic and the adversary knows the keys). Define $L = \mathrm{KDF}(K, N, AD)$ and
+$L' = \mathrm{KDF}(K', N', AD')$.
 
-Conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
-
-- **Case 1: same context** $(N,AD)=(N',AD')$. Both openings use the same derived key. Since
-  $(N,AD,M) \neq (N',AD',M')$ and the contexts are equal, we must have $M \neq M'$. Because the ciphertext $C^\star$
-  fixes the plaintext length ($|M| = |M'| = |C^\star|$ minus the tag), both messages have identical chunking. Then two
-  different messages opening the same $C^\star$ under the same key and chunking contradict Lemma 3 (fixed-key
-  bijection), so this case is impossible.
-- **Case 2: different contexts** $(N,AD)\neq(N',AD')$. Distinct contexts map to independent random keys in
-  $\mathsf{G}_1$. A dual valid opening requires the adversary to produce a single $C^\star$ whose embedded tag is valid
-  under both derived keys simultaneously.
-
-  **Adversary strategy.** The adversary fixes $C^\star = \mathit{ct}^\star \| T^\star$. One valid opening (say under
-  context $(N,AD)$) fixes $T^\star$ to the unique correct tag for $\mathit{ct}^\star$ under that context's derived key.
-  The second opening requires that $\mathrm{DecryptAndMAC}$ under the independently random key for $(N',AD')$ also
-  produces tag $T^\star$ on $\mathit{ct}^\star$. By the exact uniformity principle (Section 6.1), the
-  tag-squeeze $\pi$-call under the second key has a fresh input, so this second tag is truly uniform
-  over $\{0,1\}^{8\tau}$ and independent of the first, so the match probability is at most $2^{-8\tau}$ per
-  candidate context. Over at most $Q$ candidate contexts (encryption-oracle queries plus the two openings), the union
-  bound gives $\Pr[\text{match}] \leq Q / 2^{8\tau}$.
+- **Case 1: same context, different message.** $(K,N,AD)=(K',N',AD')$, so $M \neq M'$ (since
+  full tuples are distinct). Both openings use the same derived key $L = L'$ and the same chunking
+  (equal-length messages). By Lemma 3 (fixed-key bijection, Section 6.6), the encrypt function is a
+  bijection on equal-length messages for a fixed key. Two different messages cannot produce the same
+  ciphertext. This case is **impossible**.
+- **Case 2: different context, KDF collision.** $(K,N,AD)\neq(K',N',AD')$ but $L = L'$. The
+  $\mathrm{encode\_string}$ encoding is injective and self-delimiting, so distinct $(K,N,AD)$ triples produce
+  distinct KDF input strings. A collision $L = L'$ on distinct inputs is a collision in TurboSHAKE128.
+  In the ideal-permutation model, sponge collision resistance gives
+  $\Pr[\text{Case 2}] \leq (t + \sigma_v)^2 / 2^{c+1}$,
+  where $t$ is the adversary's offline $\pi$-query budget and $\sigma_v$ is the $\pi$-calls for the two
+  verification encryptions in the game.
+- **Case 3: different context, different derived keys.** $L \neq L'$. Both encryptions must produce the
+  same $C^\star = \mathit{ct}^\star \| T^\star$. By domain separation (Section 6.3) and the exact uniformity
+  principle (Section 6.1), the final-node squeeze $\pi$-call under $L'$ has a fresh input (its capacity is
+  distinct from every $\pi$-call under $L$, conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$). The tag under
+  $L'$ is therefore uniform over $\{0,1\}^{8\tau}$ and independent of $T^\star$, so the match probability
+  is at most $1/2^{8\tau}$. The $\neg\mathsf{Bad}_{\mathrm{perm}}$ conditioning cost is subsumed by the
+  $(t + \sigma_v)^2 / 2^{c+1}$ term — both are birthday-on-capacity bounds of the same order.
 
 Therefore:
 
 $$
-\mathrm{Adv}_{\mathrm{CMT\text{-}4}}^{\mathrm{bare}} \le \frac{Q}{2^{8\tau}}.
+\mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{1}{2^{8\tau}}.
 $$
 
-The total bound follows from the decomposition in Section 6.5. For $\tau = 32$, the bare denominator is $2^{256}$.
+For $c = 256$, $\tau = 32$: both terms are $\leq 2^{-128}$ when $t \leq 2^{64}$.
 
 ### 6.11 Summary of Bounds
 
