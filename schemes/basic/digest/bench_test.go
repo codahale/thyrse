@@ -3,19 +3,20 @@ package digest_test
 import (
 	"testing"
 
+	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/basic/digest"
 )
 
 func BenchmarkDigest(b *testing.B) {
 	h := digest.New("com.example.benchmark")
 
-	for _, length := range lengths {
-		b.Run(length.name, func(b *testing.B) {
-			input := make([]byte, length.n)
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			input := make([]byte, size.N)
 			dst := make([]byte, 32)
 
 			b.ReportAllocs()
-			b.SetBytes(int64(length.n))
+			b.SetBytes(int64(size.N))
 			for b.Loop() {
 				h.Reset()
 				h.Write(input)
@@ -23,18 +24,4 @@ func BenchmarkDigest(b *testing.B) {
 			}
 		})
 	}
-}
-
-var lengths = []struct {
-	name string
-	n    int
-}{
-	{"16B", 16},
-	{"32B", 32},
-	{"64B", 64},
-	{"128B", 128},
-	{"256B", 256},
-	{"1KiB", 1024},
-	{"16KiB", 16 * 1024},
-	{"1MiB", 1024 * 1024},
 }
