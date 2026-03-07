@@ -3,3 +3,4 @@
 package keccak
 
 var hasAVX512 = false
+var _ = hasAVX512

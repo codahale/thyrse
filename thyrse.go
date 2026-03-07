@@ -312,7 +312,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsSeal, twKey[:])
 
-	ciphertext, fullTag := treewrap.EncryptAndMAC(ciphertext[:0], &twKey, plaintext)
+	_, fullTag := treewrap.EncryptAndMAC(ciphertext[:0], &twKey, plaintext)
 	clear(twKey[:])
 
 	p.resetChain(opSeal, cv[:], fullTag[:])
