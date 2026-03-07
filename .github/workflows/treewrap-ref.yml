@@ -1,6 +1,7 @@
 name: TreeWrap Spec Validation
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main" ]
     paths:
