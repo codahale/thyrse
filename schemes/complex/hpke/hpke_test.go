@@ -33,14 +33,14 @@ func TestOpen(t *testing.T) {
 	t.Run("wrong receiver", func(t *testing.T) {
 		plaintext, err := hpke.Open("hpke", dX, qS, ciphertext)
 		if err == nil {
-			t.Errorf("Open = %x, want = ErrInvalidCiphertext", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
 	t.Run("wrong sender", func(t *testing.T) {
 		plaintext, err := hpke.Open("hpke", dR, qX, ciphertext)
 		if err == nil {
-			t.Errorf("Open = %x, want = ErrInvalidCiphertext", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
@@ -50,7 +50,7 @@ func TestOpen(t *testing.T) {
 
 		plaintext, err := hpke.Open("hpke", dR, qS, badQE)
 		if err == nil {
-			t.Errorf("Open = %x, want = ErrInvalidCiphertext", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
@@ -60,7 +60,7 @@ func TestOpen(t *testing.T) {
 
 		plaintext, err := hpke.Open("hpke", dR, qS, badCT)
 		if err == nil {
-			t.Errorf("Open = %x, want = ErrInvalidCiphertext", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
@@ -70,7 +70,7 @@ func TestOpen(t *testing.T) {
 
 		plaintext, err := hpke.Open("hpke", dR, qS, badTag)
 		if err == nil {
-			t.Errorf("Open = %x, want = ErrInvalidCiphertext", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 }
