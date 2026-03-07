@@ -997,7 +997,7 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 
 | Property target              | Caller obligation                                                                             |
 |------------------------------|-----------------------------------------------------------------------------------------------|
-| IND-CPA-like confidentiality | Ensure key uniqueness per `EncryptAndMAC` invocation.                                         |
+| IND-CPA-like confidentiality | Ensure keys are unique and computationally indistinguishable from uniform per invocation. Keys derived from low-entropy sources or non-injective mappings degrade the IND-CPA bound by the key's min-entropy deficit: the bridge theorem (Section 6.4) assumes each per-invocation key is an independent draw from a uniform distribution. |
 | INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.                                  |
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
 | CMT-4                        | Derive `EncryptAndMAC` keys via a collision-resistant mapping from caller-level inputs. The CMT-4 bound for the caller's scheme is $\varepsilon_{\mathrm{cr}}(\text{KDF}) + (t + \sigma_v)/2^{8\tau}$; see Section 6.10 Cases 2–3. |
