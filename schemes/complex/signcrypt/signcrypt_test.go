@@ -23,21 +23,21 @@ func TestOpen(t *testing.T) {
 		}
 
 		if got, want := plaintext, []byte("this is a message"); !bytes.Equal(got, want) {
-			t.Errorf("Open() = %x, want = %x", got, want)
+			t.Errorf("Open() = %x, want %x", got, want)
 		}
 	})
 
 	t.Run("wrong receiver", func(t *testing.T) {
 		plaintext, err := signcrypt.Open("signcrypt", dX, qS, ciphertext)
 		if err == nil {
-			t.Errorf("should not have been valid, unsigncrypted = %x", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
 	t.Run("wrong sender", func(t *testing.T) {
 		plaintext, err := signcrypt.Open("signcrypt", dR, qX, ciphertext)
 		if err == nil {
-			t.Errorf("should not have been valid, unsigncrypted = %x", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
@@ -46,7 +46,7 @@ func TestOpen(t *testing.T) {
 		badQE[0] ^= 1
 		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badQE)
 		if err == nil {
-			t.Errorf("should not have been valid, unsigncrypted = %x", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
@@ -55,7 +55,7 @@ func TestOpen(t *testing.T) {
 		badM[33] ^= 1
 		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badM)
 		if err == nil {
-			t.Errorf("should not have been valid, unsigncrypted = %x", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
@@ -64,7 +64,7 @@ func TestOpen(t *testing.T) {
 		badI[len(badI)-61] ^= 1
 		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badI)
 		if err == nil {
-			t.Errorf("should not have been valid, unsigncrypted = %x", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
@@ -73,7 +73,7 @@ func TestOpen(t *testing.T) {
 		badS[len(badS)-30] ^= 1
 		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badS)
 		if err == nil {
-			t.Errorf("should not have been valid, unsigncrypted = %x", plaintext)
+			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 }
