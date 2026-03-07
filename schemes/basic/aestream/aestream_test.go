@@ -111,8 +111,8 @@ func TestWriter_Write(t *testing.T) {
 		w := aestream.NewWriter(thyrse.New("example"), ew)
 
 		_, err := w.Write([]byte("hello"))
-		if !errors.Is(err, ew.Err) {
-			t.Errorf("expected %v, got %v", ew.Err, err)
+		if got, want := err, ew.Err; !errors.Is(got, want) {
+			t.Errorf("Write() err = %v, want %v", got, want)
 		}
 	})
 }
@@ -133,7 +133,7 @@ func TestNewReader(t *testing.T) {
 		r := aestream.NewReader(p2, bytes.NewReader(buf.Bytes()))
 		_, err := io.ReadAll(r)
 		if err == nil {
-			t.Error("expected error on truncated stream, got nil")
+			t.Error("ReadAll() err = nil, want error")
 		}
 	})
 
@@ -155,10 +155,9 @@ func TestNewReader(t *testing.T) {
 		r := aestream.NewReader(p2, bytes.NewReader(truncated))
 		_, err := io.ReadAll(r)
 		if err == nil {
-			t.Error("expected error on truncated header, got nil")
-		}
-		if err != nil && !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Errorf("expected ErrInvalidCiphertext, got %v", err)
+			t.Error("ReadAll() err = nil, want error")
+		} else if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Errorf("ReadAll() err = %v, want %v", got, want)
 		}
 	})
 }
@@ -167,8 +166,11 @@ func TestReader_Read(t *testing.T) {
 	t.Run("empty read", func(t *testing.T) {
 		r := aestream.NewReader(thyrse.New("example"), bytes.NewReader(nil))
 		n, err := r.Read(nil)
-		if n != 0 || err != nil {
-			t.Errorf("expected 0, nil; got %d, %v", n, err)
+		if got, want := n, 0; got != want {
+			t.Errorf("Read() = %d, want %d", got, want)
+		}
+		if err != nil {
+			t.Errorf("Read() err = %v, want nil", err)
 		}
 	})
 
@@ -177,16 +179,16 @@ func TestReader_Read(t *testing.T) {
 		r := aestream.NewReader(thyrse.New("example"), er)
 
 		_, err := r.Read(make([]byte, 100))
-		if !errors.Is(err, er.Err) {
-			t.Errorf("expected %v, got %v", er.Err, err)
+		if got, want := err, er.Err; !errors.Is(got, want) {
+			t.Errorf("Read() err = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("empty stream", func(t *testing.T) {
 		r := aestream.NewReader(thyrse.New("example"), bytes.NewReader(nil))
 		_, err := r.Read(make([]byte, 100))
-		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Errorf("expected ErrInvalidCiphertext, got %v", err)
+		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Errorf("Read() err = %v, want %v", got, want)
 		}
 	})
 
@@ -201,8 +203,8 @@ func TestReader_Read(t *testing.T) {
 
 		r := aestream.NewReader(thyrse.New("example"), bytes.NewReader(data))
 		_, err := io.ReadAll(r)
-		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Errorf("expected ErrInvalidCiphertext, got %v", err)
+		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Errorf("Read() err = %v, want %v", got, want)
 		}
 	})
 
@@ -217,22 +219,22 @@ func TestReader_Read(t *testing.T) {
 
 		r := aestream.NewReader(thyrse.New("example"), bytes.NewReader(data))
 		_, err := io.ReadAll(r)
-		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Errorf("expected ErrInvalidCiphertext, got %v", err)
+		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
+			t.Errorf("Read() err = %v, want %v", got, want)
 		}
 	})
 }
 
 func BenchmarkNewWriter(b *testing.B) {
-	for _, length := range lengths {
-		b.Run(length.name, func(b *testing.B) {
-			b.SetBytes(int64(length.n))
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 
 			p1 := thyrse.New("example")
 			p1.Mix("key", []byte("it's a key"))
 			w := aestream.NewWriter(p1, io.Discard)
-			buf := make([]byte, length.n)
+			buf := make([]byte, size.N)
 
 			for b.Loop() {
 				if _, err := w.Write(buf); err != nil {
@@ -245,15 +247,15 @@ func BenchmarkNewWriter(b *testing.B) {
 
 func BenchmarkNewReader(b *testing.B) {
 	// This is really only useful for compensating for the inability to remove setup costs from BenchmarkReader.
-	for _, length := range lengths {
-		b.Run(length.name, func(b *testing.B) {
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
 			b.ReportAllocs()
 
 			p1 := thyrse.New("example")
 			p1.Mix("key", []byte("it's a key"))
-			ciphertext := bytes.NewBuffer(make([]byte, 0, length.n))
+			ciphertext := bytes.NewBuffer(make([]byte, 0, size.N))
 			w := aestream.NewWriter(p1, ciphertext)
-			buf := make([]byte, length.n)
+			buf := make([]byte, size.N)
 			_, _ = w.Write(buf)
 			_ = w.Close()
 
@@ -269,16 +271,16 @@ func BenchmarkNewReader(b *testing.B) {
 }
 
 func BenchmarkNewReader_Read(b *testing.B) {
-	for _, length := range lengths {
-		b.Run(length.name, func(b *testing.B) {
-			b.SetBytes(int64(length.n))
+	for _, size := range testdata.Sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 
 			p1 := thyrse.New("example")
 			p1.Mix("key", []byte("it's a key"))
-			ciphertext := bytes.NewBuffer(make([]byte, 0, length.n))
+			ciphertext := bytes.NewBuffer(make([]byte, 0, size.N))
 			w := aestream.NewWriter(p1, ciphertext)
-			buf := make([]byte, length.n)
+			buf := make([]byte, size.N)
 			_, _ = w.Write(buf)
 			_ = w.Close()
 
@@ -358,20 +360,6 @@ func Example() {
 	// Output:
 	// ciphertext = dca9a867b30cebc09e48845ad7251792880ff07c4ee0ca93c684db2a2280a3a0ceee3b55ac009dff2978ba70e7479f4700dce503294d16df40152bda2bd488dadfe7fd424a0776d9c90cd48ad190f8
 	// plaintext  = hello world
-}
-
-var lengths = []struct {
-	name string
-	n    int
-}{
-	{"16B", 16},
-	{"32B", 32},
-	{"64B", 64},
-	{"128B", 128},
-	{"256B", 256},
-	{"1KiB", 1024},
-	{"16KiB", 16 * 1024},
-	{"1MiB", 1024 * 1024},
 }
 
 func FuzzReader(f *testing.F) {
