@@ -663,6 +663,13 @@ where $\varepsilon_{\mathrm{cap}}$ covers $\mathsf{Bad}_{\mathrm{perm}}$ (needed
 $\varepsilon_{\mathrm{ks}}$ is the MRV15 PRF bound for the KDF, and
 $\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}$ covers derived-key collisions.
 
+> [!NOTE]
+> The $\varepsilon_{\mathrm{cap}}$ term already covers all capacity collisions globally, including those
+> internal to the KDF. The MRV15 capacity terms ($(q\ell)^2/2^b$ and $2q^2\ell/2^c$ in the FKS bound) are
+> therefore subsumed by $\varepsilon_{\mathrm{cap}}$. The non-redundant contribution from
+> $\varepsilon_{\mathrm{ks}}$ is the online-vs-offline term $\mu_{\mathrm{kdf}}\, t / 2^k$, which captures
+> key-recovery-style attacks not covered by the capacity birthday bound.
+
 Let $\mathsf{CtxColl}$ denote the event of a derived-key collision among distinct contexts. This context-collision term
 is per experiment/per key epoch.
 
@@ -688,7 +695,7 @@ functions under independent uniformly random per-context keys, conditioned on $\
 AEAD property's total advantage decomposes as:
 
 $$
-\mathrm{Adv}_{\Pi} \le \underbrace{\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)}_{\text{bridge hop (Section 6.4)}} + \underbrace{\varepsilon_{\mathrm{ctx\text{-}coll}}}_{\text{key collision}} + \underbrace{\mathrm{Adv}_{\Pi}^{\mathrm{bare}}}_{\text{Sections 6.7–6.9}}.
+\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
 $$
 
 Under the exact uniformity principle (Section 6.1), all bare-bound analyses reduce to structural collision and forgery
@@ -963,14 +970,14 @@ Each property's total advantage combines the bridge-hop cost (Section 6.4) with 
 (Sections 6.7–6.9):
 
 $$
-\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
+\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
 $$
 
 | Property | $\mathrm{Adv}^{\mathrm{bare}}$ | Total |
 |----------|-------------------------------|-------|
-| IND-CPA  | $0$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}}$ |
-| INT-CTXT | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
-| IND-CCA2 | $2S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}} + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}$ |
+| IND-CPA  | $0$ | $\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}}$ |
+| INT-CTXT | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
+| IND-CCA2 | $2S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}$ |
 
 CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the bridge decomposition:
 
@@ -979,8 +986,7 @@ $$
 $$
 
 Where $\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}$,
-$\varepsilon_{\mathrm{ks}} = \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$
-is the MRV15 PRF bound (Section 6.2), and
+$\mu_{\mathrm{kdf}}\, t / 2^k$ is the non-redundant online-vs-offline key-recovery term from the MRV15 PRF bound (Section 6.2; capacity terms subsumed by $\varepsilon_{\mathrm{cap}}$), and
 $\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}$ is the PRF-RF switching cost.
 Parameters are defined in Section 6.1.
 
