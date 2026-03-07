@@ -208,7 +208,7 @@ func TestIncremental(t *testing.T) {
 
 	// Incremental with various chunk sizes.
 	for _, chunkSize := range []int{1, 7, 168, 1000, 8192, 8193, len(msg)} {
-		t.Run("", func(t *testing.T) {
+		t.Run(fmt.Sprintf("chunk=%d", chunkSize), func(t *testing.T) {
 			h := New()
 			for i := 0; i < len(msg); i += chunkSize {
 				end := min(i+chunkSize, len(msg))
@@ -244,7 +244,7 @@ func TestIncrementalRead(t *testing.T) {
 	_, _ = h2.Read(want)
 
 	if !bytes.Equal(got, want) {
-		t.Error("incremental read mismatch")
+		t.Error("Read() incremental mismatch")
 	}
 }
 
@@ -261,7 +261,7 @@ func TestSumNonDestructive(t *testing.T) {
 	_, _ = h2.Read(out)
 
 	if !bytes.Equal(sum, out) {
-		t.Error("Sum result differs from Read")
+		t.Error("Sum() result differs from Read()")
 	}
 
 	// After Sum, Write+Read should still work on original hasher.
@@ -276,7 +276,7 @@ func TestSumNonDestructive(t *testing.T) {
 	_, _ = h3.Read(want)
 
 	if !bytes.Equal(got, want) {
-		t.Error("Write after Sum produced wrong result")
+		t.Error("Read() after Sum()+Write() produced wrong result")
 	}
 }
 
