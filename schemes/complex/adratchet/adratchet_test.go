@@ -77,7 +77,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 		for _, i := range order {
 			v, err := bea.ReceiveMessage(msgs[i])
 			if err != nil {
-				t.Fatalf("ReceiveMessage(%d) failed: %v", i, err)
+				t.Fatalf("ReceiveMessage(%d) err = %v, want nil", i, err)
 			}
 			if got, want := v, []byte{byte(i)}; !bytes.Equal(got, want) {
 				t.Errorf("ReceiveMessage(%d) = %v, want %v", i, got, want)
@@ -94,7 +94,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 
 		// Bea receives msg 1.
 		if _, err := bea.ReceiveMessage(msg1); err != nil {
-			t.Fatalf("bea failed to receive msg1: %v", err)
+			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 
 		// Bea sends msg 2 (triggers DH ratchet on Alice side when she receives it).
@@ -102,7 +102,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 
 		// Alice receives msg 2.
 		if _, err := alice.ReceiveMessage(msg2); err != nil {
-			t.Fatalf("alice failed to receive msg2: %v", err)
+			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 
 		// Alice sends msg 3 and msg 4. (These will have a new DH key).
@@ -112,7 +112,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 		// Bea receives msg 4 first.
 		v, err := bea.ReceiveMessage(msg4)
 		if err != nil {
-			t.Fatalf("bea failed to receive msg4: %v", err)
+			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 		if got, want := v, []byte("msg4"); !bytes.Equal(got, want) {
 			t.Errorf("ReceiveMessage(msg4) = %q, want %q", got, want)
@@ -121,7 +121,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 		// Bea receives msg 3.
 		v, err = bea.ReceiveMessage(msg3)
 		if err != nil {
-			t.Fatalf("bea failed to receive msg3: %v", err)
+			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 		if got, want := v, []byte("msg3"); !bytes.Equal(got, want) {
 			t.Errorf("ReceiveMessage(msg3) = %q, want %q", got, want)
@@ -136,14 +136,14 @@ func TestState_ReceiveMessage(t *testing.T) {
 		msg[len(msg)-1] ^= 0xff // Corrupt the tag
 
 		if _, err := bea.ReceiveMessage(msg); err == nil {
-			t.Error("expected error for corrupted message, got none")
+			t.Error("ReceiveMessage() err = nil, want error")
 		}
 	})
 
 	t.Run("too short", func(t *testing.T) {
 		bea := adratchet.NewResponder(p.Clone(), dB, qA)
 		if _, err := bea.ReceiveMessage([]byte("too short")); err == nil {
-			t.Error("expected error for too short message, got none")
+			t.Error("ReceiveMessage() err = nil, want error")
 		}
 	})
 
@@ -153,11 +153,11 @@ func TestState_ReceiveMessage(t *testing.T) {
 
 		msg := alice.SendMessage([]byte("hello"))
 		if _, err := bea.ReceiveMessage(msg); err != nil {
-			t.Fatalf("failed to receive message: %v", err)
+			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 
 		if _, err := bea.ReceiveMessage(msg); err == nil {
-			t.Error("expected error for already received message, got none")
+			t.Error("ReceiveMessage() err = nil, want error")
 		}
 	})
 
@@ -171,7 +171,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 
 		if _, err := bea.ReceiveMessage(msg); err == nil {
-			t.Error("expected error for gap too large, got none")
+			t.Error("ReceiveMessage() err = nil, want error")
 		}
 	})
 
@@ -184,7 +184,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 		msg[31] |= 0x80
 
 		if _, err := bea.ReceiveMessage(msg); err == nil {
-			t.Error("expected error for invalid public key, got none")
+			t.Error("ReceiveMessage() err = nil, want error")
 		}
 	})
 
@@ -205,7 +205,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 
 		// Bea receives it. pn should be 1001, which is > MaxSkip.
 		if _, err := bea.ReceiveMessage(msg); err == nil {
-			t.Error("expected error for new key gap too large, got none")
+			t.Error("ReceiveMessage() err = nil, want error")
 		}
 	})
 }
