@@ -363,15 +363,20 @@ construction. Applications requiring length hiding must pad plaintexts before en
 permutation at the claimed workloads. This is a modeling assumption, not a proof about reduced-round Keccak-p itself.
 
 > [!IMPORTANT]
-> Public cryptanalysis on Keccak-family primitives includes reduced-round results with explicit round counts: practical
-> collision-style results are publicly known through 5 rounds in standard Keccak instances, with 6-round collision
-> solutions publicly reported for reduced-round contest instances, and structural distinguishers are known at higher
-> round counts in the raw-permutation setting (including 8-round distinguishers and 16-round zero-sum distinguishers).
+> Public cryptanalysis on Keccak-family primitives includes reduced-round results with explicit round counts.
+> On standard Keccak-224/256 instances: practical 4-round collisions and 5-round near-collisions (Hamming
+> distance 5–10) are reported in DDS14. On reduced-capacity contest instances (Keccak[c=160]): 6-round
+> collision solutions are publicly reported (Keccak Crunchy Crypto Contest). In the raw-permutation setting
+> (Keccak-f[1600] with full state access, no keying): differential distinguishers reach 8 rounds at
+> complexity $2^{491.47}$ (DGPW11), and zero-sum distinguishers reach 16 rounds (of the original 18) at
+> complexity $2^{1023.88}$ (AM09). All known results above 6 rounds are in the unkeyed raw-permutation
+> setting and require state access or control that the keyed sponge/duplex denies.
 > (See the Keccak Team third-party table and reduced-round references in Section 9.)
 >
-> These results do not directly invalidate the TreeWrap128 heuristic because TreeWrap128 uses a keyed sponge/duplex setting
-> with 256-bit capacity, strict domain separation, and workload limits; nevertheless, future cryptanalysis could change
-> the practical margin, so deployments should treat the concrete bounds as conditional.
+> These results do not directly invalidate the TreeWrap128 security analysis because TreeWrap128 uses a
+> keyed sponge/duplex setting with 256-bit capacity, strict domain separation, and workload limits;
+> nevertheless, future cryptanalysis could change the practical margin, so deployments should treat the
+> concrete bounds as conditional.
 
 ### 6.1 Model and Notation
 
