@@ -334,7 +334,7 @@ Keccak-p[1600,12]. The argument has two layers:
 
 - **Layer A (Section 6.4).** A single game hop replaces the TurboSHAKE128 KDF with a lazy random function, using the
   MRV15 keyed-sponge PRF framework (FKS, Section 6.2) to bound the distinguishing advantage.
-- **Layer B (Sections 6.6–6.10).** Under random keys, each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) decomposes
+- **Layer B (Sections 6.6–6.9).** Under random keys, each fixed-key AEAD goal (IND-CPA, INT-CTXT, IND-CCA2) decomposes
   into keyed-duplex PRF properties of the leaf ciphers (FKD, Section 6.2): pseudorandomness of rate outputs,
   structural state equivalence, and fixed-key bijection.
 
@@ -414,7 +414,7 @@ $\neg\mathsf{Bad}_{\mathrm{perm}}$, every $\pi$-call on a fresh (never-before-se
 uniform 1600-bit output — not merely computationally pseudorandom. Since $\neg\mathsf{Bad}_{\mathrm{perm}}$ ensures all
 capacity outputs are pairwise distinct, and the Domain Separation Lemma (Section 6.3) ensures rate contents are distinct
 across roles, each construction $\pi$-call has a fresh input. Outputs are therefore exactly uniform. This principle is
-the engine for all bare-bound analyses in Sections 6.7–6.10: once $\neg\mathsf{Bad}_{\mathrm{perm}}$ is conditioned
+the engine for the bare-bound analyses in Sections 6.7–6.9: once $\neg\mathsf{Bad}_{\mathrm{perm}}$ is conditioned
 away (at cost $\varepsilon_{\mathrm{cap}}$), the remaining advantage reduces to structural collision and forgery
 probabilities over truly uniform values.
 
@@ -574,7 +574,7 @@ Inner/final node separability follows directly from Sakura Lemma 4: the final-no
 
 **Design constraint.** Future modifications to domain byte assignments MUST preserve Sakura delimited-suffix encoding compliance and the node-type partition between inner and final roles.
 
-**Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation) and Sections 6.6–6.10 (independent leaf, tag, and commitment analysis).
+**Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation), Sections 6.6–6.9 (independent leaf and tag analysis), and Section 6.10 (CMT-4 commitment analysis).
 
 ### 6.4 Bridge Theorem: KDF to Random Key
 
@@ -650,23 +650,24 @@ is per experiment/per key epoch.
 > this analysis. Because MRV15 is a direct PRF result in the ideal-permutation model, no composition theorem is needed,
 > and the Ristenpart-Shacham-Shrimpton (RSS11) multi-stage caveat does not arise.
 
-**Summary.** All AEAD goals below (Sections 6.7–6.10) are analyzed in $\mathsf{G}_1$, conditioned on
+**Summary.** The fixed-key AEAD goals below (Sections 6.7–6.9) are analyzed in $\mathsf{G}_1$, conditioned on
 $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. Section 6.5 defines the bare-game framework and the
-total-advantage decomposition used by all subsequent sections.
+total-advantage decomposition used by those sections. CMT-4 (Section 6.10) is a multi-key notion with a standalone
+proof that does not use this bridge.
 
 ### 6.5 Bare-Game Framework
 
-All analyses in Sections 6.6–6.10 work in $\mathsf{G}_1$ (Section 6.4) conditioned on
+All analyses in Sections 6.6–6.9 work in $\mathsf{G}_1$ (Section 6.4) conditioned on
 $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. The costs of these events
 ($\varepsilon_{\mathrm{cap}}$ and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge theorem
-and do not recur.
+and do not recur. (CMT-4, Section 6.10, is a multi-key notion with a standalone bound.)
 
 Define the **bare advantage** $\mathrm{Adv}_{\Pi}^{\mathrm{bare}}$ as the adversary's advantage against the internal
 functions under independent uniformly random per-context keys, conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$. Each
 AEAD property's total advantage decomposes as:
 
 $$
-\mathrm{Adv}_{\Pi} \le \underbrace{\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)}_{\text{bridge hop (Section 6.4)}} + \underbrace{\varepsilon_{\mathrm{ctx\text{-}coll}}}_{\text{key collision}} + \underbrace{\mathrm{Adv}_{\Pi}^{\mathrm{bare}}}_{\text{Sections 6.7–6.10}}.
+\mathrm{Adv}_{\Pi} \le \underbrace{\varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)}_{\text{bridge hop (Section 6.4)}} + \underbrace{\varepsilon_{\mathrm{ctx\text{-}coll}}}_{\text{key collision}} + \underbrace{\mathrm{Adv}_{\Pi}^{\mathrm{bare}}}_{\text{Sections 6.7–6.9}}.
 $$
 
 Under the exact uniformity principle (Section 6.1), all bare-bound analyses reduce to structural collision and forgery
@@ -934,7 +935,7 @@ For $c = 256$, $\tau = 32$: both terms are $\leq 2^{-128}$ when $t \leq 2^{64}$.
 ### 6.11 Summary of Bounds
 
 Each property's total advantage combines the bridge-hop cost (Section 6.4) with the bare advantage
-(Sections 6.7–6.10):
+(Sections 6.7–6.9):
 
 $$
 \mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
