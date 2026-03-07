@@ -29,7 +29,7 @@ func TestSign(t *testing.T) {
 	t.Run("reader failure", func(t *testing.T) {
 		_, err := sig.Sign("sig", d, drbg.Data(64), &testdata.ErrReader{Err: errors.New("broken")})
 		if err == nil {
-			t.Error("should have failed")
+			t.Error("Sign() err = nil, want error")
 		}
 	})
 }
@@ -51,7 +51,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if !valid {
-			t.Errorf("Verify() = false, want = true")
+			t.Error("Verify() = false, want true")
 		}
 	})
 
@@ -62,7 +62,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -73,14 +73,14 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Errorf("Verify() = true, want = false")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
 	t.Run("reader failure", func(t *testing.T) {
 		_, err := sig.Verify("sig", q, signature, &testdata.ErrReader{Err: errors.New("broken")})
 		if err == nil {
-			t.Error("should have failed")
+			t.Error("Verify() err = nil, want error")
 		}
 	})
 
@@ -91,7 +91,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Errorf("should not have been valid")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -102,7 +102,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Errorf("should not have been valid")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -115,7 +115,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Errorf("should not have been valid")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -128,7 +128,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Errorf("should not have been valid")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -143,7 +143,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Error("should not have been valid")
+			t.Error("Verify() = true, want false")
 		}
 	})
 
@@ -154,7 +154,7 @@ func TestVerify(t *testing.T) {
 		}
 
 		if valid {
-			t.Errorf("should not have been valid")
+			t.Error("Verify() = true, want false")
 		}
 	})
 }
@@ -174,7 +174,7 @@ func FuzzVerify(f *testing.F) {
 		}
 
 		if valid {
-			t.Errorf("Verify(signature=%x, message=%x) = true, want = false", signature, message)
+			t.Errorf("Verify(signature=%x, message=%x) = true, want false", signature, message)
 		}
 	})
 }
