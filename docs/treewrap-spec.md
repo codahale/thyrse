@@ -58,15 +58,13 @@ blocks, a write-only state update is also faster than read-XOR-write on most arc
 The duplex is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
 Appendix B.
 
+<!-- begin:code:ref/duplex.py:duplex_all -->
 ```python
-from collections import namedtuple
-
 R = 168   # Sponge rate (bytes).
 C = 32    # Capacity (bytes); key and chain value size.
 TAU = 32  # Tag size (bytes).
 B = 8192  # Chunk size (bytes).
 
-# S: 200-byte Keccak state (bytearray). pos: current offset into the rate.
 _DuplexState = namedtuple("_DuplexState", ["S", "pos"])
 
 def _duplex_pad_permute(D: _DuplexState, domain_byte: int) -> _DuplexState:
@@ -114,6 +112,7 @@ def _duplex_absorb(D: _DuplexState, data: bytes) -> _DuplexState:
             pos = 0
     return _DuplexState(S, pos)
 ```
+<!-- end:code:ref/duplex.py:duplex_all -->
 
 > [!NOTE]
 > `_duplex_pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $R-1$). Initialization
@@ -220,11 +219,9 @@ derivation and tag verification.
 
 *Procedure:*
 
+<!-- begin:code:ref/treewrap.py:internal_functions -->
 ```python
-# Sakura message-hop / chaining-hop framing: '110^{62}' packed LSB-first.
 HOP_FRAME = bytes([0x03]) + bytes(7)
-
-# Sakura interleaving block size for I = infinity (Section 5, Tree Topology).
 SAKURA_SUFFIX = b"\xff\xff"
 
 def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes]:
@@ -234,7 +231,6 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
 
     op = _duplex_encrypt if direction == "E" else _duplex_decrypt
 
-    # Final node: absorb key || LEU64(0) and pad to key the duplex.
     F = _DuplexState(bytearray(200), 0)
     F = _duplex_absorb(F, key + (0).to_bytes(8, "little"))
     F = _duplex_pad_permute(F, 0x08)
@@ -242,17 +238,13 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
     out_parts = [ct0]
 
     if n == 1:
-        # Single node: message hop '11' -> 0x07
         F = _duplex_pad_permute(F, 0x07)
         return out_parts[0], bytes(F.S[:TAU])
 
-    # Multi-node: message hop framing '110^{62}'
     F = _duplex_absorb(F, HOP_FRAME)
 
-    # Leaves 1..n-1: independent, parallel.
     cvs = []
     for i, chunk in enumerate(chunks[1:], start=1):
-        # Absorb key || LEU64(i) and pad to key the leaf duplex.
         L = _DuplexState(bytearray(200), 0)
         L = _duplex_absorb(L, key + i.to_bytes(8, "little"))
         L = _duplex_pad_permute(L, 0x08)
@@ -261,14 +253,11 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
         L = _duplex_pad_permute(L, 0x0B)
         cvs.append(bytes(L.S[:C]))
 
-    # Absorb chain values into final node.
     for cv in cvs:
         F = _duplex_absorb(F, cv)
 
-    # Chaining hop suffix.
     F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
 
-    # Chaining hop '01' -> 0x06
     F = _duplex_pad_permute(F, 0x06)
     return b"".join(out_parts), bytes(F.S[:TAU])
 
@@ -278,6 +267,7 @@ def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
 def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
     return _tree_process(key, ciphertext, "D")
 ```
+<!-- end:code:ref/treewrap.py:internal_functions -->
 
 The final node (index 0) always encrypts chunk 0. Leaf operations for chunks 1 through $n-1$ are independent and may
 execute in parallel. Tag computation begins as soon as all chain values are available. `decrypt_and_mac` produces the
@@ -308,9 +298,8 @@ The `encode_string` encoding (NIST SP 800-185) makes the concatenation injective
 as a different triple. Domain byte `0x09` separates key derivation from all other TreeWrap128 domain bytes
 (`0x08`, `0x0B`, `0x07`, `0x06`).
 
+<!-- begin:code:ref/treewrap.py:aead_functions -->
 ```python
-import hmac
-
 def treewrap128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
     assert len(K) == C, "K must be exactly 32 bytes"
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
@@ -326,6 +315,7 @@ def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes |
     pt, tag = decrypt_and_mac(tw_key, ct)
     return pt if hmac.compare_digest(tag, tag_expected) else None
 ```
+<!-- end:code:ref/treewrap.py:aead_functions -->
 
 ## 6. Security Properties
 
@@ -1252,6 +1242,7 @@ proof-bound figure alone.
 
 ## 10. Test Vectors
 
+<!-- begin:vectors:docs/treewrap-test-vectors.json:bare -->
 ### 10.1 Internal Function Vectors
 
 All internal function vectors use:
@@ -1320,7 +1311,9 @@ Swapping chunks 1 and 2 (bytes 0–8,191 and 8,192–16,383) yields tag
 
 For all internal function vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as
 `EncryptAndMAC`.
+<!-- end:vectors:docs/treewrap-test-vectors.json:bare -->
 
+<!-- begin:vectors:docs/treewrap-test-vectors.json:aead -->
 ### 10.2 TreeWrap128 Vectors
 
 These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including SP 800-185
@@ -1465,6 +1458,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 `treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
+<!-- end:vectors:docs/treewrap-test-vectors.json:aead -->
 
 ## Appendix A. Exact Per-Query $\sigma$ Formula
 
@@ -1503,6 +1497,7 @@ platform-optimized Keccak libraries.
 
 ### Keccak-p[1600,12]
 
+<!-- begin:code:ref/keccak.py:keccak_p1600 -->
 ```python
 def keccak_p1600(state: bytearray, rounds: int = 12):
     """Apply Keccak-p[1600,rounds] to a 200-byte state in-place."""
@@ -1514,7 +1509,6 @@ def keccak_p1600(state: bytearray, rounds: int = 12):
         0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
         0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008,
     ]
-    # Combined rho+pi lane permutation order and rotation offsets.
     PILN = [10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1]
     ROTC = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44]
     M = (1 << 64) - 1
@@ -1522,35 +1516,32 @@ def keccak_p1600(state: bytearray, rounds: int = 12):
     A = [int.from_bytes(state[8 * i : 8 * i + 8], "little") for i in range(25)]
 
     for ir in range(24 - rounds, 24):
-        # Theta.
         C = [A[j] ^ A[j + 5] ^ A[j + 10] ^ A[j + 15] ^ A[j + 20] for j in range(5)]
         for j in range(5):
             d = C[(j - 1) % 5] ^ (((C[(j + 1) % 5] << 1) | (C[(j + 1) % 5] >> 63)) & M)
             for k in range(0, 25, 5):
                 A[j + k] ^= d
-        # Rho and pi.
         t = A[1]
         for j in range(24):
             A[PILN[j]], t = ((t << ROTC[j]) | (t >> (64 - ROTC[j]))) & M, A[PILN[j]]
-        # Chi.
         for j in range(0, 25, 5):
             C = A[j : j + 5]
             for k in range(5):
                 A[j + k] = (C[k] ^ (~C[(k + 1) % 5] & C[(k + 2) % 5])) & M
-        # Iota.
         A[0] ^= RC[ir]
 
     for i in range(25):
         state[8 * i : 8 * i + 8] = A[i].to_bytes(8, "little")
 ```
+<!-- end:code:ref/keccak.py:keccak_p1600 -->
 
 ### TurboSHAKE128
 
+<!-- begin:code:ref/kt128.py:turboshake128 -->
 ```python
 def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
     """TurboSHAKE128(M, D, ell) as specified in RFC 9861."""
     S = bytearray(200)
-    # Absorb.
     pos = 0
     for i in range(0, len(msg), R):
         block = msg[i : i + R]
@@ -1560,11 +1551,9 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
         if pos == R:
             keccak_p1600(S)
             pos = 0
-    # Pad and switch to squeezing.
     S[pos] ^= domain_byte
     S[R - 1] ^= 0x80
     keccak_p1600(S)
-    # Squeeze.
     out, pos = bytearray(), 0
     while len(out) < output_len:
         if pos == R:
@@ -1575,6 +1564,7 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
         pos += n
     return bytes(out)
 ```
+<!-- end:code:ref/kt128.py:turboshake128 -->
 
 ### Integer and String Encodings
 
@@ -1582,6 +1572,7 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
 single `0x00` byte rather than `0x00 0x01`. TreeWrap128 only calls `length_encode` with $n \geq 2$, so the difference is
 unreachable in practice.
 
+<!-- begin:code:ref/encodings.py:encodings_all -->
 ```python
 def length_encode(x: int) -> bytes:
     """RFC 9861 length_encode: big-endian, no leading zeros, followed by byte count."""
@@ -1601,6 +1592,7 @@ def encode_string(x: bytes) -> bytes:
     """SP 800-185: left_encode(len(x) * 8) || x."""
     return left_encode(len(x) * 8) + x
 ```
+<!-- end:code:ref/encodings.py:encodings_all -->
 
 ## Appendix C. Deployment Budgeting Across TreeWrap128, TurboSHAKE, and KangarooTwelve (Non-Normative)
 

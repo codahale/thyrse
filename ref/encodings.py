@@ -1,3 +1,4 @@
+# region: encodings_all
 def length_encode(x: int) -> bytes:
     """RFC 9861 length_encode: big-endian, no leading zeros, followed by byte count."""
     if x == 0:
@@ -15,3 +16,4 @@ def left_encode(x: int) -> bytes:
 def encode_string(x: bytes) -> bytes:
     """SP 800-185: left_encode(len(x) * 8) || x."""
     return left_encode(len(x) * 8) + x
+# endregion

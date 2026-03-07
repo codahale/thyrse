@@ -7,6 +7,7 @@ from .duplex import (
 from .kt128 import turboshake128
 from .encodings import encode_string, length_encode
 
+# region: internal_functions
 HOP_FRAME = bytes([0x03]) + bytes(7)
 SAKURA_SUFFIX = b"\xff\xff"
 
@@ -52,7 +53,9 @@ def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
 
 def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
     return _tree_process(key, ciphertext, "D")
+# endregion
 
+# region: aead_functions
 def treewrap128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
     assert len(K) == C, "K must be exactly 32 bytes"
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
@@ -67,3 +70,4 @@ def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes |
     ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
     pt, tag = decrypt_and_mac(tw_key, ct)
     return pt if hmac.compare_digest(tag, tag_expected) else None
+# endregion

@@ -1,6 +1,7 @@
 from collections import namedtuple
 from .keccak import keccak_p1600
 
+# region: duplex_all
 R = 168   # Sponge rate (bytes).
 C = 32    # Capacity (bytes); key and chain value size.
 TAU = 32  # Tag size (bytes).
@@ -52,3 +53,4 @@ def _duplex_absorb(D: _DuplexState, data: bytes) -> _DuplexState:
             keccak_p1600(S)
             pos = 0
     return _DuplexState(S, pos)
+# endregion
