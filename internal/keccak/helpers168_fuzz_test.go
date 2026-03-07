@@ -181,7 +181,7 @@ func FuzzFastLoopEncrypt168(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, nBlocks int, seed string) {
 		if nBlocks < 1 || nBlocks > 200 {
-			return
+			t.Skip()
 		}
 		for _, nInst := range []int{2, 4, 8} {
 			t.Run(fmt.Sprintf("x%d", nInst), func(t *testing.T) {
@@ -197,7 +197,7 @@ func FuzzFastLoopDecrypt168(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, nBlocks int, seed string) {
 		if nBlocks < 1 || nBlocks > 200 {
-			return
+			t.Skip()
 		}
 		for _, nInst := range []int{2, 4, 8} {
 			t.Run(fmt.Sprintf("x%d", nInst), func(t *testing.T) {

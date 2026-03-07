@@ -274,13 +274,13 @@ func TestDuplexEqual(t *testing.T) {
 	var a, b Duplex
 	a.Absorb([]byte("same"))
 	b.Absorb([]byte("same"))
-	if a.Equal(&b) != 1 {
-		t.Fatal("equal duplexes reported unequal")
+	if got, want := a.Equal(&b), 1; got != want {
+		t.Fatalf("Equal() = %d, want %d", got, want)
 	}
 
 	b.Absorb([]byte("x"))
-	if a.Equal(&b) != 0 {
-		t.Fatal("different duplexes reported equal")
+	if got, want := a.Equal(&b), 0; got != want {
+		t.Fatalf("Equal() = %d, want %d", got, want)
 	}
 }
 

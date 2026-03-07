@@ -2,8 +2,9 @@ package keccak
 
 import (
 	"bytes"
-	"crypto/rand"
 	"testing"
+
+	"github.com/codahale/thyrse/internal/testdata"
 )
 
 // TestFastLoopEncryptDecrypt168 verifies round-trip: encrypt then decrypt
@@ -13,16 +14,14 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 	const blockSize = Rate
 
 	t.Run("x1", func(t *testing.T) {
+		drbg := testdata.New("helpers168 rt x1")
 		n := nBlocks * blockSize
-		pt := make([]byte, n)
-		rand.Read(pt)
+		pt := drbg.Data(n)
 		ct := make([]byte, n)
 		recovered := make([]byte, n)
 
 		var sEnc, sDec State1
-		// Seed states identically with some data.
-		seed := make([]byte, 200)
-		rand.Read(seed)
+		seed := drbg.Data(200)
 		for i := range 25 {
 			v := uint64(seed[i*8]) | uint64(seed[i*8+1])<<8 | uint64(seed[i*8+2])<<16 | uint64(seed[i*8+3])<<24 |
 				uint64(seed[i*8+4])<<32 | uint64(seed[i*8+5])<<40 | uint64(seed[i*8+6])<<48 | uint64(seed[i*8+7])<<56
@@ -30,34 +29,30 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 			sDec.a[i] = v
 		}
 
-		got := sEnc.FastLoopEncrypt168(pt, ct)
-		if got != n {
-			t.Fatalf("encrypt returned %d, want %d", got, n)
+		if got, want := sEnc.FastLoopEncrypt168(pt, ct), n; got != want {
+			t.Fatalf("FastLoopEncrypt168() = %d, want %d", got, want)
 		}
-		got = sDec.FastLoopDecrypt168(ct, recovered)
-		if got != n {
-			t.Fatalf("decrypt returned %d, want %d", got, n)
+		if got, want := sDec.FastLoopDecrypt168(ct, recovered), n; got != want {
+			t.Fatalf("FastLoopDecrypt168() = %d, want %d", got, want)
 		}
 		if !bytes.Equal(pt, recovered) {
 			t.Fatal("round-trip failed: plaintext != recovered")
 		}
-		// States should match.
 		if sEnc.a != sDec.a {
 			t.Fatal("final states differ after encrypt/decrypt")
 		}
 	})
 
 	t.Run("x2", func(t *testing.T) {
+		drbg := testdata.New("helpers168 rt x2")
 		n := nBlocks * blockSize
 		stride := n
-		pt := make([]byte, 2*stride)
-		rand.Read(pt)
+		pt := drbg.Data(2 * stride)
 		ct := make([]byte, 2*stride)
 		recovered := make([]byte, 2*stride)
 
 		var sEnc, sDec State2
-		seed := make([]byte, 400)
-		rand.Read(seed)
+		seed := drbg.Data(400)
 		for i := range 25 {
 			for j := range 2 {
 				off := (i*2 + j) * 8
@@ -68,13 +63,11 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 			}
 		}
 
-		got := sEnc.FastLoopEncrypt168(pt, ct, stride)
-		if got != n {
-			t.Fatalf("encrypt returned %d, want %d", got, n)
+		if got, want := sEnc.FastLoopEncrypt168(pt, ct, stride), n; got != want {
+			t.Fatalf("FastLoopEncrypt168() = %d, want %d", got, want)
 		}
-		got = sDec.FastLoopDecrypt168(ct, recovered, stride)
-		if got != n {
-			t.Fatalf("decrypt returned %d, want %d", got, n)
+		if got, want := sDec.FastLoopDecrypt168(ct, recovered, stride), n; got != want {
+			t.Fatalf("FastLoopDecrypt168() = %d, want %d", got, want)
 		}
 		if !bytes.Equal(pt, recovered) {
 			t.Fatal("round-trip failed")
@@ -85,16 +78,15 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 	})
 
 	t.Run("x4", func(t *testing.T) {
+		drbg := testdata.New("helpers168 rt x4")
 		n := nBlocks * blockSize
 		stride := n
-		pt := make([]byte, 4*stride)
-		rand.Read(pt)
+		pt := drbg.Data(4 * stride)
 		ct := make([]byte, 4*stride)
 		recovered := make([]byte, 4*stride)
 
 		var sEnc, sDec State4
-		seed := make([]byte, 800)
-		rand.Read(seed)
+		seed := drbg.Data(800)
 		for i := range 25 {
 			for j := range 4 {
 				off := (i*4 + j) * 8
@@ -105,13 +97,11 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 			}
 		}
 
-		got := sEnc.FastLoopEncrypt168(pt, ct, stride)
-		if got != n {
-			t.Fatalf("encrypt returned %d, want %d", got, n)
+		if got, want := sEnc.FastLoopEncrypt168(pt, ct, stride), n; got != want {
+			t.Fatalf("FastLoopEncrypt168() = %d, want %d", got, want)
 		}
-		got = sDec.FastLoopDecrypt168(ct, recovered, stride)
-		if got != n {
-			t.Fatalf("decrypt returned %d, want %d", got, n)
+		if got, want := sDec.FastLoopDecrypt168(ct, recovered, stride), n; got != want {
+			t.Fatalf("FastLoopDecrypt168() = %d, want %d", got, want)
 		}
 		if !bytes.Equal(pt, recovered) {
 			t.Fatal("round-trip failed")
@@ -122,16 +112,15 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 	})
 
 	t.Run("x8", func(t *testing.T) {
+		drbg := testdata.New("helpers168 rt x8")
 		n := nBlocks * blockSize
 		stride := n
-		pt := make([]byte, 8*stride)
-		rand.Read(pt)
+		pt := drbg.Data(8 * stride)
 		ct := make([]byte, 8*stride)
 		recovered := make([]byte, 8*stride)
 
 		var sEnc, sDec State8
-		seed := make([]byte, 1600)
-		rand.Read(seed)
+		seed := drbg.Data(1600)
 		for i := range 25 {
 			for j := range 8 {
 				off := (i*8 + j) * 8
@@ -142,13 +131,11 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 			}
 		}
 
-		got := sEnc.FastLoopEncrypt168(pt, ct, stride)
-		if got != n {
-			t.Fatalf("encrypt returned %d, want %d", got, n)
+		if got, want := sEnc.FastLoopEncrypt168(pt, ct, stride), n; got != want {
+			t.Fatalf("FastLoopEncrypt168() = %d, want %d", got, want)
 		}
-		got = sDec.FastLoopDecrypt168(ct, recovered, stride)
-		if got != n {
-			t.Fatalf("decrypt returned %d, want %d", got, n)
+		if got, want := sDec.FastLoopDecrypt168(ct, recovered, stride), n; got != want {
+			t.Fatalf("FastLoopDecrypt168() = %d, want %d", got, want)
 		}
 		if !bytes.Equal(pt, recovered) {
 			t.Fatal("round-trip failed")
@@ -219,10 +206,9 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 	const n = nBlocks * Rate
 
 	t.Run("x1", func(t *testing.T) {
-		pt := make([]byte, n)
-		rand.Read(pt)
-		seed := make([]byte, 200)
-		rand.Read(seed)
+		drbg := testdata.New("xval enc x1")
+		pt := drbg.Data(n)
+		seed := drbg.Data(200)
 
 		var sGen State1
 		seedState1(&sGen, seed)
@@ -243,15 +229,14 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 	})
 
 	t.Run("x2", func(t *testing.T) {
+		drbg := testdata.New("xval enc x2")
 		stride := n
-		pt := make([]byte, 2*stride)
-		rand.Read(pt)
+		pt := drbg.Data(2 * stride)
 
 		// Distinct seed per instance to detect state pointer corruption.
 		var seeds [2][]byte
 		for inst := range 2 {
-			seeds[inst] = make([]byte, 200)
-			rand.Read(seeds[inst])
+			seeds[inst] = drbg.Data(200)
 		}
 
 		// Run x1 generic on each instance independently.
@@ -293,15 +278,14 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 	})
 
 	t.Run("x4", func(t *testing.T) {
+		drbg := testdata.New("xval enc x4")
 		stride := n
-		pt := make([]byte, 4*stride)
-		rand.Read(pt)
+		pt := drbg.Data(4 * stride)
 
 		// Distinct seed per instance to detect state pointer corruption.
 		var seeds [4][]byte
 		for inst := range 4 {
-			seeds[inst] = make([]byte, 200)
-			rand.Read(seeds[inst])
+			seeds[inst] = drbg.Data(200)
 		}
 
 		// Run x1 generic on each instance.
@@ -343,15 +327,14 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 	})
 
 	t.Run("x8", func(t *testing.T) {
+		drbg := testdata.New("xval enc x8")
 		stride := n
-		pt := make([]byte, 8*stride)
-		rand.Read(pt)
+		pt := drbg.Data(8 * stride)
 
 		// Distinct seed per instance to detect state pointer corruption.
 		var seeds [8][]byte
 		for inst := range 8 {
-			seeds[inst] = make([]byte, 200)
-			rand.Read(seeds[inst])
+			seeds[inst] = drbg.Data(200)
 		}
 
 		var sGen [8]State1
@@ -398,10 +381,9 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 	const n = nBlocks * Rate
 
 	t.Run("x1", func(t *testing.T) {
-		ct := make([]byte, n)
-		rand.Read(ct)
-		seed := make([]byte, 200)
-		rand.Read(seed)
+		drbg := testdata.New("xval dec x1")
+		ct := drbg.Data(n)
+		seed := drbg.Data(200)
 
 		var sGen State1
 		seedState1(&sGen, seed)
@@ -422,15 +404,14 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 	})
 
 	t.Run("x2", func(t *testing.T) {
+		drbg := testdata.New("xval dec x2")
 		stride := n
-		ct := make([]byte, 2*stride)
-		rand.Read(ct)
+		ct := drbg.Data(2 * stride)
 
 		// Distinct seed per instance to detect state pointer corruption.
 		var seeds [2][]byte
 		for inst := range 2 {
-			seeds[inst] = make([]byte, 200)
-			rand.Read(seeds[inst])
+			seeds[inst] = drbg.Data(200)
 		}
 
 		var sGen [2]State1
@@ -470,15 +451,14 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 	})
 
 	t.Run("x4", func(t *testing.T) {
+		drbg := testdata.New("xval dec x4")
 		stride := n
-		ct := make([]byte, 4*stride)
-		rand.Read(ct)
+		ct := drbg.Data(4 * stride)
 
 		// Distinct seed per instance to detect state pointer corruption.
 		var seeds [4][]byte
 		for inst := range 4 {
-			seeds[inst] = make([]byte, 200)
-			rand.Read(seeds[inst])
+			seeds[inst] = drbg.Data(200)
 		}
 
 		var sGen [4]State1
@@ -518,15 +498,14 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 	})
 
 	t.Run("x8", func(t *testing.T) {
+		drbg := testdata.New("xval dec x8")
 		stride := n
-		ct := make([]byte, 8*stride)
-		rand.Read(ct)
+		ct := drbg.Data(8 * stride)
 
 		// Distinct seed per instance to detect state pointer corruption.
 		var seeds [8][]byte
 		for inst := range 8 {
-			seeds[inst] = make([]byte, 200)
-			rand.Read(seeds[inst])
+			seeds[inst] = drbg.Data(200)
 		}
 
 		var sGen [8]State1
