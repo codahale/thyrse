@@ -525,7 +525,8 @@ duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
 
 > [!NOTE]
 > The BDPVA07 flat sponge claim gives a generic
-> $(\sigma + t)^2 / 2^{c+1}$ for the unkeyed sponge setting. MRV15 provides
+> $N^2 / 2^{c+1}$ bound (where $N$ is total permutation calls) for the unkeyed sponge setting, which
+> yields $(\sigma + t)^2 / 2^{c+1}$ in the online/offline decomposition used here. MRV15 provides
 > tighter bounds for the keyed setting that TreeWrap128 exclusively uses.
 > BDPVA07 remains valid as a fallback analysis but is superseded here. For the
 > KDF (FKS, Theorem 1), the principal improvement is that the online-vs-online
@@ -1202,10 +1203,11 @@ proof-bound figure alone.
   Framework." Eurocrypt 2011 (ePrint 2011/339 as "Careful with Composition: Limitations of Indifferentiability and Universal Composability").
   Highlights multi-stage composition caveats; motivates explicit game-hop arguments in composed proofs.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass Authenticated Encryption
-  and Other Applications." SAC 2011. IACR ePrint 2011/499. Proves that duplex outputs are pseudorandom under the sponge
-  indifferentiability assumption (Theorem 1) and gives overwrite-mode security (BDPVA11 §6.2, Algorithm 5, Theorem 2:
-  Overwrite is as secure as Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are
-  covered by the duplex security bound.
+  and Other Applications." SAC 2011. IACR ePrint 2011/499. Establishes the duplex-sponge equivalence (Lemma 3: each
+  duplex output equals a sponge evaluation on concatenated padded inputs), proves SpongeWrap AEAD security bounds
+  (Theorem 1), and gives overwrite-mode security (BDPVA11 §6.2, Algorithm 5, Theorem 2: Overwrite is as secure as
+  Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are covered by the duplex
+  security bound.
 - Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex: Applications to
   Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Primary security framework for TreeWrap128. Proves
   beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state keyed duplex
@@ -1214,9 +1216,9 @@ proof-bound figure alone.
 - Andreeva, E., Daemen, J., Mennink, B., and Van Assche, G. "Security of Keyed Sponge Constructions Using a Modular
   Proof Approach." FSE 2015. Proves PRF security of both inner-keyed and outer-keyed sponge variants. The outer-keyed
   result covers TreeWrap128's rate-absorbed key initialization (Section 6.2).
-- Dinur, I., Dunkelman, O., and Shamir, A. "Improved practical attacks on round-reduced Keccak." Journal of
-  Cryptology 27(4), 2014. Reports practical 4-round collisions and 5-round near-collision results in standard
-  Keccak-224/256 settings.
+- Dinur, I., Dunkelman, O., and Shamir, A. "New attacks on Keccak-224 and Keccak-256." FSE 2012; published as
+  "Improved practical attacks on round-reduced Keccak" in Journal of Cryptology 27(4), 2014. Reports practical 4-round
+  collisions and 5-round near-collision results in standard Keccak-224/256 settings.
 - Keccak Team. "Keccak Crunchy Crypto Collision and Pre-image Contest."
   https://keccak.team/crunchy_contest.html. Public contest record for reduced-round Keccak[c=160] instances, including
   6-round collision solutions.
