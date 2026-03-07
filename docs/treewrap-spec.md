@@ -940,17 +940,20 @@ $L' = \mathrm{KDF}(K', N', AD')$.
   same $C^\star = \mathit{ct}^\star \| T^\star$. By domain separation (Section 6.3) and the exact uniformity
   principle (Section 6.1), the final-node squeeze $\pi$-call under $L'$ has a fresh input (its capacity is
   distinct from every $\pi$-call under $L$, conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$). The tag under
-  $L'$ is therefore uniform over $\{0,1\}^{8\tau}$ and independent of $T^\star$, so the match probability
-  is at most $1/2^{8\tau}$. The $\neg\mathsf{Bad}_{\mathrm{perm}}$ conditioning cost is subsumed by the
-  $(t + \sigma_v)^2 / 2^{c+1}$ term — both are birthday-on-capacity bounds of the same order.
+  $L'$ is therefore uniform over $\{0,1\}^{8\tau}$ and independent of $T^\star$, so each candidate
+  $(ct^\star, T^\star)$ matches with probability $1/2^{8\tau}$. However, the adversary can use its $t$
+  offline $\pi$-queries and $\sigma_v$ verification $\pi$-calls to evaluate both tag functions on multiple
+  candidate ciphertexts. By a union bound over at most $t + \sigma_v$ candidates, the match probability is
+  at most $(t + \sigma_v)/2^{8\tau}$. The $\neg\mathsf{Bad}_{\mathrm{perm}}$ conditioning cost is subsumed
+  by the $(t + \sigma_v)^2 / 2^{c+1}$ term — both are birthday-on-capacity bounds of the same order.
 
 Therefore:
 
 $$
-\mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{1}{2^{8\tau}}.
+\mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{t + \sigma_v}{2^{8\tau}}.
 $$
 
-For $c = 256$, $\tau = 32$: both terms are $\leq 2^{-128}$ when $t \leq 2^{64}$.
+For $c = 256$, $\tau = 32$: both terms are $\leq 2^{-128}$ when $t + \sigma_v \leq 2^{64}$. The first term gives $(2^{64})^2/2^{257} \approx 2^{-129}$; the second gives $2^{64}/2^{256} = 2^{-192}$.
 
 ### 6.11 Summary of Bounds
 
@@ -970,7 +973,7 @@ $$
 CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the bridge decomposition:
 
 $$
-\mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{1}{2^{8\tau}}.
+\mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{t + \sigma_v}{2^{8\tau}}.
 $$
 
 Where $\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}$,
@@ -995,7 +998,7 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 | IND-CPA-like confidentiality | Ensure key uniqueness per `EncryptAndMAC` invocation.                                         |
 | INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.                                  |
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
-| CMT-4                        | Derive `EncryptAndMAC` keys via a collision-resistant mapping from caller-level inputs. The CMT-4 bound for the caller's scheme is $\varepsilon_{\mathrm{cr}}(\text{KDF}) + 1/2^{8\tau}$; see Section 6.10 Cases 2–3. |
+| CMT-4                        | Derive `EncryptAndMAC` keys via a collision-resistant mapping from caller-level inputs. The CMT-4 bound for the caller's scheme is $\varepsilon_{\mathrm{cr}}(\text{KDF}) + (t + \sigma_v)/2^{8\tau}$; see Section 6.10 Cases 2–3. |
 
 ### 7.2 Chunk Reordering, Length Changes, and Empty Input
 
