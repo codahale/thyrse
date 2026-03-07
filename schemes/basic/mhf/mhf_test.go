@@ -70,7 +70,6 @@ func TestHash(t *testing.T) {
 	})
 }
 
-// FuzzHash tests the Hash function with various inputs
 func FuzzHash(f *testing.F) {
 	// Add seed corpus
 	f.Add("test.domain", uint8(4), []byte("salt"), []byte("password"))
@@ -88,8 +87,8 @@ func FuzzHash(f *testing.F) {
 		hash := mhf.Hash(domain, cost, salt, password, nil, 32)
 
 		// Verify output length
-		if len(hash) != 32 {
-			t.Fatalf("hash length = %d, want 32", len(hash))
+		if got, want := len(hash), 32; got != want {
+			t.Fatalf("Hash() len = %d, want %d", got, want)
 		}
 
 		// Verify determinism - same inputs should produce the same output
@@ -111,7 +110,6 @@ func FuzzHash(f *testing.F) {
 	})
 }
 
-// FuzzHashVariableLength tests Hash with different output lengths
 func FuzzHashVariableLength(f *testing.F) {
 	f.Add("test", uint8(2), []byte("salt"), []byte("pass"), 16)
 	f.Add("test", uint8(2), []byte("salt"), []byte("pass"), 32)
@@ -127,13 +125,12 @@ func FuzzHashVariableLength(f *testing.F) {
 		hash := mhf.Hash(domain, cost, salt, password, nil, outputLen)
 
 		// Verify output length
-		if len(hash) != outputLen {
-			t.Fatalf("hash length = %d, want %d", len(hash), outputLen)
+		if got, want := len(hash), outputLen; got != want {
+			t.Fatalf("Hash() len = %d, want %d", got, want)
 		}
 	})
 }
 
-// FuzzHashSaltSensitivity tests that different salts produce different outputs
 func FuzzHashSaltSensitivity(f *testing.F) {
 	f.Add("auth", []byte("password"), []byte("salt1"), []byte("salt2"))
 	f.Add("", []byte(""), []byte{0x00}, []byte{0x01})
@@ -156,7 +153,6 @@ func FuzzHashSaltSensitivity(f *testing.F) {
 	})
 }
 
-// FuzzHashCostSensitivity tests that different costs affect the output
 func FuzzHashCostSensitivity(f *testing.F) {
 	f.Add("test", []byte("pass"), []byte("salt"), uint8(2), uint8(3))
 	f.Add("test", []byte("pass"), []byte("salt"), uint8(4), uint8(5))
@@ -177,7 +173,6 @@ func FuzzHashCostSensitivity(f *testing.F) {
 	})
 }
 
-// FuzzHashEmptyInputs tests Hash with empty or nil inputs
 func FuzzHashEmptyInputs(f *testing.F) {
 	f.Add(true, true, true)
 	f.Add(false, true, true)
@@ -205,8 +200,8 @@ func FuzzHashEmptyInputs(f *testing.F) {
 		// Test that Hash handles empty inputs without panicking
 		hash := mhf.Hash(domain, cost, salt, password, nil, 32)
 
-		if len(hash) != 32 {
-			t.Fatalf("hash length = %d, want 32", len(hash))
+		if got, want := len(hash), 32; got != want {
+			t.Fatalf("Hash() len = %d, want %d", got, want)
 		}
 
 		// Verify determinism even with empty inputs
