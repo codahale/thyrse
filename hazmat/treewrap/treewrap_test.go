@@ -137,8 +137,8 @@ func TestDecryptAndMAC(t *testing.T) {
 		ct2, _ := EncryptAndMAC(nil, &wrongKey, pt)
 		_, decryptTag := DecryptAndMAC(nil, key, ct2)
 
-		if subtle.ConstantTimeCompare(encryptTag[:], decryptTag[:]) == 1 {
-			t.Error("tags should not match for different keys")
+		if got, want := subtle.ConstantTimeCompare(encryptTag[:], decryptTag[:]), 0; got != want {
+			t.Errorf("ConstantTimeCompare() = %d, want %d", got, want)
 		}
 	})
 
@@ -156,8 +156,8 @@ func TestDecryptAndMAC(t *testing.T) {
 
 		_, decryptTag := DecryptAndMAC(nil, key, ct)
 
-		if subtle.ConstantTimeCompare(encryptTag[:], decryptTag[:]) == 1 {
-			t.Error("tags should not match for modified ciphertext")
+		if got, want := subtle.ConstantTimeCompare(encryptTag[:], decryptTag[:]), 0; got != want {
+			t.Errorf("ConstantTimeCompare() = %d, want %d", got, want)
 		}
 	})
 
@@ -177,8 +177,8 @@ func TestDecryptAndMAC(t *testing.T) {
 
 		_, decryptTag := DecryptAndMAC(nil, key, swapped)
 
-		if subtle.ConstantTimeCompare(encryptTag[:], decryptTag[:]) == 1 {
-			t.Error("tags should not match for swapped chunks")
+		if got, want := subtle.ConstantTimeCompare(encryptTag[:], decryptTag[:]), 0; got != want {
+			t.Errorf("ConstantTimeCompare() = %d, want %d", got, want)
 		}
 	})
 
@@ -250,21 +250,19 @@ func TestEncryptAndMAC(t *testing.T) {
 			}
 			ct, tag := EncryptAndMAC(nil, key, pt)
 
-			// Check tag.
-			if tagHex := hex.EncodeToString(tag[:]); tagHex != vec.Expected.TagHex {
-				t.Errorf("tag = %s, want %s", tagHex, vec.Expected.TagHex)
+			if got, want := hex.EncodeToString(tag[:]), vec.Expected.TagHex; got != want {
+				t.Errorf("EncryptAndMAC() tag = %s, want %s", got, want)
 			}
 
-			// Check ciphertext (full or prefix depending on what the vector provides).
 			if vec.Expected.CtHex != "" || vec.Message.Len == 0 {
-				if ctHex := hex.EncodeToString(ct); ctHex != vec.Expected.CtHex {
-					t.Errorf("ct = %s, want %s", ctHex, vec.Expected.CtHex)
+				if got, want := hex.EncodeToString(ct), vec.Expected.CtHex; got != want {
+					t.Errorf("EncryptAndMAC() ct = %s, want %s", got, want)
 				}
 			}
 			if vec.Expected.CtPrefix32Hex != "" {
 				prefix := min(32, len(ct))
-				if ctHex := hex.EncodeToString(ct[:prefix]); ctHex != vec.Expected.CtPrefix32Hex {
-					t.Errorf("ct prefix = %s, want %s", ctHex, vec.Expected.CtPrefix32Hex)
+				if got, want := hex.EncodeToString(ct[:prefix]), vec.Expected.CtPrefix32Hex; got != want {
+					t.Errorf("EncryptAndMAC() ct prefix = %s, want %s", got, want)
 				}
 			}
 		})
