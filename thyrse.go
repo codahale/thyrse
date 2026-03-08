@@ -59,7 +59,7 @@ func (p *Protocol) String() string {
 // that fits in memory.
 func (p *Protocol) Mix(label string, data []byte) {
 	p.writeOpLabel(opMix, label)
-	p.writeLengthEncode(data)
+	p.writeEncodeString(data)
 }
 
 // MixDigest absorbs streaming data by pre-hashing through KT128. The Init label is used as the KT128 customization
@@ -74,7 +74,7 @@ func (p *Protocol) MixDigest(label string, r io.Reader) error {
 	_, _ = kh.Read(digest[:])
 
 	p.writeOpLabel(opMixDigest, label)
-	p.writeLengthEncode(digest[:])
+	p.writeEncodeString(digest[:])
 	return nil
 }
 
@@ -115,7 +115,7 @@ func (mw *MixWriter) Branch() *Protocol {
 
 	p := mw.p.Clone()
 	p.writeOpLabel(opMixDigest, mw.label)
-	p.writeLengthEncode(digest[:])
+	p.writeEncodeString(digest[:])
 	return p
 }
 
@@ -126,7 +126,7 @@ func (mw *MixWriter) Close() error {
 	_, _ = mw.kh.Read(digest[:])
 
 	mw.p.writeOpLabel(opMixDigest, mw.label)
-	mw.p.writeLengthEncode(digest[:])
+	mw.p.writeEncodeString(digest[:])
 	return nil
 }
 
@@ -151,13 +151,13 @@ func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 	for i := range n {
 		clone := p.Clone()
 		clone.writeLeftEncode(uint64(i + 1))
-		clone.writeLengthEncode(values[i])
+		clone.writeEncodeString(values[i])
 		clones[i] = clone
 	}
 
 	// Finalize base (ordinal 0, empty value).
 	p.writeLeftEncode(0)
-	p.writeLengthEncode(nil)
+	p.writeEncodeString(nil)
 
 	return clones
 }
@@ -390,21 +390,22 @@ func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	return cv
 }
 
-// writeOpLabel writes op || length_encode(label) in a single call to h.Write.
+// writeOpLabel writes op || encode_string(label) in a single call to h.Write.
 // All protocol operations start with this preamble.
 func (p *Protocol) writeOpLabel(op byte, label string) {
 	n := len(label)
-	if n < 256 {
-		// Common case: left_encode(n) = [1, n], so frame is op || 1 || n || label.
-		var buf [259]byte // 3 + 256
+	bits := n * 8
+	if bits < 256 {
+		// Fast path: left_encode(bits) = [1, bits], frame is op || 1 || bits || label.
+		var buf [3 + 31]byte // max n=31 when bits<256
 		buf[0] = op
 		buf[1] = 1
-		buf[2] = byte(n)
+		buf[2] = byte(bits)
 		copy(buf[3:], label)
 		p.h.Absorb(buf[:3+n])
 	} else {
 		p.h.Absorb([]byte{op})
-		p.writeLengthEncode([]byte(label))
+		p.writeEncodeString([]byte(label))
 	}
 }
 
@@ -414,28 +415,33 @@ func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset()
 
 	// Build the entire CHAIN frame in a single stack buffer:
-	//   opChain || originOp || left_encode(count) || left_encode(len(cv)) || cv
-	//   [|| left_encode(len(tag)) || tag]
-	const prefixLen = 6 // opChain(1) + originOp(1) + left_encode(count)(2) + left_encode(cvLen)(2)
-	var buf [prefixLen + chainValueSize + 2 + 32]byte
+	//   opChain || originOp || left_encode(count) || encode_string(cv)
+	//   [|| encode_string(tag)]
+	//
+	// encode_string(cv): left_encode(64*8=512) = [2, 2, 0] → 3 prefix bytes + 64 data bytes.
+	// encode_string(tag): left_encode(32*8=256) = [2, 1, 0] → 3 prefix bytes + 32 data bytes.
+	const cvPrefixLen = 7 // opChain(1) + originOp(1) + left_encode(count)(2) + left_encode(512)(3)
+	var buf [cvPrefixLen + chainValueSize + 3 + 32]byte
 	buf[0] = opChain
 	buf[1] = originOp
-	buf[2] = 1 // left_encode length prefix
-	buf[4] = 1 // left_encode length prefix
-	buf[5] = chainValueSize
+	buf[2] = 1    // left_encode(count) length prefix
+	buf[4] = 2    // left_encode(512) length prefix: 2 value bytes
+	buf[5] = 0x02 // 512 >> 8
+	buf[6] = 0x00 // 512 & 0xFF
 
-	n := prefixLen + chainValueSize
-	copy(buf[prefixLen:], chainValue)
+	n := cvPrefixLen + chainValueSize
+	copy(buf[cvPrefixLen:], chainValue)
 
 	if len(tag) == 0 {
 		buf[3] = 1 // count = 1
 		p.h.Absorb(buf[:n])
 	} else {
-		buf[3] = 2 // count = 2
-		buf[n] = 1 // left_encode length prefix
-		buf[n+1] = byte(len(tag))
-		copy(buf[n+2:], tag)
-		p.h.Absorb(buf[:n+2+len(tag)])
+		buf[3] = 2    // count = 2
+		buf[n] = 2    // left_encode(256) length prefix: 2 value bytes
+		buf[n+1] = 0x01 // 256 >> 8
+		buf[n+2] = 0x00 // 256 & 0xFF
+		copy(buf[n+3:], tag)
+		p.h.Absorb(buf[:n+3+len(tag)])
 	}
 }
 
@@ -460,19 +466,20 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 	p.h.Absorb(buf[i:9])
 }
 
-// writeLengthEncode writes length_encode(x) = left_encode(len(x)) || x.
-func (p *Protocol) writeLengthEncode(data []byte) {
+// writeEncodeString writes encode_string(x) = left_encode(len(x)*8) || x (NIST SP 800-185).
+func (p *Protocol) writeEncodeString(data []byte) {
 	n := len(data)
-	if n > 0 && n < 128 {
-		// Common case: batch left_encode(len) and data into a single write.
-		var buf [130]byte // 2 + 128
+	bits := uint64(n) * 8
+	if n > 0 && bits < 256 {
+		// Fast path: left_encode(bits) = [1, bits], batch into single write.
+		var buf [2 + 31]byte // max n=31 when bits<256
 		buf[0] = 1
-		buf[1] = byte(n)
+		buf[1] = byte(bits)
 		copy(buf[2:], data)
 		p.h.Absorb(buf[:2+n])
 		return
 	}
-	p.writeLeftEncode(uint64(n))
+	p.writeLeftEncode(bits)
 	if n > 0 {
 		p.h.Absorb(data)
 	}
