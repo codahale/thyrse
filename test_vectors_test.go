@@ -11,14 +11,14 @@ import (
 )
 
 type testVectorFile struct {
-	InitLabel string       `json:"init_label"`
-	Vectors   []testVector `json:"vectors"`
+	Vectors []testVector `json:"vectors"`
 }
 
 type testVector struct {
-	ID       string            `json:"id"`
-	Title    string            `json:"title"`
-	Expected map[string]string `json:"expected"`
+	ID        string            `json:"id"`
+	Title     string            `json:"title"`
+	InitLabel string            `json:"init_label"`
+	Expected  map[string]string `json:"expected"`
 }
 
 func loadVectors(t *testing.T) testVectorFile {
@@ -62,95 +62,95 @@ func TestVectors(t *testing.T) {
 
 	t.Run("InitDerive", func(t *testing.T) {
 		vec := vecByID(t, f, "16.1")
-		p := thyrse.New(f.InitLabel)
+		p := thyrse.New(vec.InitLabel)
 		derive := p.Derive("output", nil, 32)
 
-		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive_output_hex"); got != want {
+		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive"); got != want {
 			t.Errorf("Derive = %s, want = %s", got, want)
 		}
 	})
 
 	t.Run("MixMixDerive", func(t *testing.T) {
 		vec := vecByID(t, f, "16.2")
-		p := thyrse.New(f.InitLabel)
+		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		p.Mix("nonce", []byte("test-nonce-value"))
 		derive := p.Derive("output", nil, 32)
 
-		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive_output_hex"); got != want {
+		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive"); got != want {
 			t.Errorf("Derive = %s, want = %s", got, want)
 		}
 	})
 
 	t.Run("SealDerive", func(t *testing.T) {
 		vec := vecByID(t, f, "16.3")
-		p := thyrse.New(f.InitLabel)
+		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		seal := p.Seal("message", nil, []byte("hello, world!"))
 		derive := p.Derive("output", nil, 32)
 
-		if got, want := hex.EncodeToString(seal), expectHex(t, vec, "seal_output_hex"); got != want {
+		if got, want := hex.EncodeToString(seal), expectHex(t, vec, "seal"); got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive_output_hex"); got != want {
+		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive"); got != want {
 			t.Errorf("Derive = %s, want = %s", got, want)
 		}
 	})
 
 	t.Run("MaskSeal", func(t *testing.T) {
 		vec := vecByID(t, f, "16.4")
-		p := thyrse.New(f.InitLabel)
+		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		mask := p.Mask("unauthenticated", nil, []byte("mask this data"))
 		seal := p.Seal("authenticated", nil, []byte("seal this data"))
 
-		if got, want := hex.EncodeToString(mask), expectHex(t, vec, "mask_output_hex"); got != want {
+		if got, want := hex.EncodeToString(mask), expectHex(t, vec, "mask"); got != want {
 			t.Errorf("Mask = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(seal), expectHex(t, vec, "seal_output_hex"); got != want {
+		if got, want := hex.EncodeToString(seal), expectHex(t, vec, "seal"); got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
 	})
 
-	t.Run("RatchetDerive", func(t *testing.T) {
-		vec := vecByID(t, f, "16.5")
+	t.Run("DeriveNoRatchet", func(t *testing.T) {
+		vec := vecByID(t, f, "16.5.1")
+		p := thyrse.New(vec.InitLabel)
+		p.Mix("key", []byte("test-key-material"))
+		derive := p.Derive("output", nil, 32)
 
-		// Without Ratchet.
-		p1 := thyrse.New(f.InitLabel)
-		p1.Mix("key", []byte("test-key-material"))
-		derive1 := p1.Derive("output", nil, 32)
-
-		if got, want := hex.EncodeToString(derive1), expectHex(t, vec, "derive_no_ratchet_hex"); got != want {
+		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive"); got != want {
 			t.Errorf("Derive (no Ratchet) = %s, want = %s", got, want)
 		}
+	})
 
-		// With Ratchet.
-		p2 := thyrse.New(f.InitLabel)
-		p2.Mix("key", []byte("test-key-material"))
-		p2.Ratchet("forward-secrecy")
-		derive2 := p2.Derive("output", nil, 32)
+	t.Run("RatchetDerive", func(t *testing.T) {
+		vec := vecByID(t, f, "16.5.2")
+		p := thyrse.New(vec.InitLabel)
+		p.Mix("key", []byte("test-key-material"))
+		p.Ratchet("forward-secrecy")
+		derive := p.Derive("output", nil, 32)
 
-		if got, want := hex.EncodeToString(derive2), expectHex(t, vec, "derive_after_ratchet_hex"); got != want {
+		if got, want := hex.EncodeToString(derive), expectHex(t, vec, "derive"); got != want {
 			t.Errorf("Derive (after Ratchet) = %s, want = %s", got, want)
 		}
 	})
 
 	t.Run("ForkDerive", func(t *testing.T) {
 		vec := vecByID(t, f, "16.6")
-		p := thyrse.New(f.InitLabel)
+		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		left, right := p.Fork("role", []byte("prover"), []byte("verifier"))
 		base := p.Derive("output", nil, 32)
 		leftDerive := left.Derive("output", nil, 32)
 		rightDerive := right.Derive("output", nil, 32)
 
-		if got, want := hex.EncodeToString(base), expectHex(t, vec, "base_derive_hex"); got != want {
+		if got, want := hex.EncodeToString(base), expectHex(t, vec, "base_derive"); got != want {
 			t.Errorf("Base Derive = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(leftDerive), expectHex(t, vec, "clone_1_derive_hex"); got != want {
+		if got, want := hex.EncodeToString(leftDerive), expectHex(t, vec, "clone_1_derive"); got != want {
 			t.Errorf("Prover Derive = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(rightDerive), expectHex(t, vec, "clone_2_derive_hex"); got != want {
+		if got, want := hex.EncodeToString(rightDerive), expectHex(t, vec, "clone_2_derive"); got != want {
 			t.Errorf("Verifier Derive = %s, want = %s", got, want)
 		}
 	})
@@ -163,7 +163,7 @@ func TestVectors(t *testing.T) {
 		plaintext := []byte("hello, world!")
 
 		// Seal side.
-		pSeal := thyrse.New(f.InitLabel)
+		pSeal := thyrse.New(vec.InitLabel)
 		pSeal.Mix("key", key)
 		pSeal.Mix("nonce", nonce)
 		pSeal.Mix("ad", ad)
@@ -171,7 +171,7 @@ func TestVectors(t *testing.T) {
 		sealDerive := pSeal.Derive("confirm", nil, 32)
 
 		// Open side.
-		pOpen := thyrse.New(f.InitLabel)
+		pOpen := thyrse.New(vec.InitLabel)
 		pOpen.Mix("key", key)
 		pOpen.Mix("nonce", nonce)
 		pOpen.Mix("ad", ad)
@@ -181,7 +181,7 @@ func TestVectors(t *testing.T) {
 		}
 		openDerive := pOpen.Derive("confirm", nil, 32)
 
-		if got, want := hex.EncodeToString(sealed), expectHex(t, vec, "seal_output_hex"); got != want {
+		if got, want := hex.EncodeToString(sealed), expectHex(t, vec, "seal"); got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
 		if !bytes.Equal(opened, plaintext) {
@@ -200,13 +200,13 @@ func TestVectors(t *testing.T) {
 		plaintext := []byte("hello, world!")
 
 		// Seal side.
-		pSeal := thyrse.New(f.InitLabel)
+		pSeal := thyrse.New(vec.InitLabel)
 		pSeal.Mix("key", key)
 		pSeal.Mix("nonce", nonce)
 		sealed := pSeal.Seal("message", nil, plaintext)
 		sealDerive := pSeal.Derive("after", nil, 32)
 
-		if got, want := hex.EncodeToString(sealed), expectHex(t, vec, "seal_output_hex"); got != want {
+		if got, want := hex.EncodeToString(sealed), expectHex(t, vec, "seal"); got != want {
 			t.Errorf("Seal = %s, want = %s", got, want)
 		}
 
@@ -216,7 +216,7 @@ func TestVectors(t *testing.T) {
 		tampered[0] ^= 0xff
 
 		// Open side with tampered data.
-		pOpen := thyrse.New(f.InitLabel)
+		pOpen := thyrse.New(vec.InitLabel)
 		pOpen.Mix("key", key)
 		pOpen.Mix("nonce", nonce)
 		_, err := pOpen.Open("message", nil, tampered)
@@ -230,22 +230,41 @@ func TestVectors(t *testing.T) {
 		}
 	})
 
-	t.Run("MultipleSeals", func(t *testing.T) {
-		vec := vecByID(t, f, "16.9")
-		p := thyrse.New(f.InitLabel)
+	t.Run("MultipleSeals1", func(t *testing.T) {
+		vec := vecByID(t, f, "16.9.1")
+		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		p.Mix("nonce", []byte("test-nonce-value"))
-		seal1 := p.Seal("msg", nil, []byte("first message"))
-		seal2 := p.Seal("msg", nil, []byte("second message"))
-		seal3 := p.Seal("msg", nil, []byte("third message"))
+		seal := p.Seal("msg", nil, []byte("first message"))
 
-		if got, want := hex.EncodeToString(seal1), expectHex(t, vec, "seal_1_output_hex"); got != want {
+		if got, want := hex.EncodeToString(seal), expectHex(t, vec, "seal"); got != want {
 			t.Errorf("Seal 1 = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(seal2), expectHex(t, vec, "seal_2_output_hex"); got != want {
+	})
+
+	t.Run("MultipleSeals2", func(t *testing.T) {
+		vec := vecByID(t, f, "16.9.2")
+		p := thyrse.New(vec.InitLabel)
+		p.Mix("key", []byte("test-key-material"))
+		p.Mix("nonce", []byte("test-nonce-value"))
+		p.Seal("msg", nil, []byte("first message"))
+		seal := p.Seal("msg", nil, []byte("second message"))
+
+		if got, want := hex.EncodeToString(seal), expectHex(t, vec, "seal"); got != want {
 			t.Errorf("Seal 2 = %s, want = %s", got, want)
 		}
-		if got, want := hex.EncodeToString(seal3), expectHex(t, vec, "seal_3_output_hex"); got != want {
+	})
+
+	t.Run("MultipleSeals3", func(t *testing.T) {
+		vec := vecByID(t, f, "16.9.3")
+		p := thyrse.New(vec.InitLabel)
+		p.Mix("key", []byte("test-key-material"))
+		p.Mix("nonce", []byte("test-nonce-value"))
+		p.Seal("msg", nil, []byte("first message"))
+		p.Seal("msg", nil, []byte("second message"))
+		seal := p.Seal("msg", nil, []byte("third message"))
+
+		if got, want := hex.EncodeToString(seal), expectHex(t, vec, "seal"); got != want {
 			t.Errorf("Seal 3 = %s, want = %s", got, want)
 		}
 	})
