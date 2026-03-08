@@ -20,14 +20,11 @@ func Sign(domain string, d *ristretto255.Scalar, rand []byte, message io.Reader)
 	// Initialize the protocol and mix in the signer's public key and the message.
 	p := thyrse.New(domain)
 	p.Mix("signer", ristretto255.NewIdentityElement().ScalarBaseMult(d).Bytes())
-	w := p.MixWriter("message")
-	_, err := io.Copy(w, message)
+	msg, err := io.ReadAll(message)
 	if err != nil {
 		return nil, err
 	}
-	// Close() error is explicitly ignored here because MixWriter.Close() only returns an error
-	// if the underlying writer returns an error, and io.Discard never returns errors.
-	_ = w.Close()
+	p.Mix("message", msg)
 
 	// Fork the protocol into prover/verifier roles and mix both the signer's private key and the provided random data
 	// (if any) into the prover.
@@ -67,14 +64,11 @@ func Verify(domain string, q *ristretto255.Element, sig []byte, message io.Reade
 	// Initialize the protocol and mix in the signer's public key and the message.
 	p := thyrse.New(domain)
 	p.Mix("signer", q.Bytes())
-	w := p.MixWriter("message")
-	_, err := io.Copy(w, message)
+	msg, err := io.ReadAll(message)
 	if err != nil {
 		return false, err
 	}
-	// Close() error is explicitly ignored here because MixWriter.Close() only returns an error
-	// if the underlying writer returns an error, and io.Discard never returns errors.
-	_ = w.Close()
+	p.Mix("message", msg)
 
 	// Fork the protocol, keeping only the verifier.
 	_, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))

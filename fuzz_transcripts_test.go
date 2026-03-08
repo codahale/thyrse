@@ -43,7 +43,7 @@ func FuzzProtocolDivergence(f *testing.F) {
 				t.Skip(err)
 			}
 
-			const opTypeCount = 6 // Mix, MixDigest, Derive, Ratchet, Mask, Seal
+			const opTypeCount = 5 // Mix, Derive, Ratchet, Mask, Seal
 			switch opType := opTypeRaw % opTypeCount; opType {
 			case 0: // Mix
 				input, err := tp.GetBytes()
@@ -53,15 +53,7 @@ func FuzzProtocolDivergence(f *testing.F) {
 
 				p1.Mix(label, input)
 				p2.Mix(label, input)
-			case 1: // MixDigest
-				input, err := tp.GetBytes()
-				if err != nil {
-					t.Skip(err)
-				}
-
-				_ = p1.MixDigest(label, bytes.NewReader(input))
-				_ = p2.MixDigest(label, bytes.NewReader(input))
-			case 2: // Derive
+			case 1: // Derive
 				n, err := tp.GetUint16()
 				if err != nil || n == 0 {
 					t.Skip(err)
@@ -71,10 +63,10 @@ func FuzzProtocolDivergence(f *testing.F) {
 				if !bytes.Equal(res1, res2) {
 					t.Fatalf("Divergent Derive outputs: %x != %x", res1, res2)
 				}
-			case 3: // Ratchet
+			case 2: // Ratchet
 				p1.Ratchet(label)
 				p2.Ratchet(label)
-			case 4: // Mask
+			case 3: // Mask
 				input, err := tp.GetBytes()
 				if err != nil {
 					t.Skip(err)
@@ -84,7 +76,7 @@ func FuzzProtocolDivergence(f *testing.F) {
 				if !bytes.Equal(res1, res2) {
 					t.Fatalf("Divergent Mask outputs: %x != %x", res1, res2)
 				}
-			case 5: // Seal
+			case 4: // Seal
 				input, err := tp.GetBytes()
 				if err != nil {
 					t.Skip(err)
@@ -139,7 +131,7 @@ func FuzzProtocolReversibility(f *testing.F) {
 				t.Skip(err)
 			}
 
-			const opTypeCount = 6 // Mix, MixDigest, Derive, Ratchet, Mask, Seal
+			const opTypeCount = 5 // Mix, Derive, Ratchet, Mask, Seal
 			switch opType := opTypeRaw % opTypeCount; opType {
 			case 0: // Mix
 				input, err := tp.GetBytes()
@@ -154,20 +146,7 @@ func FuzzProtocolReversibility(f *testing.F) {
 					label:  label,
 					input:  input,
 				})
-			case 1: // MixDigest
-				input, err := tp.GetBytes()
-				if err != nil {
-					t.Skip(err)
-				}
-
-				_ = p1.MixDigest(label, bytes.NewReader(input))
-
-				operations = append(operations, operation{
-					opType: 1,
-					label:  label,
-					input:  input,
-				})
-			case 2: // Derive
+			case 1: // Derive
 				n, err := tp.GetUint16()
 				if err != nil || n == 0 {
 					t.Skip(err)
@@ -176,19 +155,19 @@ func FuzzProtocolReversibility(f *testing.F) {
 				output := p1.Derive(label, nil, max(int(n), 1))
 
 				operations = append(operations, operation{
-					opType: 2,
+					opType: 1,
 					label:  label,
 					n:      max(int(n), 1),
 					output: output,
 				})
-			case 3: // Ratchet
+			case 2: // Ratchet
 				p1.Ratchet(label)
 
 				operations = append(operations, operation{
-					opType: 3,
+					opType: 2,
 					label:  label,
 				})
-			case 4: // Mask
+			case 3: // Mask
 				input, err := tp.GetBytes()
 				if err != nil {
 					t.Skip(err)
@@ -197,12 +176,12 @@ func FuzzProtocolReversibility(f *testing.F) {
 				output := p1.Mask(label, nil, input)
 
 				operations = append(operations, operation{
-					opType: 4,
+					opType: 3,
 					label:  label,
 					input:  input,
 					output: output,
 				})
-			case 5: // Seal
+			case 4: // Seal
 				input, err := tp.GetBytes()
 				if err != nil {
 					t.Skip(err)
@@ -211,7 +190,7 @@ func FuzzProtocolReversibility(f *testing.F) {
 				output := p1.Seal(label, nil, input)
 
 				operations = append(operations, operation{
-					opType: 5,
+					opType: 4,
 					label:  label,
 					input:  input,
 					output: output,
@@ -226,21 +205,19 @@ func FuzzProtocolReversibility(f *testing.F) {
 			switch op.opType {
 			case 0: // Mix
 				p2.Mix(op.label, op.input)
-			case 1: // MixDigest
-				_ = p2.MixDigest(op.label, bytes.NewReader(op.input))
-			case 2: // Derive
+			case 1: // Derive
 				output := p2.Derive(op.label, nil, op.n)
 				if !bytes.Equal(output, op.output) {
 					t.Fatalf("Divergent Derive outputs: %x != %x", output, op.output)
 				}
-			case 3: // Ratchet
+			case 2: // Ratchet
 				p2.Ratchet(op.label)
-			case 4: // Unmask
+			case 3: // Unmask
 				plaintext := p2.Unmask(op.label, nil, op.output)
 				if !bytes.Equal(plaintext, op.input) {
 					t.Fatalf("Invalid Unmask output: %x != %x", plaintext, op.input)
 				}
-			case 5: // Open
+			case 4: // Open
 				plaintext, err := p2.Open(op.label, nil, op.output)
 				if err != nil {
 					t.Fatalf("Invalid Open operation: %v", err)

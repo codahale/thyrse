@@ -1,7 +1,6 @@
 package thyrse_test
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/codahale/thyrse"
@@ -11,7 +10,7 @@ import (
 func BenchmarkSchemeHash(b *testing.B) {
 	hash := func(message, dst []byte) []byte {
 		protocol := thyrse.New("hash")
-		_ = protocol.MixDigest("message", bytes.NewReader(message))
+		protocol.Mix("message", message)
 		return protocol.Derive("digest", dst, 32)
 	}
 

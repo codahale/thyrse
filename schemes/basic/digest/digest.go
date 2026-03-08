@@ -5,7 +5,6 @@ import (
 	"hash"
 
 	"github.com/codahale/thyrse"
-	"github.com/codahale/thyrse/internal/kt128"
 )
 
 const (
@@ -14,6 +13,9 @@ const (
 
 	// KeyedSize is the size, in bytes, of the keyed hash's digest.
 	KeyedSize = 16
+
+	// BlockSize is the internal block size used by the digest.
+	BlockSize = 168
 )
 
 // New returns a new hash.Hash instance which uses the given domain string.
@@ -40,17 +42,20 @@ func NewKeyed(domain string, key []byte) hash.Hash {
 }
 
 type digest struct {
-	base, p *thyrse.Protocol
-	w       *thyrse.MixWriter
-	size    int
+	base *thyrse.Protocol
+	p    *thyrse.Protocol
+	buf  []byte
+	size int
 }
 
 func (d *digest) Write(p []byte) (n int, err error) {
-	return d.w.Write(p)
+	d.buf = append(d.buf, p...)
+	return len(p), nil
 }
 
 func (d *digest) Sum(b []byte) []byte {
-	p := d.w.Branch()
+	p := d.p.Clone()
+	p.Mix("message", d.buf)
 	var label string
 	if d.size == KeyedSize {
 		label = "tag"
@@ -62,7 +67,7 @@ func (d *digest) Sum(b []byte) []byte {
 
 func (d *digest) Reset() {
 	d.p = d.base.Clone()
-	d.w = d.p.MixWriter("message")
+	d.buf = d.buf[:0]
 }
 
 func (d *digest) Size() int {
@@ -70,7 +75,7 @@ func (d *digest) Size() int {
 }
 
 func (d *digest) BlockSize() int {
-	return kt128.BlockSize
+	return BlockSize
 }
 
 var _ hash.Hash = (*digest)(nil)

@@ -1,8 +1,6 @@
 package thyrse
 
 import (
-	"bytes"
-	"io"
 	"testing"
 
 	"github.com/codahale/thyrse/internal/testdata"
@@ -96,36 +94,6 @@ func BenchmarkMix(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				p.Mix("data", data)
-			}
-		})
-	}
-}
-
-func BenchmarkMixDigest(b *testing.B) {
-	for _, size := range testdata.Sizes {
-		b.Run(size.Name, func(b *testing.B) {
-			p := New("bench")
-			data := make([]byte, size.N)
-			b.SetBytes(int64(size.N))
-			b.ReportAllocs()
-			for b.Loop() {
-				_ = p.MixDigest("data", bytes.NewReader(data))
-			}
-		})
-	}
-}
-
-func BenchmarkMixWriter(b *testing.B) {
-	for _, size := range testdata.Sizes {
-		b.Run(size.Name, func(b *testing.B) {
-			p := New("bench")
-			data := make([]byte, size.N)
-			b.SetBytes(int64(size.N))
-			b.ReportAllocs()
-			for b.Loop() {
-				mw := p.MixWriter("data")
-				_, _ = io.Copy(mw, bytes.NewReader(data))
-				_ = mw.Close()
 			}
 		})
 	}

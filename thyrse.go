@@ -11,9 +11,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"io"
 
-	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/hazmat/treewrap"
 	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"
@@ -60,74 +58,6 @@ func (p *Protocol) String() string {
 func (p *Protocol) Mix(label string, data []byte) {
 	p.writeOpLabel(opMix, label)
 	p.writeEncodeString(data)
-}
-
-// MixDigest absorbs streaming data by pre-hashing through KT128. The Init label is used as the KT128 customization
-// string, binding the digest to the protocol identity.
-func (p *Protocol) MixDigest(label string, r io.Reader) error {
-	kh := kt128.New()
-	if _, err := io.Copy(kh, r); err != nil {
-		return err
-	}
-
-	var digest [chainValueSize]byte
-	_, _ = kh.ReadCustom([]byte(p.initLabel), digest[:])
-
-	p.writeOpLabel(opMixDigest, label)
-	p.writeEncodeString(digest[:])
-	return nil
-}
-
-// MixWriter returns a [MixWriter] for incrementally supplying the input of a MixDigest operation. Write data to it in
-// any number of calls, then Close it to complete the operation.
-//
-// To simultaneously route written data to another destination, wrap the MixWriter and the other destination in an
-// [io.MultiWriter]. To mix data from an [io.Reader] while also routing it to another destination, wrap the reader with
-// [io.TeeReader].
-func (p *Protocol) MixWriter(label string) *MixWriter {
-	return &MixWriter{
-		p:     p,
-		label: label,
-		kh:    kt128.New(),
-	}
-}
-
-// MixWriter incrementally accumulates the input of a MixDigest operation. Call [MixWriter.Close] to complete the
-// operation on the associated [Protocol].
-type MixWriter struct {
-	p     *Protocol
-	label string
-	kh    *kt128.Hasher
-}
-
-// Write adds p to the MixDigest input.
-func (mw *MixWriter) Write(p []byte) (int, error) {
-	return mw.kh.Write(p)
-}
-
-// Branch returns a clone of the associated [Protocol] with the MixDigest operation completed using the input
-// accumulated so far. The original Protocol and MixWriter remain unchanged and can continue to accumulate input.
-func (mw *MixWriter) Branch() *Protocol {
-	kh := mw.kh.Clone()
-
-	var digest [chainValueSize]byte
-	_, _ = kh.ReadCustom([]byte(mw.p.initLabel), digest[:])
-
-	p := mw.p.Clone()
-	p.writeOpLabel(opMixDigest, mw.label)
-	p.writeEncodeString(digest[:])
-	return p
-}
-
-// Close completes the MixDigest operation, mixing the accumulated input into the protocol transcript. Close must be
-// called exactly once.
-func (mw *MixWriter) Close() error {
-	var digest [chainValueSize]byte
-	_, _ = mw.kh.ReadCustom([]byte(mw.p.initLabel), digest[:])
-
-	mw.p.writeOpLabel(opMixDigest, mw.label)
-	mw.p.writeEncodeString(digest[:])
-	return nil
 }
 
 // Fork calls ForkN with the given label and values and returns the two branches.
@@ -497,13 +427,12 @@ const (
 	dsRatchet = 0x24
 
 	// Operation codes.
-	opInit      = 0x10
-	opMix       = 0x11
-	opMixDigest = 0x12
-	opFork      = 0x13
-	opDerive    = 0x14
-	opRatchet   = 0x15
-	opMask      = 0x16
-	opSeal      = 0x17
-	opChain     = 0x18
+	opInit    = 0x01
+	opMix     = 0x02
+	opFork    = 0x03
+	opDerive  = 0x04
+	opRatchet = 0x05
+	opMask    = 0x06
+	opSeal    = 0x07
+	opChain   = 0x08
 )

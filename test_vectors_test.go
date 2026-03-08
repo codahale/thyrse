@@ -108,25 +108,6 @@ func TestVectors(t *testing.T) {
 		}
 	})
 
-	t.Run("MixDigest", func(t *testing.T) {
-		// §16.7: MixDigest — pre-hash of a 10000-byte input via KT128.
-		data := make([]byte, 10000)
-		for i := range data {
-			data[i] = byte(i % 251)
-		}
-
-		p := thyrse.New("test.vector")
-		p.Mix("key", []byte("test-key-material"))
-		if err := p.MixDigest("stream-data", bytes.NewReader(data)); err != nil {
-			t.Fatal(err)
-		}
-		derive := p.Derive("output", nil, 32)
-
-		if got, want := hex.EncodeToString(derive), "af174384212309ffa4c9ff60bb18a96a9b8a1c3ec9c1d9449bad6a7207504878"; got != want {
-			t.Errorf("Derive = %s, want = %s", got, want)
-		}
-	})
-
 	t.Run("SealOpenRoundTrip", func(t *testing.T) {
 		// §16.8: Seal + Open round-trip — successful authenticated encryption and decryption.
 		key := []byte("test-key-material")
