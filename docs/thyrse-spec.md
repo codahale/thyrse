@@ -154,6 +154,30 @@ CS_DERIVE      = 0x21
 CS_MASK_KEY    = 0x22
 CS_SEAL_KEY    = 0x23
 CS_RATCHET     = 0x24
+
+
+def _encode_frame(start: int, op: int, label: bytes, value: bytes = b"") -> bytes:
+    """Encode a TKDF frame: op ‖ encode_string(label) ‖ value ‖ right_encode(start).
+
+    Each frame records its own start position via right_encode, making the
+    transcript recoverable (§5).
+    """
+    return bytes([op]) + encode_string(label) + value + right_encode(start)
+
+
+def _encode_chain(origin_op: int, *values: bytes) -> bytearray:
+    """Encode a CHAIN frame that replaces the transcript after a finalizing operation.
+
+    Finalizing operations (Derive, Ratchet, Mask, Seal) evaluate KT128 over
+    the current transcript, then replace it with a single CHAIN frame.  The
+    frame carries the origin operation code and all derived values so the
+    transcript records which operation produced the chain and what was fed
+    back into it.
+    """
+    payload = bytes([origin_op]) + left_encode(len(values))
+    for v in values:
+        payload += encode_string(v)
+    return bytearray(_encode_frame(0, OP_CHAIN, b"", payload))
 ```
 <!-- end:code:ref/thyrse.py:constants -->
 
@@ -162,23 +186,6 @@ CS_RATCHET     = 0x24
 class Protocol:
     def __init__(self):
         self.transcript = bytearray()
-
-    def _append_frame(self, op: int, label: bytes, value: bytes = b""):
-        start = len(self.transcript)
-        self.transcript += bytes([op]) + encode_string(label) + value
-        self.transcript += right_encode(start)
-
-    def _finalize(self, customization_strings: dict[int, int]) -> dict[int, bytes]:
-        T = bytes(self.transcript)
-        return {cs: kt128(T, bytes([cs]), length)
-                for cs, length in customization_strings.items()}
-
-    def _reset_chain(self, origin_op: int, *values: bytes):
-        payload = bytes([origin_op]) + left_encode(len(values))
-        for v in values:
-            payload += encode_string(v)
-        self.transcript = bytearray()
-        self._append_frame(OP_CHAIN, b"", payload)
 ```
 <!-- end:code:ref/thyrse.py:protocol_core -->
 
@@ -223,7 +230,7 @@ Append frame `(0x01, label, "")`.
 <!-- begin:code:ref/thyrse.py:init -->
 ```python
     def init(self, label: bytes):
-        self._append_frame(OP_INIT, label)
+        self.transcript += _encode_frame(len(self.transcript), OP_INIT, label)
 ```
 <!-- end:code:ref/thyrse.py:init -->
 
@@ -240,7 +247,7 @@ Append frame `(0x02, label, data)`.
 <!-- begin:code:ref/thyrse.py:mix -->
 ```python
     def mix(self, label: bytes, data: bytes):
-        self._append_frame(OP_MIX, label, data)
+        self.transcript += _encode_frame(len(self.transcript), OP_MIX, label, data)
 ```
 <!-- end:code:ref/thyrse.py:mix -->
 
@@ -272,14 +279,14 @@ empty value. Clone 1 gets ordinal `1` with value `prover`. Clone 2 gets ordinal 
     def fork(self, label: bytes, *values: bytes) -> list["Protocol"]:
         N = len(values)
         snapshot = bytes(self.transcript)
-        self._append_frame(OP_FORK, label,
+        self.transcript += _encode_frame(len(self.transcript), OP_FORK, label,
             left_encode(N) + left_encode(0) + encode_string(b""))
         clones = []
         for i, val in enumerate(values, start=1):
             clone = Protocol()
             clone.transcript = bytearray(snapshot)
-            clone._append_frame(OP_FORK, label,
-                left_encode(N) + left_encode(i) + encode_string(val))
+            clone.transcript += _encode_frame(len(clone.transcript), OP_FORK,
+                label, left_encode(N) + left_encode(i) + encode_string(val))
             clones.append(clone)
         return clones
 ```
@@ -313,10 +320,13 @@ Return `output`.
 ```python
     def derive(self, label: bytes, output_len: int) -> bytes:
         assert output_len > 0
-        self._append_frame(OP_DERIVE, label, left_encode(output_len))
-        results = self._finalize({CS_CHAIN: H, CS_DERIVE: output_len})
-        self._reset_chain(OP_DERIVE, results[CS_CHAIN])
-        return results[CS_DERIVE]
+        self.transcript += _encode_frame(
+            len(self.transcript), OP_DERIVE, label, left_encode(output_len))
+        T = bytes(self.transcript)
+        chain = kt128(T, bytes([CS_CHAIN]), H)
+        output = kt128(T, bytes([CS_DERIVE]), output_len)
+        self.transcript = _encode_chain(OP_DERIVE, chain)
+        return output
 ```
 <!-- end:code:ref/thyrse.py:derive -->
 
@@ -339,9 +349,11 @@ Irreversibly advances the protocol state. No user-visible output is produced.
 <!-- begin:code:ref/thyrse.py:ratchet -->
 ```python
     def ratchet(self, label: bytes):
-        self._append_frame(OP_RATCHET, label)
-        results = self._finalize({CS_RATCHET: H})
-        self._reset_chain(OP_RATCHET, results[CS_RATCHET])
+        self.transcript += _encode_frame(
+            len(self.transcript), OP_RATCHET, label)
+        T = bytes(self.transcript)
+        ratchet_value = kt128(T, bytes([CS_RATCHET]), H)
+        self.transcript = _encode_chain(OP_RATCHET, ratchet_value)
 ```
 <!-- end:code:ref/thyrse.py:ratchet -->
 
@@ -397,17 +409,23 @@ succeeded.
 <!-- begin:code:ref/thyrse.py:mask_unmask -->
 ```python
     def mask(self, label: bytes, plaintext: bytes) -> bytes:
-        self._append_frame(OP_MASK, label)
-        results = self._finalize({CS_CHAIN: H, CS_MASK_KEY: C})
-        ct, tag = encrypt_and_mac(results[CS_MASK_KEY], plaintext)
-        self._reset_chain(OP_MASK, results[CS_CHAIN], tag)
+        self.transcript += _encode_frame(
+            len(self.transcript), OP_MASK, label)
+        T = bytes(self.transcript)
+        chain = kt128(T, bytes([CS_CHAIN]), H)
+        mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
+        ct, tag = encrypt_and_mac(mask_key, plaintext)
+        self.transcript = _encode_chain(OP_MASK, chain, tag)
         return ct
 
     def unmask(self, label: bytes, ciphertext: bytes) -> bytes:
-        self._append_frame(OP_MASK, label)
-        results = self._finalize({CS_CHAIN: H, CS_MASK_KEY: C})
-        pt, tag = decrypt_and_mac(results[CS_MASK_KEY], ciphertext)
-        self._reset_chain(OP_MASK, results[CS_CHAIN], tag)
+        self.transcript += _encode_frame(
+            len(self.transcript), OP_MASK, label)
+        T = bytes(self.transcript)
+        chain = kt128(T, bytes([CS_CHAIN]), H)
+        mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
+        pt, tag = decrypt_and_mac(mask_key, ciphertext)
+        self.transcript = _encode_chain(OP_MASK, chain, tag)
         return pt
 ```
 <!-- end:code:ref/thyrse.py:mask_unmask -->
@@ -467,17 +485,23 @@ Return `plaintext`.
 <!-- begin:code:ref/thyrse.py:seal_open -->
 ```python
     def seal(self, label: bytes, plaintext: bytes) -> bytes:
-        self._append_frame(OP_SEAL, label)
-        results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
-        ct, tag = encrypt_and_mac(results[CS_SEAL_KEY], plaintext)
-        self._reset_chain(OP_SEAL, results[CS_CHAIN], tag)
+        self.transcript += _encode_frame(
+            len(self.transcript), OP_SEAL, label)
+        T = bytes(self.transcript)
+        chain = kt128(T, bytes([CS_CHAIN]), H)
+        seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
+        ct, tag = encrypt_and_mac(seal_key, plaintext)
+        self.transcript = _encode_chain(OP_SEAL, chain, tag)
         return ct + tag
 
     def open(self, label: bytes, ciphertext: bytes, tag: bytes) -> bytes | None:
-        self._append_frame(OP_SEAL, label)
-        results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
-        pt, computed_tag = decrypt_and_mac(results[CS_SEAL_KEY], ciphertext)
-        self._reset_chain(OP_SEAL, results[CS_CHAIN], computed_tag)
+        self.transcript += _encode_frame(
+            len(self.transcript), OP_SEAL, label)
+        T = bytes(self.transcript)
+        chain = kt128(T, bytes([CS_CHAIN]), H)
+        seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
+        pt, computed_tag = decrypt_and_mac(seal_key, ciphertext)
+        self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
         if not _hmac.compare_digest(computed_tag, tag):
             return None
         return pt
