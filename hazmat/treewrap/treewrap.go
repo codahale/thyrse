@@ -13,7 +13,7 @@ package treewrap
 import (
 	"encoding/binary"
 
-	"github.com/codahale/thyrse/internal/encoding"
+	"github.com/codahale/thyrse/internal/enc"
 	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"
 )
@@ -100,7 +100,7 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 	}
 
 	// Chaining hop suffix: length_encode(nLeaves) || 0xFF || 0xFF
-	suffix := append(encoding.LengthEncode(uint64(c.nLeaves)), 0xFF, 0xFF)
+	suffix := append(enc.LengthEncode(uint64(c.nLeaves)), 0xFF, 0xFF)
 	c.final.Absorb(suffix)
 
 	// Tag: pad_permute(0x06)

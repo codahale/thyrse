@@ -8,7 +8,7 @@ package kt128
 import (
 	"slices"
 
-	"github.com/codahale/thyrse/internal/encoding"
+	"github.com/codahale/thyrse/internal/enc"
 	"github.com/codahale/thyrse/internal/keccak"
 )
 
@@ -43,7 +43,7 @@ func New() *Hasher {
 func NewCustom(c []byte) *Hasher {
 	suffix := make([]byte, 0, len(c)+9)
 	suffix = append(suffix, c...)
-	suffix = append(suffix, encoding.LengthEncode(uint64(len(c)))...)
+	suffix = append(suffix, enc.LengthEncode(uint64(len(c)))...)
 	return &Hasher{suffix: suffix}
 }
 
@@ -273,7 +273,7 @@ func (h *Hasher) finalize() {
 	}
 
 	// Terminator: lengthEncode(leafCount) || 0xFF || 0xFF.
-	h.ts.Absorb(encoding.LengthEncode(uint64(h.leafCount)))
+	h.ts.Absorb(enc.LengthEncode(uint64(h.leafCount)))
 	h.ts.Absorb([]byte{0xFF, 0xFF})
 }
 
