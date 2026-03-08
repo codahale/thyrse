@@ -34,7 +34,7 @@ func unhex(s string) []byte {
 // readCustom finalizes h with the given customization string and reads output.
 // This is a test helper for RFC vector compatibility.
 func readCustom(h *Hasher, custom []byte, out []byte) {
-	h.ReadCustom(custom, out)
+	_, _ = h.ReadCustom(custom, out)
 }
 
 // sumHelper returns a 32-byte hash without modifying the original hasher.
@@ -42,7 +42,7 @@ func readCustom(h *Hasher, custom []byte, out []byte) {
 func sumHelper(h *Hasher) []byte {
 	clone := h.clone()
 	out := make([]byte, 32)
-	clone.Read(out)
+	_, _ = clone.Read(out)
 	return out
 }
 

@@ -241,7 +241,7 @@ func (h *Hasher) clone() *Hasher {
 		pos:       h.pos,
 		leafCount: h.leafCount,
 		ds:        h.ds,
-		state: h.state,
+		state:     h.state,
 	}
 }
 
