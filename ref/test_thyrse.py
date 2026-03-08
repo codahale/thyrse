@@ -297,96 +297,145 @@ class TestVectorsJSON(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with open(VECTORS_PATH) as f:
-            cls.doc = json.load(f)
+            cls.vectors = json.load(f)["vectors"]
 
-    def _run_ops(self, vec):
-        """Execute operations and return (protocol, outputs, clones)."""
-        init_label = self.doc["init_label"].encode()
-        p = Protocol()
-        outputs = {}
-        clones = []
-
-        for op in vec["operations"]:
-            if op["op"] == "init":
-                p.init(init_label)
-            elif op["op"] == "mix":
-                p.mix(op["label"].encode(), op["data_utf8"].encode())
-            elif op["op"] == "derive":
-                out = p.derive(op["label"].encode(), op["output_len"])
-                outputs.setdefault("derive", []).append(out)
-            elif op["op"] == "ratchet":
-                p.ratchet(op["label"].encode())
-            elif op["op"] == "seal":
-                out = p.seal(op["label"].encode(), op["plaintext_utf8"].encode())
-                outputs.setdefault("seal", []).append(out)
-            elif op["op"] == "mask":
-                out = p.mask(op["label"].encode(), op["plaintext_utf8"].encode())
-                outputs["mask"] = out
-            elif op["op"] == "fork":
-                vals = [v.encode() for v in op["values_utf8"]]
-                clones = p.fork(op["label"].encode(), *vals)
-
-        return p, outputs, clones
+    def _vec(self, vid):
+        for v in self.vectors:
+            if v["id"] == vid:
+                return v
+        self.fail(f"vector {vid} not found")
 
     def test_16_1_init_derive(self):
-        vec = self.doc["vectors"][0]
-        _, outputs, _ = self._run_ops(vec)
-        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_output_hex"])
+        vec = self._vec("16.1")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), vec["expected"]["derive"])
 
-    def test_16_2_init_mix_mix_derive(self):
-        vec = self.doc["vectors"][1]
-        _, outputs, _ = self._run_ops(vec)
-        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_output_hex"])
+    def test_16_2_mix_mix_derive(self):
+        vec = self._vec("16.2")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        p.mix(b"nonce", b"test-nonce-value")
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_3_seal_derive(self):
-        vec = self.doc["vectors"][2]
-        _, outputs, _ = self._run_ops(vec)
-        self.assertEqual(outputs["seal"][0].hex(), vec["expected"]["seal_output_hex"])
-        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_output_hex"])
+        vec = self._vec("16.3")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        sealed = p.seal(b"message", b"hello, world!")
+        self.assertEqual(sealed.hex(), vec["expected"]["seal"])
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_4_mask_seal(self):
-        vec = self.doc["vectors"][3]
-        _, outputs, _ = self._run_ops(vec)
-        self.assertEqual(outputs["mask"].hex(), vec["expected"]["mask_output_hex"])
-        self.assertEqual(outputs["seal"][0].hex(), vec["expected"]["seal_output_hex"])
+        vec = self._vec("16.4")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        masked = p.mask(b"unauthenticated", b"mask this data")
+        self.assertEqual(masked.hex(), vec["expected"]["mask"])
+        sealed = p.seal(b"authenticated", b"seal this data")
+        self.assertEqual(sealed.hex(), vec["expected"]["seal"])
 
-    def test_16_5_ratchet(self):
-        vec = self.doc["vectors"][4]
-        _, outputs, _ = self._run_ops(vec)
-        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_after_ratchet_hex"])
+    def test_16_5_1_derive_no_ratchet(self):
+        vec = self._vec("16.5.1")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), vec["expected"]["derive"])
+
+    def test_16_5_2_ratchet_derive(self):
+        vec = self._vec("16.5.2")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        p.ratchet(b"forward-secrecy")
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_6_fork(self):
-        vec = self.doc["vectors"][5]
-        p, _, clones = self._run_ops(vec)
-        # _run_ops already called derive on base via operations; need to re-run manually
-        # since fork+derive on all branches requires special handling
-        p2 = Protocol()
-        p2.init(self.doc["init_label"].encode())
-        p2.mix(b"key", b"test-key-material")
-        clones2 = p2.fork(b"role", b"prover", b"verifier")
-        self.assertEqual(p2.derive(b"output", 32).hex(), vec["expected"]["base_derive_hex"])
-        self.assertEqual(clones2[0].derive(b"output", 32).hex(), vec["expected"]["clone_1_derive_hex"])
-        self.assertEqual(clones2[1].derive(b"output", 32).hex(), vec["expected"]["clone_2_derive_hex"])
-
-    def test_16_9_multiple_seals(self):
-        vec = self.doc["vectors"][8]
-        _, outputs, _ = self._run_ops(vec)
-        self.assertEqual(outputs["seal"][0].hex(), vec["expected"]["seal_1_output_hex"])
-        self.assertEqual(outputs["seal"][1].hex(), vec["expected"]["seal_2_output_hex"])
-        self.assertEqual(outputs["seal"][2].hex(), vec["expected"]["seal_3_output_hex"])
-
-
-class TestFork(unittest.TestCase):
-    def test_fork_derive_16_6(self):
-        """§16.6: Fork with two branches, each producing Derive."""
+        vec = self._vec("16.6")
         p = Protocol()
-        p.init(b"test.vector")
+        p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
         clones = p.fork(b"role", b"prover", b"verifier")
+        self.assertEqual(p.derive(b"output", 32).hex(), vec["expected"]["base_derive"])
+        self.assertEqual(clones[0].derive(b"output", 32).hex(), vec["expected"]["clone_1_derive"])
+        self.assertEqual(clones[1].derive(b"output", 32).hex(), vec["expected"]["clone_2_derive"])
 
-        base_out = p.derive(b"output", 32)
-        self.assertEqual(base_out.hex(), "53fa58633361a67384c7a6d8df0e6163dac581024e9786856442edf13e5b787c")
-        prover_out = clones[0].derive(b"output", 32)
-        self.assertEqual(prover_out.hex(), "329696ce84ae7aef8577db9841d82956b60f9f7ce38449d8b83092f3a46a89ad")
-        verifier_out = clones[1].derive(b"output", 32)
-        self.assertEqual(verifier_out.hex(), "19644cc5d0a5bc8f52eb647a581b85ba868ce0cb3561f8d2a58f1bf6ed1a3e82")
+    def test_16_7_seal_open_roundtrip(self):
+        vec = self._vec("16.7")
+        sender = Protocol()
+        sender.init(vec["init_label"].encode())
+        sender.mix(b"key", b"test-key-material")
+        sender.mix(b"nonce", b"test-nonce-value")
+        sender.mix(b"ad", b"associated data")
+        sealed = sender.seal(b"message", b"hello, world!")
+        self.assertEqual(sealed.hex(), vec["expected"]["seal"])
+
+        receiver = Protocol()
+        receiver.init(vec["init_label"].encode())
+        receiver.mix(b"key", b"test-key-material")
+        receiver.mix(b"nonce", b"test-nonce-value")
+        receiver.mix(b"ad", b"associated data")
+        ct, tag = sealed[:-32], sealed[-32:]
+        pt = receiver.open(b"message", ct, tag)
+        self.assertEqual(pt, b"hello, world!")
+
+        self.assertEqual(sender.derive(b"confirm", 32), receiver.derive(b"confirm", 32))
+
+    def test_16_8_seal_open_tampered(self):
+        vec = self._vec("16.8")
+        sender = Protocol()
+        sender.init(vec["init_label"].encode())
+        sender.mix(b"key", b"test-key-material")
+        sender.mix(b"nonce", b"test-nonce-value")
+        sealed = sender.seal(b"message", b"hello, world!")
+        self.assertEqual(sealed.hex(), vec["expected"]["seal"])
+
+        receiver = Protocol()
+        receiver.init(vec["init_label"].encode())
+        receiver.mix(b"key", b"test-key-material")
+        receiver.mix(b"nonce", b"test-nonce-value")
+        tampered = bytearray(sealed)
+        tampered[0] ^= 0xFF
+        ct, tag = bytes(tampered[:-32]), bytes(tampered[-32:])
+        pt = receiver.open(b"message", ct, tag)
+        self.assertIsNone(pt)
+
+        self.assertNotEqual(sender.derive(b"after", 32), receiver.derive(b"after", 32))
+
+    def test_16_9_1_seal(self):
+        vec = self._vec("16.9.1")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        p.mix(b"nonce", b"test-nonce-value")
+        s1 = p.seal(b"msg", b"first message")
+        self.assertEqual(s1.hex(), vec["expected"]["seal"])
+
+    def test_16_9_2_seal(self):
+        vec = self._vec("16.9.2")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        p.mix(b"nonce", b"test-nonce-value")
+        p.seal(b"msg", b"first message")
+        s2 = p.seal(b"msg", b"second message")
+        self.assertEqual(s2.hex(), vec["expected"]["seal"])
+
+    def test_16_9_3_seal(self):
+        vec = self._vec("16.9.3")
+        p = Protocol()
+        p.init(vec["init_label"].encode())
+        p.mix(b"key", b"test-key-material")
+        p.mix(b"nonce", b"test-nonce-value")
+        p.seal(b"msg", b"first message")
+        p.seal(b"msg", b"second message")
+        s3 = p.seal(b"msg", b"third message")
+        self.assertEqual(s3.hex(), vec["expected"]["seal"])
