@@ -193,7 +193,7 @@ func (h *Hasher) Chain(customA []byte, dstA []byte, customB []byte, dstB []byte)
 	// When suffixes have equal length, both duplexes end at the same sponge
 	// position and we can use parallel PadPermute. Otherwise fall back to
 	// sequential.
-	if a.ts.Pos() == b.ts.Pos() {
+	if a.ds == b.ds && a.ts.Pos() == b.ts.Pos() {
 		a.ts.PadPermute2(&b.ts, a.ds)
 	} else {
 		a.ts.PadPermute(a.ds)
