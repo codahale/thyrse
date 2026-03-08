@@ -25,7 +25,7 @@ type Hasher struct {
 	buf       []byte        // buffered message/leaf data
 	ts        keccak.Duplex // final-node sponge state
 	pos       uint64        // total bytes written via Write
-	leafCount int           // total leaf CVs written to ts so far
+	leafCount uint64        // total leaf CVs written to ts so far
 	ds        byte          // KT128 customization byte for finalization (0x07 single-node, 0x06 tree-mode)
 	treeMode  bool          // true once S_0 has been flushed to ts
 	finalized bool          // true once finalize has completed
@@ -157,7 +157,7 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 		idx++
 	}
 
-	h.leafCount += nLeaves
+	h.leafCount += uint64(nLeaves)
 }
 
 // Read squeezes output from the XOF. On the first call, it finalizes absorption
@@ -252,7 +252,7 @@ func (h *Hasher) Equal(other *Hasher) int {
 	eq &= subtle.ConstantTimeCompare(h.buf, other.buf)
 	eq &= subtle.ConstantTimeEq(int32(h.pos>>32), int32(other.pos>>32))
 	eq &= subtle.ConstantTimeEq(int32(h.pos), int32(other.pos))
-	eq &= subtle.ConstantTimeEq(int32(uint64(h.leafCount)>>32), int32(uint64(other.leafCount)>>32))
+	eq &= subtle.ConstantTimeEq(int32(h.leafCount>>32), int32(other.leafCount>>32))
 	eq &= subtle.ConstantTimeEq(int32(h.leafCount), int32(other.leafCount))
 	eq &= subtle.ConstantTimeByteEq(h.ds, other.ds)
 	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.treeMode)), int32(boolToInt(other.treeMode)))
@@ -326,7 +326,7 @@ func (h *Hasher) finalize(custom []byte) {
 	}
 
 	// Terminator: LengthEncode(leafCount) || 0xFF || 0xFF.
-	h.ts.Absorb(enc.LengthEncode(uint64(h.leafCount)))
+	h.ts.Absorb(enc.LengthEncode(h.leafCount))
 	h.ts.Absorb([]byte{0xFF, 0xFF})
 }
 
