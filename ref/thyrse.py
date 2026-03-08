@@ -141,7 +141,7 @@ class Protocol:
 
 
 # region: usage_aead
-def _example_aead():
+def _example_aead(key_material, nonce, associated_data, plaintext):
     p = Protocol()
     p.init(b"com.example.myprotocol")
     p.mix(b"key", key_material)
@@ -152,7 +152,7 @@ def _example_aead():
 
 
 # region: usage_aead_decrypt
-def _example_aead_decrypt():
+def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag):
     p = Protocol()
     p.init(b"com.example.myprotocol")
     p.mix(b"key", key_material)

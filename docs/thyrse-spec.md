@@ -908,7 +908,7 @@ A standard AEAD construction:
 
 <!-- begin:code:ref/thyrse.py:usage_aead -->
 ```python
-def _example_aead():
+def _example_aead(key_material, nonce, associated_data, plaintext):
     p = Protocol()
     p.init(b"com.example.myprotocol")
     p.mix(b"key", key_material)
@@ -922,7 +922,7 @@ Decryption:
 
 <!-- begin:code:ref/thyrse.py:usage_aead_decrypt -->
 ```python
-def _example_aead_decrypt():
+def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag):
     p = Protocol()
     p.init(b"com.example.myprotocol")
     p.mix(b"key", key_material)
