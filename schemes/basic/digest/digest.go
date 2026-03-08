@@ -5,7 +5,7 @@ import (
 	"hash"
 
 	"github.com/codahale/thyrse"
-	"github.com/codahale/thyrse/hazmat/kt128"
+	"github.com/codahale/thyrse/internal/kt128"
 )
 
 const (

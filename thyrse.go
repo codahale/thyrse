@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/codahale/thyrse/hazmat/kt128"
+	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/hazmat/treewrap"
 	"github.com/codahale/thyrse/internal/keccak"
 	"github.com/codahale/thyrse/internal/mem"

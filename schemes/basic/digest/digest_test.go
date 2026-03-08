@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/codahale/thyrse/hazmat/kt128"
+	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/schemes/basic/digest"
 )
 
