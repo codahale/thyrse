@@ -189,6 +189,31 @@ class TestRatchet(unittest.TestCase):
         self.assertEqual(out2.hex(), "23be92e694890a8b3d6fb5b4885b3b5a63539ad8da6fc5e8e20cf34728dbeb91")
 
 
+class TestMask(unittest.TestCase):
+    def test_mask_seal_16_4(self):
+        """§16.4: Init + Mix + Mask + Seal."""
+        p = Protocol()
+        p.init(b"test.vector")
+        p.mix(b"key", b"test-key-material")
+        masked = p.mask(b"unauthenticated", b"mask this data")
+        self.assertEqual(masked.hex(), "21fc87f3008b3cff62fb2584c970")
+        sealed = p.seal(b"authenticated", b"seal this data")
+        self.assertEqual(sealed.hex(), "f078ea89c7dea34a821c8470544ec5a70061c75aa9de8a1d49e4a9e816455ca54f78e50a2a1981d1c0a47cfe4d20")
+
+    def test_mask_unmask_roundtrip(self):
+        """Mask then Unmask with identical transcripts recovers plaintext."""
+        sender = Protocol()
+        sender.init(b"test.vector")
+        sender.mix(b"key", b"test-key-material")
+        ct = sender.mask(b"data", b"secret message")
+
+        receiver = Protocol()
+        receiver.init(b"test.vector")
+        receiver.mix(b"key", b"test-key-material")
+        pt = receiver.unmask(b"data", ct)
+        self.assertEqual(pt, b"secret message")
+
+
 class TestSeal(unittest.TestCase):
     def test_seal_derive_16_3(self):
         """§16.3: Init + Mix + Seal + Derive."""

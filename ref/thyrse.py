@@ -65,6 +65,20 @@ class Protocol:
         results = self._finalize({CS_RATCHET: H})
         self._reset_chain(OP_RATCHET, results[CS_RATCHET])
 
+    def mask(self, label: bytes, plaintext: bytes) -> bytes:
+        self._append_frame(OP_MASK, label)
+        results = self._finalize({CS_CHAIN: H, CS_MASK_KEY: C})
+        ct, tag = encrypt_and_mac(results[CS_MASK_KEY], plaintext)
+        self._reset_chain(OP_MASK, results[CS_CHAIN], tag)
+        return ct
+
+    def unmask(self, label: bytes, ciphertext: bytes) -> bytes:
+        self._append_frame(OP_MASK, label)
+        results = self._finalize({CS_CHAIN: H, CS_MASK_KEY: C})
+        pt, tag = decrypt_and_mac(results[CS_MASK_KEY], ciphertext)
+        self._reset_chain(OP_MASK, results[CS_CHAIN], tag)
+        return pt
+
     def seal(self, label: bytes, plaintext: bytes) -> bytes:
         self._append_frame(OP_SEAL, label)
         results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
