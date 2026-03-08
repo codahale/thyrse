@@ -14,6 +14,9 @@ type Duplex struct {
 	pos int
 }
 
+// Pos returns the current byte position within the rate.
+func (d *Duplex) Pos() int { return d.pos }
+
 // Reset zeros the state and resets the position to 0.
 func (d *Duplex) Reset() {
 	d.s.Reset()

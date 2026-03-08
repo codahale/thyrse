@@ -490,6 +490,34 @@ func TestChain(t *testing.T) {
 		}
 	})
 
+	t.Run("different length customizations (sequential fallback)", func(t *testing.T) {
+		msg := ptn(100)
+
+		h := New()
+		_, _ = h.Write(msg)
+		dstA := make([]byte, 32)
+		dstB := make([]byte, 32)
+		h.Chain([]byte("X"), dstA, []byte("long custom string"), dstB)
+
+		// Compare with sequential readCustom.
+		hA := New()
+		_, _ = hA.Write(msg)
+		wantA := make([]byte, 32)
+		readCustom(hA, []byte("X"), wantA)
+
+		hB := New()
+		_, _ = hB.Write(msg)
+		wantB := make([]byte, 32)
+		readCustom(hB, []byte("long custom string"), wantB)
+
+		if !bytes.Equal(dstA, wantA) {
+			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
+		}
+		if !bytes.Equal(dstB, wantB) {
+			t.Errorf("Chain dstB mismatch with sequential\ngot  %x\nwant %x", dstB, wantB)
+		}
+	})
+
 	t.Run("does not mutate original hasher", func(t *testing.T) {
 		h := New()
 		_, _ = h.Write(ptn(100))

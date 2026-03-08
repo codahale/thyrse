@@ -180,7 +180,9 @@ func (h *Hasher) ReadCustom(custom []byte, p []byte) (int, error) {
 // customization suffixes to each clone, finalizes both, and squeezes output
 // into dstA and dstB respectively. The two outputs are independent.
 //
-// The final PadPermute is performed in parallel using the 2x permutation.
+// When both customization strings produce the same suffix length (which is
+// always the case for equal-length strings), the final PadPermute is performed
+// in parallel using the 2x permutation.
 func (h *Hasher) Chain(customA []byte, dstA []byte, customB []byte, dstB []byte) {
 	a := h.clone()
 	b := h.clone()
@@ -188,9 +190,15 @@ func (h *Hasher) Chain(customA []byte, dstA []byte, customB []byte, dstB []byte)
 	a.finalize(customA)
 	b.finalize(customB)
 
-	// Both clones have the same ds byte and same sponge position.
-	// Use parallel PadPermute to avoid two sequential permutations.
-	a.ts.PadPermute2(&b.ts, a.ds)
+	// When suffixes have equal length, both duplexes end at the same sponge
+	// position and we can use parallel PadPermute. Otherwise fall back to
+	// sequential.
+	if a.ts.Pos() == b.ts.Pos() {
+		a.ts.PadPermute2(&b.ts, a.ds)
+	} else {
+		a.ts.PadPermute(a.ds)
+		b.ts.PadPermute(b.ds)
+	}
 
 	a.ts.Squeeze(dstA)
 	b.ts.Squeeze(dstB)
