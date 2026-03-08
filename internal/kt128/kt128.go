@@ -233,6 +233,7 @@ func (h *Hasher) Clone() *Hasher {
 
 // Reset resets the Hasher to its initial state.
 func (h *Hasher) Reset() {
+	clear(h.buf)
 	h.buf = h.buf[:0]
 	h.ts.Reset()
 	h.pos = 0
@@ -249,7 +250,9 @@ func (h *Hasher) Reset() {
 func (h *Hasher) Equal(other *Hasher) int {
 	eq := h.ts.Equal(&other.ts)
 	eq &= subtle.ConstantTimeCompare(h.buf, other.buf)
+	eq &= subtle.ConstantTimeEq(int32(h.pos>>32), int32(other.pos>>32))
 	eq &= subtle.ConstantTimeEq(int32(h.pos), int32(other.pos))
+	eq &= subtle.ConstantTimeEq(int32(uint64(h.leafCount)>>32), int32(uint64(other.leafCount)>>32))
 	eq &= subtle.ConstantTimeEq(int32(h.leafCount), int32(other.leafCount))
 	eq &= subtle.ConstantTimeByteEq(h.ds, other.ds)
 	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.treeMode)), int32(boolToInt(other.treeMode)))
@@ -258,13 +261,11 @@ func (h *Hasher) Equal(other *Hasher) int {
 	return eq
 }
 
-func boolToInt(b bool) (v int) {
+func boolToInt(b bool) int {
 	if b {
-		v = 1
-	} else {
-		v = 0
+		return 1
 	}
-	return v
+	return 0
 }
 
 // customSuffix appends C || right_encode(|C|) to dst and returns the result.

@@ -98,10 +98,10 @@ func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 // Derive produces pseudorandom output that is a deterministic function of the full transcript. The outputLen must be
 // greater than zero; use [Protocol.Ratchet] for zero-output-length state advancement.
 func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
-	ret, out := mem.SliceForAppend(dst, outputLen)
 	if outputLen <= 0 {
 		panic("thyrse: Derive output_len must be greater than zero")
 	}
+	ret, out := mem.SliceForAppend(dst, outputLen)
 
 	p.beginFrame(opDerive, label)
 	p.writeLeftEncode(uint64(outputLen))

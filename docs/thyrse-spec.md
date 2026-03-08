@@ -482,9 +482,11 @@ indifferentiable from a random oracle under the ideal permutation model for Kecc
 Daemen, Peeters, Van Assche, 2008). The indifferentiability advantage is bounded by
 `(σ + t)² / 2^(c+1)`, where `σ` is the total number of online Keccak-p calls, `t` is the adversary's
 offline Keccak-p budget, and `c = 256` is the capacity in bits. KT128 inherits this bound with a Sakura
-composition factor (see §13.7). KT128 evaluations with distinct customization strings are modeled as
-independent random oracles, justified by the customization string occupying a structurally distinct position
-in the final-node encoding (RFC 9861, §3.2).
+composition factor (see §13.7): by the indifferentiability composition theorem (Maurer, Renner, Holenstein,
+2004, Theorem 1), replacing TurboSHAKE128 with a random oracle in the Sakura tree hash introduces an
+additional `q_tree² / 2^(c+1)` term, where `q_tree` is the number of inner-function calls. KT128
+evaluations with distinct customization strings are modeled as independent random oracles, justified by the
+customization string occupying a structurally distinct position in the final-node encoding (RFC 9861, §3.2).
 
 **KT128 collision resistance.** Collision resistance of `H`-byte (64-byte) digests: 256-bit collision
 resistance under the Keccak sponge claim, exceeding the 128-bit security target.
@@ -577,9 +579,15 @@ vs. `0x20`), the key and chain value are independent. Therefore the tag — bein
 the independent key and the public ciphertext — reveals no information about `cv_k`. The
 composition argument is preserved.
 
-**Induction.** By induction, the security of Instance `k+1` reduces to the security of Instance `k`
-(via the pseudorandomness of `cv_k`), which ultimately reduces to the unpredictability of the
-original key material in Instance 0.
+**Induction via hybrid argument.** The composition across `q` instances is formalized as a sequence of `q`
+hybrid games. In Hybrid `j` (for `j = 0, …, q`), the chain values `cv_0, …, cv_{j-1}` are replaced with
+uniformly random strings independent of all other protocol values. Hybrid 0 is the real game; Hybrid `q`
+replaces all chain values with random. The transition from Hybrid `j` to Hybrid `j+1` replaces `cv_j` with
+a random string. An adversary distinguishing these two hybrids implies an adversary against the RO-KDF
+security of Instance `j`: since `cv_j` is the output of an independent random oracle (`0x20`) on a
+transcript containing an unpredictable input (either fresh key material in Instance 0, or the already-random
+`cv_{j-1}` from the hybrid assumption), the RO-KDF bound applies. By a union bound over the `q`
+transitions, the total advantage is at most `q · ε_kdf(0)`, matching the per-instance term in §13.7.
 
 **Chain value collisions.** Each chain value is `H = 64` bytes (512 bits). The birthday bound for chain
 value collisions across `q` instances is `q² / 2^(8H+1) = q² / 2⁵¹³`. A collision would cause two
@@ -590,7 +598,11 @@ is `2⁻⁴¹⁷`, far below the 128-bit security target.
 
 **Derive.** Direct application of §13.4. The output is produced by KT128 with customization string `0x21`
 on the current transcript. Under the RO-KDF argument, this output is indistinguishable from random given
-an unpredictable input in the transcript.
+an unpredictable input in the transcript. The XOF freshness condition (`req_XOF` in BCFG25) — that
+identical transcripts are never evaluated with different output lengths under the same customization
+string — is satisfied because `output_len` is encoded in the Derive frame's value field
+(`left_encode(output_len)`). Two Derive calls with different output lengths produce different transcripts
+and therefore make distinct random oracle queries.
 
 **Ratchet.** The chain value (customization string `0x24`) is the sole output. The pre-ratchet transcript
 is unrecoverable from the chain value by KT128 preimage resistance. Forward secrecy holds provided
