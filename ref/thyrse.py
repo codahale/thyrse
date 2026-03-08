@@ -64,3 +64,19 @@ class Protocol:
         self._append_frame(OP_RATCHET, label)
         results = self._finalize({CS_RATCHET: H})
         self._reset_chain(OP_RATCHET, results[CS_RATCHET])
+
+    def seal(self, label: bytes, plaintext: bytes) -> bytes:
+        self._append_frame(OP_SEAL, label)
+        results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
+        ct, tag = encrypt_and_mac(results[CS_SEAL_KEY], plaintext)
+        self._reset_chain(OP_SEAL, results[CS_CHAIN], tag)
+        return ct + tag
+
+    def open(self, label: bytes, ciphertext: bytes, tag: bytes) -> bytes | None:
+        self._append_frame(OP_SEAL, label)
+        results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
+        pt, computed_tag = decrypt_and_mac(results[CS_SEAL_KEY], ciphertext)
+        self._reset_chain(OP_SEAL, results[CS_CHAIN], computed_tag)
+        if not _hmac.compare_digest(computed_tag, tag):
+            return None
+        return pt

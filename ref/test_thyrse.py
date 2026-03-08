@@ -187,3 +187,74 @@ class TestRatchet(unittest.TestCase):
         p2.ratchet(b"forward-secrecy")
         out2 = p2.derive(b"output", 32)
         self.assertEqual(out2.hex(), "23be92e694890a8b3d6fb5b4885b3b5a63539ad8da6fc5e8e20cf34728dbeb91")
+
+
+class TestSeal(unittest.TestCase):
+    def test_seal_derive_16_3(self):
+        """§16.3: Init + Mix + Seal + Derive."""
+        p = Protocol()
+        p.init(b"test.vector")
+        p.mix(b"key", b"test-key-material")
+        sealed = p.seal(b"message", b"hello, world!")
+        self.assertEqual(sealed.hex(), "dde795eebaaa663b55e904c1e4da1c6c6f1c770b9c90fd17b8add38741dd5e4c821ad0e5aeb4bbfbc18d89ebe4")
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), "e6a99cd5ac77af8370dd09e5f1ea020b1ded0a7415a9dadcbe6133e917dd2498")
+
+    def test_seal_open_roundtrip_16_7(self):
+        """§16.7: Seal + Open round-trip."""
+        sender = Protocol()
+        sender.init(b"test.vector")
+        sender.mix(b"key", b"test-key-material")
+        sender.mix(b"nonce", b"test-nonce-value")
+        sender.mix(b"ad", b"associated data")
+        sealed = sender.seal(b"message", b"hello, world!")
+        self.assertEqual(sealed.hex(), "1383ffe1d63304655b9b94ae27f2a50ea1734e2df148381c2080d70ad86bac40e84d08e43b48b0b9f4a106156a")
+
+        receiver = Protocol()
+        receiver.init(b"test.vector")
+        receiver.mix(b"key", b"test-key-material")
+        receiver.mix(b"nonce", b"test-nonce-value")
+        receiver.mix(b"ad", b"associated data")
+        ct, tag = sealed[:-32], sealed[-32:]
+        pt = receiver.open(b"message", ct, tag)
+        self.assertEqual(pt, b"hello, world!")
+
+        sender_confirm = sender.derive(b"confirm", 32)
+        receiver_confirm = receiver.derive(b"confirm", 32)
+        self.assertEqual(sender_confirm, receiver_confirm)
+
+    def test_open_tampered_16_8(self):
+        """§16.8: Open with tampered ciphertext returns None."""
+        sender = Protocol()
+        sender.init(b"test.vector")
+        sender.mix(b"key", b"test-key-material")
+        sender.mix(b"nonce", b"test-nonce-value")
+        sealed = sender.seal(b"message", b"hello, world!")
+        self.assertEqual(sealed.hex(), "6e73c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a")
+
+        receiver = Protocol()
+        receiver.init(b"test.vector")
+        receiver.mix(b"key", b"test-key-material")
+        receiver.mix(b"nonce", b"test-nonce-value")
+        tampered = bytearray(sealed)
+        tampered[0] ^= 0xFF
+        ct, tag = bytes(tampered[:-32]), bytes(tampered[-32:])
+        pt = receiver.open(b"message", ct, tag)
+        self.assertIsNone(pt)
+
+        sender_out = sender.derive(b"after", 32)
+        receiver_out = receiver.derive(b"after", 32)
+        self.assertNotEqual(sender_out, receiver_out)
+
+    def test_multiple_seals_16_9(self):
+        """§16.9: Multiple Seals in sequence."""
+        p = Protocol()
+        p.init(b"test.vector")
+        p.mix(b"key", b"test-key-material")
+        p.mix(b"nonce", b"test-nonce-value")
+        s1 = p.seal(b"msg", b"first message")
+        self.assertEqual(s1.hex(), "f58f5895735ec5679a75651160f0e2b29ea495e5a13e482d22c5bd1f58c75a345a9dacbf4205022b27f809fcc2")
+        s2 = p.seal(b"msg", b"second message")
+        self.assertEqual(s2.hex(), "2b6b64822aa4ac6716aaf6226e20d4d9f1c6ac6bafbe00761b03663b3e574d91be5fa8918945fa311214cfa83e1b")
+        s3 = p.seal(b"msg", b"third message")
+        self.assertEqual(s3.hex(), "86de20dad1084ed184d23aa56a3c3001a468b67c6687b2ab93e5b640008b6c912f88b6a3a88cd4283a7719c273")
