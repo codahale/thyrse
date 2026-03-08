@@ -18,6 +18,11 @@ const (
 	BlockSize = 8192
 
 	leafDS = 0x0B
+
+	// Hasher lifecycle states.
+	stateSingle    uint8 = 0 // absorbing, single-node (< 1 chunk seen)
+	stateTree      uint8 = 1 // absorbing, tree mode (S_0 flushed)
+	stateFinalized uint8 = 2 // finalized and squeezable
 )
 
 // Hasher is an incremental KT128 instance.
@@ -26,10 +31,8 @@ type Hasher struct {
 	ts        keccak.Duplex // final-node sponge state
 	pos       uint64        // total bytes written via Write
 	leafCount uint64        // total leaf CVs written to ts so far
+	state     uint8         // lifecycle: stateSingle → stateTree → stateFinalized
 	ds        byte          // KT128 customization byte for finalization (0x07 single-node, 0x06 tree-mode)
-	treeMode  bool          // true once S_0 has been flushed to ts
-	finalized bool          // true once finalize has completed
-	squeezed  bool          // true once PadPermute has been called
 }
 
 // New returns a new Hasher with empty customization.
@@ -47,7 +50,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 	n := len(p)
 	h.pos += uint64(n)
 
-	if !h.treeMode {
+	if h.state == stateSingle {
 		// Buffer until we have more than one chunk.
 		need := BlockSize + 1 - len(h.buf)
 		if need > len(p) {
@@ -66,7 +69,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		// Keep the one overflow byte.
 		h.buf[0] = h.buf[BlockSize]
 		h.buf = h.buf[:1]
-		h.treeMode = true
+		h.state = stateTree
 	}
 
 	lanes := keccak.AvailableLanes
@@ -164,9 +167,9 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 // with empty customization.
 func (h *Hasher) Read(p []byte) (int, error) {
 	h.finalize(nil)
-	if !h.squeezed {
+	if h.state != stateFinalized {
 		h.ts.PadPermute(h.ds)
-		h.squeezed = true
+		h.state = stateFinalized
 	}
 	h.ts.Squeeze(p)
 	return len(p), nil
@@ -176,9 +179,9 @@ func (h *Hasher) Read(p []byte) (int, error) {
 // On the first call, it finalizes absorption with the customization suffix.
 func (h *Hasher) ReadCustom(custom []byte, p []byte) (int, error) {
 	h.finalize(custom)
-	if !h.squeezed {
+	if h.state != stateFinalized {
 		h.ts.PadPermute(h.ds)
-		h.squeezed = true
+		h.state = stateFinalized
 	}
 	h.ts.Squeeze(p)
 	return len(p), nil
@@ -220,9 +223,7 @@ func (h *Hasher) clone() *Hasher {
 		pos:       h.pos,
 		leafCount: h.leafCount,
 		ds:        h.ds,
-		treeMode:  h.treeMode,
-		finalized: h.finalized,
-		squeezed:  h.squeezed,
+		state: h.state,
 	}
 }
 
@@ -239,9 +240,7 @@ func (h *Hasher) Reset() {
 	h.pos = 0
 	h.ds = 0
 	h.leafCount = 0
-	h.treeMode = false
-	h.finalized = false
-	h.squeezed = false
+	h.state = stateSingle
 }
 
 // Equal returns 1 if h and other represent identical states, 0 otherwise.
@@ -255,17 +254,8 @@ func (h *Hasher) Equal(other *Hasher) int {
 	eq &= subtle.ConstantTimeEq(int32(h.leafCount>>32), int32(other.leafCount>>32))
 	eq &= subtle.ConstantTimeEq(int32(h.leafCount), int32(other.leafCount))
 	eq &= subtle.ConstantTimeByteEq(h.ds, other.ds)
-	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.treeMode)), int32(boolToInt(other.treeMode)))
-	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.finalized)), int32(boolToInt(other.finalized)))
-	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.squeezed)), int32(boolToInt(other.squeezed)))
+	eq &= subtle.ConstantTimeByteEq(h.state, other.state)
 	return eq
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // customSuffix appends C || right_encode(|C|) to dst and returns the result.
@@ -280,15 +270,14 @@ func customSuffix(dst []byte, c []byte) []byte {
 
 // finalize appends the customization suffix and computes the final hash.
 func (h *Hasher) finalize(custom []byte) {
-	if h.finalized {
+	if h.state == stateFinalized {
 		return
 	}
-	h.finalized = true
 
 	// Append customization suffix to buffered data.
 	h.buf = customSuffix(h.buf, custom)
 
-	if !h.treeMode {
+	if h.state == stateSingle {
 		if len(h.buf) <= BlockSize {
 			// Single-node: KT128 single-node finalization.
 			h.ts.Reset()
@@ -304,7 +293,7 @@ func (h *Hasher) finalize(custom []byte) {
 		h.ts.Absorb(kt12Marker[:])
 		remaining := copy(h.buf, h.buf[BlockSize:])
 		h.buf = h.buf[:remaining]
-		h.treeMode = true
+		h.state = stateTree
 	}
 
 	// Process all remaining leaves. The last chunk may be partial.

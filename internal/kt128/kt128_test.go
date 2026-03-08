@@ -41,7 +41,6 @@ func readCustom(h *Hasher, custom []byte, out []byte) {
 // Test-only replacement for the removed Sum method.
 func sumHelper(h *Hasher) []byte {
 	clone := h.clone()
-	clone.finalize(nil)
 	out := make([]byte, 32)
 	clone.Read(out)
 	return out
