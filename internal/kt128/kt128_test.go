@@ -512,33 +512,23 @@ func TestChain(t *testing.T) {
 		}
 	})
 
-	t.Run("does not mutate original hasher", func(t *testing.T) {
+	t.Run("clone before chain preserves original", func(t *testing.T) {
 		h := New()
 		_, _ = h.Write(ptn(100))
 
-		// Take a snapshot of the state by cloning and reading.
-		ref := h.clone()
-
+		// Chain on a clone, then chain on another clone — results must match.
+		c1 := h.Clone()
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
-		h.Chain([]byte("A"), dstA, []byte("B"), dstB)
+		c1.Chain([]byte("A"), dstA, []byte("B"), dstB)
 
-		// Original should still be usable: another Chain should give the same result.
+		c2 := h.Clone()
 		dstA2 := make([]byte, 32)
 		dstB2 := make([]byte, 32)
-		h.Chain([]byte("A"), dstA2, []byte("B"), dstB2)
+		c2.Chain([]byte("A"), dstA2, []byte("B"), dstB2)
 
 		if !bytes.Equal(dstA, dstA2) || !bytes.Equal(dstB, dstB2) {
-			t.Error("calling Chain twice on the same hasher produced different results")
-		}
-
-		// Original should still produce the same Read output as before Chain.
-		out := make([]byte, 32)
-		_, _ = h.Read(out)
-		refOut := make([]byte, 32)
-		_, _ = ref.Read(refOut)
-		if !bytes.Equal(out, refOut) {
-			t.Error("Chain mutated the original hasher's Read output")
+			t.Error("Chain on two clones of the same hasher produced different results")
 		}
 	})
 }

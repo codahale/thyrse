@@ -187,23 +187,41 @@ func (h *Hasher) ReadCustom(custom []byte, p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Chain clones the internal state, applies customA and customB as KT128
-// customization suffixes to each clone, finalizes both, and squeezes output
-// into dstA and dstB respectively. The two outputs are independent.
+// Chain finalizes the Hasher with two different customization strings and
+// squeezes independent output into dstA and dstB. The Hasher is consumed and
+// must not be used after Chain (call Reset to reuse).
 //
-// When both customization strings produce the same suffix length (which is
-// always the case for equal-length strings), the final PadPermute is performed
-// in parallel using the 2x permutation.
+// When both customization strings have the same length, the final PadPermute is
+// performed in parallel using the 2x permutation.
 func (h *Hasher) Chain(customA []byte, dstA []byte, customB []byte, dstB []byte) {
-	a := h.clone()
-	b := h.clone()
+	if h.state == stateFinalized {
+		return
+	}
 
-	a.finalize(customA)
-	b.finalize(customB)
+	// Append the full customization suffix for A to the shared buffer.
+	bufLen := len(h.buf)
+	h.buf = customSuffix(h.buf, customA)
 
-	// When suffixes have equal length, both duplexes end at the same sponge
-	// position and we can use parallel PadPermute. Otherwise fall back to
-	// sequential.
+	// Value-copy the hasher; both copies share h.buf's underlying array.
+	a := *h
+	b := *h
+
+	// Absorb the message (including suffix A) into a's duplex.
+	a.absorbMessage()
+
+	// Overwrite the custom string bytes in the shared buffer for B.
+	if len(customA) == len(customB) {
+		copy(h.buf[bufLen:], customB)
+	} else {
+		h.buf = h.buf[:bufLen]
+		h.buf = customSuffix(h.buf, customB)
+		b.buf = h.buf
+	}
+
+	// Absorb the message (including suffix B) into b's duplex.
+	b.absorbMessage()
+
+	// Parallel permute when positions match, sequential otherwise.
 	if a.ds == b.ds && a.ts.Pos() == b.ts.Pos() {
 		a.ts.PadPermute2(&b.ts, a.ds)
 	} else {
@@ -268,50 +286,47 @@ func customSuffix(dst []byte, c []byte) []byte {
 	return dst
 }
 
-// finalize appends the customization suffix and computes the final hash.
+// finalize appends the customization suffix and absorbs the complete message.
 func (h *Hasher) finalize(custom []byte) {
 	if h.state == stateFinalized {
 		return
 	}
-
-	// Append customization suffix to buffered data.
 	h.buf = customSuffix(h.buf, custom)
+	h.absorbMessage()
+}
+
+// absorbMessage absorbs h.buf into h.ts, setting h.ds. It does not modify h.buf.
+func (h *Hasher) absorbMessage() {
+	buf := h.buf
 
 	if h.state == stateSingle {
-		if len(h.buf) <= BlockSize {
+		if len(buf) <= BlockSize {
 			// Single-node: KT128 single-node finalization.
 			h.ts.Reset()
 			h.ds = 0x07
-			h.ts.Absorb(h.buf)
+			h.ts.Absorb(buf)
 			return
 		}
 
 		// Enter tree mode: flush S_0.
 		h.ts.Reset()
 		h.ds = 0x06
-		h.ts.Absorb(h.buf[:BlockSize])
+		h.ts.Absorb(buf[:BlockSize])
 		h.ts.Absorb(kt12Marker[:])
-		remaining := copy(h.buf, h.buf[BlockSize:])
-		h.buf = h.buf[:remaining]
-		h.state = stateTree
+		buf = buf[BlockSize:]
 	}
 
 	// Process all remaining leaves. The last chunk may be partial.
-	nLeaves := (len(h.buf) + BlockSize - 1) / BlockSize
-	if nLeaves > 0 {
-		fullLeaves := len(h.buf) / BlockSize
+	fullLeaves := len(buf) / BlockSize
+	if fullLeaves > 0 {
+		h.processLeafBatch(buf[:fullLeaves*BlockSize], fullLeaves)
+	}
 
-		if fullLeaves > 0 {
-			h.processLeafBatch(h.buf[:fullLeaves*BlockSize], fullLeaves)
-		}
-
-		if nLeaves > fullLeaves {
-			var s1 keccak.State1
-			off := fullLeaves * BlockSize
-			leafStateX1(h.buf[off:], &s1)
-			h.ts.AbsorbCV(&s1)
-			h.leafCount++
-		}
+	if partial := len(buf) - fullLeaves*BlockSize; partial > 0 {
+		var s1 keccak.State1
+		leafStateX1(buf[fullLeaves*BlockSize:], &s1)
+		h.ts.AbsorbCV(&s1)
+		h.leafCount++
 	}
 
 	// Terminator: LengthEncode(leafCount) || 0xFF || 0xFF.
