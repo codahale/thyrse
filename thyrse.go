@@ -43,6 +43,12 @@ func New(label string) *Protocol {
 	return p
 }
 
+// Equal compares the two Protocol instances in constant time, returning 1 if they are equal, 0 if not.
+func (p *Protocol) Equal(other *Protocol) int {
+	return subtle.ConstantTimeCompare([]byte(p.initLabel), []byte(other.initLabel)) &
+		p.h.Equal(other.h)
+}
+
 func (p *Protocol) String() string {
 	return fmt.Sprintf("Protocol(%s)", p.initLabel)
 }
@@ -51,7 +57,7 @@ func (p *Protocol) String() string {
 // that fits in memory.
 func (p *Protocol) Mix(label string, data []byte) {
 	p.beginFrame(opMix, label)
-	p.h.Write(data)
+	_, _ = p.h.Write(data)
 	p.endFrame()
 }
 
@@ -330,9 +336,9 @@ func (p *Protocol) writeOpLabel(op byte, label string) {
 		buf[1] = 1
 		buf[2] = byte(bits)
 		copy(buf[3:], label)
-		p.h.Write(buf[:3+n])
+		_, _ = p.h.Write(buf[:3+n])
 	} else {
-		p.h.Write([]byte{op})
+		_, _ = p.h.Write([]byte{op})
 		p.writeEncodeString([]byte(label))
 	}
 }
@@ -353,7 +359,7 @@ func (p *Protocol) endFrame() {
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset()
 	p.beginFrame(opChain, "")
-	p.h.Write([]byte{originOp})
+	_, _ = p.h.Write([]byte{originOp})
 	if len(tag) == 0 {
 		p.writeLeftEncode(1)
 		p.writeEncodeString(chainValue)
@@ -371,7 +377,7 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 
 	if x == 0 {
 		buf[0] = 1
-		p.h.Write(buf[:2])
+		_, _ = p.h.Write(buf[:2])
 		return
 	}
 
@@ -383,7 +389,7 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 		i--
 	}
 	buf[i] = byte(8 - i)
-	p.h.Write(buf[i:9])
+	_, _ = p.h.Write(buf[i:9])
 }
 
 // writeRightEncode writes right_encode(x): big-endian encoding of x followed by byte count.
@@ -393,7 +399,7 @@ func (p *Protocol) writeRightEncode(x uint64) {
 	if x == 0 {
 		buf[0] = 0
 		buf[1] = 1
-		p.h.Write(buf[:2])
+		_, _ = p.h.Write(buf[:2])
 		return
 	}
 
@@ -406,7 +412,7 @@ func (p *Protocol) writeRightEncode(x uint64) {
 	}
 	n := byte(7 - i)
 	buf[8] = n
-	p.h.Write(buf[i+1 : 9])
+	_, _ = p.h.Write(buf[i+1 : 9])
 }
 
 // writeEncodeString writes encode_string(x) = left_encode(len(x)*8) || x (NIST SP 800-185).
@@ -419,12 +425,12 @@ func (p *Protocol) writeEncodeString(data []byte) {
 		buf[0] = 1
 		buf[1] = byte(bits)
 		copy(buf[2:], data)
-		p.h.Write(buf[:2+n])
+		_, _ = p.h.Write(buf[:2+n])
 		return
 	}
 	p.writeLeftEncode(bits)
 	if n > 0 {
-		p.h.Write(data)
+		_, _ = p.h.Write(data)
 	}
 }
 

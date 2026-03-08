@@ -6,6 +6,7 @@
 package kt128
 
 import (
+	"crypto/subtle"
 	"slices"
 
 	"github.com/codahale/thyrse/internal/enc"
@@ -240,6 +241,30 @@ func (h *Hasher) Reset() {
 	h.treeMode = false
 	h.finalized = false
 	h.squeezed = false
+}
+
+// Equal returns 1 if h and other represent identical states, 0 otherwise.
+// The comparison is constant-time with respect to buffered data and the
+// underlying sponge state.
+func (h *Hasher) Equal(other *Hasher) int {
+	eq := h.ts.Equal(&other.ts)
+	eq &= subtle.ConstantTimeCompare(h.buf, other.buf)
+	eq &= subtle.ConstantTimeEq(int32(h.pos), int32(other.pos))
+	eq &= subtle.ConstantTimeEq(int32(h.leafCount), int32(other.leafCount))
+	eq &= subtle.ConstantTimeByteEq(h.ds, other.ds)
+	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.treeMode)), int32(boolToInt(other.treeMode)))
+	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.finalized)), int32(boolToInt(other.finalized)))
+	eq &= subtle.ConstantTimeEq(int32(boolToInt(h.squeezed)), int32(boolToInt(other.squeezed)))
+	return eq
+}
+
+func boolToInt(b bool) (v int) {
+	if b {
+		v = 1
+	} else {
+		v = 0
+	}
+	return v
 }
 
 // customSuffix appends C || right_encode(|C|) to dst and returns the result.
