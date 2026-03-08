@@ -13,7 +13,7 @@ import (
 	"fmt"
 
 	"github.com/codahale/thyrse/hazmat/treewrap"
-	"github.com/codahale/thyrse/internal/keccak"
+	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/internal/mem"
 )
 
@@ -29,24 +29,18 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 // Operations append frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal) evaluate
 // the sponge over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
-	h         keccak.Duplex
-	initLabel string
+	h          *kt128.Hasher
+	frameStart uint64
+	initLabel  string
 }
 
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	var p Protocol
-	// Zero value is ready to use; ds is passed to PadPermute/Chain.
-	p.initLabel = label
-	p.writeOpLabel(opInit, label)
-	return &p
-}
-
-// Equal compares the two Protocol instances in constant time, returning 1 if they are equal, 0 if not.
-func (p *Protocol) Equal(other *Protocol) int {
-	return subtle.ConstantTimeCompare([]byte(p.initLabel), []byte(other.initLabel)) &
-		p.h.Equal(&other.h)
+	p := &Protocol{h: kt128.New(), initLabel: label}
+	p.beginFrame(opInit, label)
+	p.endFrame()
+	return p
 }
 
 func (p *Protocol) String() string {
@@ -56,8 +50,9 @@ func (p *Protocol) String() string {
 // Mix absorbs data into the protocol transcript. Use for key material, nonces, associated data, and any protocol input
 // that fits in memory.
 func (p *Protocol) Mix(label string, data []byte) {
-	p.writeOpLabel(opMix, label)
-	p.writeEncodeString(data)
+	p.beginFrame(opMix, label)
+	p.h.Write(data)
+	p.endFrame()
 }
 
 // Fork calls ForkN with the given label and values and returns the two branches.
@@ -72,22 +67,24 @@ func (p *Protocol) Fork(label string, left, right []byte) (*Protocol, *Protocol)
 func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 	n := len(values)
 
-	// Write the common prefix.
-	p.writeOpLabel(opFork, label)
-	p.writeLeftEncode(uint64(n))
-
-	// Create clones before writing base ordinal.
+	// Create clones BEFORE writing fork frame to base.
 	clones := make([]*Protocol, n)
 	for i := range n {
 		clone := p.Clone()
+		clone.beginFrame(opFork, label)
+		clone.writeLeftEncode(uint64(n))
 		clone.writeLeftEncode(uint64(i + 1))
 		clone.writeEncodeString(values[i])
+		clone.endFrame()
 		clones[i] = clone
 	}
 
-	// Finalize base (ordinal 0, empty value).
+	// Now write base fork frame (ordinal 0, empty value).
+	p.beginFrame(opFork, label)
+	p.writeLeftEncode(uint64(n))
 	p.writeLeftEncode(0)
 	p.writeEncodeString(nil)
+	p.endFrame()
 
 	return clones
 }
@@ -100,8 +97,9 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 		panic("thyrse: Derive output_len must be greater than zero")
 	}
 
-	p.writeOpLabel(opDerive, label)
+	p.beginFrame(opDerive, label)
 	p.writeLeftEncode(uint64(outputLen))
+	p.endFrame()
 
 	cv := p.finalize(dsDerive, out)
 	p.resetChain(opDerive, cv[:], nil)
@@ -111,7 +109,8 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 
 // Ratchet irreversibly advances the protocol state for forward secrecy. No user-visible output is produced.
 func (p *Protocol) Ratchet(label string) {
-	p.writeOpLabel(opRatchet, label)
+	p.beginFrame(opRatchet, label)
+	p.endFrame()
 
 	cv := p.finalize(dsRatchet, nil)
 	p.resetChain(opRatchet, cv[:], nil)
@@ -122,7 +121,8 @@ func (p *Protocol) Ratchet(label string) {
 //
 // Confidentiality requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
 func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
-	p.writeOpLabel(opMask, label)
+	p.beginFrame(opMask, label)
+	p.endFrame()
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -137,7 +137,8 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 // Unmask decrypts ciphertext encrypted with [Protocol.Mask]. Both sides must have identical transcript state at the
 // point of the Mask or Unmask call.
 func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
-	p.writeOpLabel(opMask, label)
+	p.beginFrame(opMask, label)
+	p.endFrame()
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -155,7 +156,8 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 //
 // MaskStream implements [cipher.Stream] and [io.Closer].
 func (p *Protocol) MaskStream(label string) *MaskStream {
-	p.writeOpLabel(opMask, label)
+	p.beginFrame(opMask, label)
+	p.endFrame()
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -196,7 +198,8 @@ func (ms *MaskStream) Close() error {
 //
 // UnmaskStream implements [cipher.Stream] and [io.Closer].
 func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
-	p.writeOpLabel(opMask, label)
+	p.beginFrame(opMask, label)
+	p.endFrame()
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
@@ -237,7 +240,8 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	ret, out := mem.SliceForAppend(dst, len(plaintext)+TagSize)
 	ciphertext, tag := out[:len(plaintext)], out[len(plaintext):]
 
-	p.writeOpLabel(opSeal, label)
+	p.beginFrame(opSeal, label)
+	p.endFrame()
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsSeal, twKey[:])
@@ -264,7 +268,8 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	ct := sealed[:len(sealed)-TagSize]
 	tt := sealed[len(sealed)-TagSize:]
 
-	p.writeOpLabel(opSeal, label)
+	p.beginFrame(opSeal, label)
+	p.endFrame()
 
 	var twKey [treewrap.KeySize]byte
 	cv := p.finalize(dsSeal, twKey[:])
@@ -284,39 +289,32 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 
 // Clone returns an independent copy of the protocol state. The original and clone evolve independently.
 func (p *Protocol) Clone() *Protocol {
-	return &Protocol{h: p.h, initLabel: p.initLabel}
+	return &Protocol{h: p.h.Clone(), frameStart: p.frameStart, initLabel: p.initLabel}
 }
 
 // Clear overwrites the protocol state with zeros and invalidates the instance. After Clear, the instance must not be
 // used.
 func (p *Protocol) Clear() {
 	p.h.Reset()
+	p.h = nil
 	p.initLabel = ""
 }
 
-// finalize performs the dual sponge finalization using [keccak.Duplex.Chain].
+// finalize performs the dual sponge finalization using [kt128.Hasher.Chain].
 //
-// For Derive, Mask, and Seal: p.h (padded with dsChain=0x20) produces the
-// chain value, and the clone (padded with outputDS) produces the output
-// squeezed into dst.
+// For Derive, Mask, and Seal: the dsChain output produces the chain value,
+// and the outputDS output produces the output squeezed into dst.
 //
-// For Ratchet: the clone (padded with dsRatchet=0x24) produces the chain value;
-// p.h's output is discarded.
+// For Ratchet: the dsRatchet output produces the chain value; the dsChain
+// output is discarded.
 func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
-
-	var oh keccak.Duplex
 	if outputDS == dsRatchet {
-		p.h.Chain(&oh, dsChain, dsRatchet)
-		oh.Squeeze(cv[:])
+		var discard [chainValueSize]byte
+		p.h.Chain([]byte{dsChain}, discard[:], []byte{dsRatchet}, cv[:])
 	} else {
-		p.h.Chain(&oh, dsChain, outputDS)
-		p.h.Squeeze(cv[:])
-		if dst != nil {
-			oh.Squeeze(dst)
-		}
+		p.h.Chain([]byte{dsChain}, cv[:], []byte{outputDS}, dst)
 	}
-
 	return cv
 }
 
@@ -332,47 +330,39 @@ func (p *Protocol) writeOpLabel(op byte, label string) {
 		buf[1] = 1
 		buf[2] = byte(bits)
 		copy(buf[3:], label)
-		p.h.Absorb(buf[:3+n])
+		p.h.Write(buf[:3+n])
 	} else {
-		p.h.Absorb([]byte{op})
+		p.h.Write([]byte{op})
 		p.writeEncodeString([]byte(label))
 	}
+}
+
+// beginFrame records the current position and writes the operation preamble.
+func (p *Protocol) beginFrame(op byte, label string) {
+	p.frameStart = p.h.Pos()
+	p.writeOpLabel(op, label)
+}
+
+// endFrame writes the position marker that closes the current frame.
+func (p *Protocol) endFrame() {
+	p.writeRightEncode(p.frameStart)
 }
 
 // resetChain resets the transcript with a CHAIN frame. The chain value is always chainValueSize bytes and the tag, when
 // present, is always treewrap.TagSize bytes.
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset()
-
-	// Build the entire CHAIN frame in a single stack buffer:
-	//   opChain || originOp || left_encode(count) || encode_string(cv)
-	//   [|| encode_string(tag)]
-	//
-	// encode_string(cv): left_encode(64*8=512) = [2, 2, 0] → 3 prefix bytes + 64 data bytes.
-	// encode_string(tag): left_encode(32*8=256) = [2, 1, 0] → 3 prefix bytes + 32 data bytes.
-	const cvPrefixLen = 7 // opChain(1) + originOp(1) + left_encode(count)(2) + left_encode(512)(3)
-	var buf [cvPrefixLen + chainValueSize + 3 + 32]byte
-	buf[0] = opChain
-	buf[1] = originOp
-	buf[2] = 1    // left_encode(count) length prefix
-	buf[4] = 2    // left_encode(512) length prefix: 2 value bytes
-	buf[5] = 0x02 // 512 >> 8
-	buf[6] = 0x00 // 512 & 0xFF
-
-	n := cvPrefixLen + chainValueSize
-	copy(buf[cvPrefixLen:], chainValue)
-
+	p.beginFrame(opChain, "")
+	p.h.Write([]byte{originOp})
 	if len(tag) == 0 {
-		buf[3] = 1 // count = 1
-		p.h.Absorb(buf[:n])
+		p.writeLeftEncode(1)
+		p.writeEncodeString(chainValue)
 	} else {
-		buf[3] = 2    // count = 2
-		buf[n] = 2    // left_encode(256) length prefix: 2 value bytes
-		buf[n+1] = 0x01 // 256 >> 8
-		buf[n+2] = 0x00 // 256 & 0xFF
-		copy(buf[n+3:], tag)
-		p.h.Absorb(buf[:n+3+len(tag)])
+		p.writeLeftEncode(2)
+		p.writeEncodeString(chainValue)
+		p.writeEncodeString(tag)
 	}
+	p.endFrame()
 }
 
 // writeLeftEncode writes left_encode(x) as defined in NIST SP 800-185.
@@ -381,7 +371,7 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 
 	if x == 0 {
 		buf[0] = 1
-		p.h.Absorb(buf[:2])
+		p.h.Write(buf[:2])
 		return
 	}
 
@@ -393,7 +383,30 @@ func (p *Protocol) writeLeftEncode(x uint64) {
 		i--
 	}
 	buf[i] = byte(8 - i)
-	p.h.Absorb(buf[i:9])
+	p.h.Write(buf[i:9])
+}
+
+// writeRightEncode writes right_encode(x): big-endian encoding of x followed by byte count.
+func (p *Protocol) writeRightEncode(x uint64) {
+	var buf [9]byte
+
+	if x == 0 {
+		buf[0] = 0
+		buf[1] = 1
+		p.h.Write(buf[:2])
+		return
+	}
+
+	i := 7
+	v := x
+	for v > 0 {
+		buf[i] = byte(v)
+		v >>= 8
+		i--
+	}
+	n := byte(7 - i)
+	buf[8] = n
+	p.h.Write(buf[i+1 : 9])
 }
 
 // writeEncodeString writes encode_string(x) = left_encode(len(x)*8) || x (NIST SP 800-185).
@@ -406,12 +419,12 @@ func (p *Protocol) writeEncodeString(data []byte) {
 		buf[0] = 1
 		buf[1] = byte(bits)
 		copy(buf[2:], data)
-		p.h.Absorb(buf[:2+n])
+		p.h.Write(buf[:2+n])
 		return
 	}
 	p.writeLeftEncode(bits)
 	if n > 0 {
-		p.h.Absorb(data)
+		p.h.Write(data)
 	}
 }
 

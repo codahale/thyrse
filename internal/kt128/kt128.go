@@ -23,6 +23,7 @@ const (
 type Hasher struct {
 	buf       []byte        // buffered message/leaf data
 	ts        keccak.Duplex // final-node sponge state
+	pos       uint64        // total bytes written via Write
 	leafCount int           // total leaf CVs written to ts so far
 	ds        byte          // domain separator for finalization (0x07 single-node, 0x06 tree-mode)
 	treeMode  bool          // true once S_0 has been flushed to ts
@@ -35,9 +36,15 @@ func New() *Hasher {
 	return &Hasher{}
 }
 
+// Pos returns the total number of bytes written via Write.
+func (h *Hasher) Pos() uint64 {
+	return h.pos
+}
+
 // Write absorbs message bytes. It must not be called after Read or Sum.
 func (h *Hasher) Write(p []byte) (int, error) {
 	n := len(p)
+	h.pos += uint64(n)
 
 	if !h.treeMode {
 		// Buffer until we have more than one chunk.
@@ -209,6 +216,7 @@ func (h *Hasher) clone() *Hasher {
 	return &Hasher{
 		buf:       slices.Clone(h.buf),
 		ts:        h.ts,
+		pos:       h.pos,
 		leafCount: h.leafCount,
 		ds:        h.ds,
 		treeMode:  h.treeMode,
@@ -226,6 +234,7 @@ func (h *Hasher) Clone() *Hasher {
 func (h *Hasher) Reset() {
 	h.buf = h.buf[:0]
 	h.ts.Reset()
+	h.pos = 0
 	h.ds = 0
 	h.leafCount = 0
 	h.treeMode = false

@@ -669,9 +669,12 @@ func TestClear(t *testing.T) {
 
 		p.Clear()
 
-		// After Clear, the initLabel should be nil.
+		// After Clear, the initLabel should be empty and hasher nil.
 		if p.initLabel != "" {
 			t.Fatal("initLabel not zeroed")
+		}
+		if p.h != nil {
+			t.Fatal("hasher not nil after Clear")
 		}
 
 		// A fresh protocol with the same inputs should still produce the reference output,
