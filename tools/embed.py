@@ -117,7 +117,7 @@ def _make_message(msg_def: dict) -> bytes:
 # ---------------------------------------------------------------------------
 
 def render_bare_vectors(data: dict) -> str:
-    """Render bare (internal function) vectors as Markdown matching spec §10.1."""
+    """Render bare (internal function) vectors as Markdown matching spec \u00a710.1."""
     bare = data["bare"]
     lines: list[str] = []
 
@@ -173,7 +173,7 @@ def render_bare_vectors(data: dict) -> str:
 
 
 def render_aead_vectors(data: dict) -> str:
-    """Render AEAD vectors as Markdown matching spec §10.2."""
+    """Render AEAD vectors as Markdown matching spec \u00a710.2."""
     aead = data["aead"]
     lines: list[str] = []
 
@@ -243,70 +243,78 @@ def _quote_ops(text: str) -> str:
     return _THYRSE_OP_RE.sub(r"`\1`", text)
 
 
-def _thyrse_op_line(op: dict, init_label: str, var: str = "p") -> str:
-    """Return one Python code line for a Thyrse operation."""
-    kind = op["op"]
-    if kind == "init":
-        return f'{var}.init(b"{init_label}")'
-    if kind == "mix":
-        label = op["label"]
-        if "data_utf8" in op:
-            return f'{var}.mix(b"{label}", b"{op["data_utf8"]}")'
-        return f'{var}.mix(b"{label}", ...)'
-    if kind == "derive":
-        return f'output = {var}.derive(b"{op["label"]}", {op["output_len"]})'
-    if kind == "seal":
-        label = op["label"]
-        if "plaintext_utf8" in op:
-            return f'ct_tag = {var}.seal(b"{label}", b"{op["plaintext_utf8"]}")'
-        return f'ct_tag = {var}.seal(b"{label}", ...)'
-    if kind == "open":
-        label = op["label"]
-        if op.get("tamper"):
-            return f'pt = {var}.open(b"{label}", tampered_ct, tampered_tag)'
-        return f'ct, tag = ct_tag[:-{_C}], ct_tag[-{_C}:]\npt = {var}.open(b"{label}", ct, tag)'
-    if kind == "mask":
-        label = op["label"]
-        if "plaintext_utf8" in op:
-            return f'ct = {var}.mask(b"{label}", b"{op["plaintext_utf8"]}")'
-        return f'ct = {var}.mask(b"{label}", ...)'
-    if kind == "ratchet":
-        return f'{var}.ratchet(b"{op["label"]}")'
-    if kind == "fork":
-        label = op["label"]
-        vals = ", ".join(f'b"{v}"' for v in op["values_utf8"])
-        return f'clones = {var}.fork(b"{label}", {vals})'
-    raise ValueError(f"Unknown Thyrse op: {kind!r}")
-
-
-_C = 32  # Tag size for ct/tag splitting.
-
-
 def render_thyrse_vectors(data: dict) -> str:
-    """Render Thyrse test vectors as Markdown matching spec §16."""
-    init_label = data["init_label"]
+    """Render Thyrse test vectors as Markdown matching spec \u00a716."""
     vectors = data["vectors"]
+    by_id = {v["id"]: v for v in vectors}
     lines: list[str] = []
 
     lines.append("All values are hex-encoded. All test vectors use `Init` label `\"test.vector\"`. Byte string literals are shown in hex as")
     lines.append("`(hex)`.")
 
+    # IDs to skip when encountered in the main loop (handled as groups).
+    skip = {"16.5.2", "16.9.2", "16.9.3"}
+
     for vec in vectors:
         vid = vec["id"]
-        title = vec["title"]
-        desc = vec["description"]
-        ops = vec["operations"]
+        if vid in skip:
+            continue
+
+        init_label = vec["init_label"]
         exp = vec["expected"]
 
-        lines.append("")
-        lines.append(f"### {vid} {title}")
-        lines.append("")
-        lines.append(_quote_ops(desc))
+        # --- Heading & description ---
+        if vid == "16.5.1":
+            v1, v2 = by_id["16.5.1"], by_id["16.5.2"]
+            lines.append("")
+            lines.append("### 16.5 Ratchet + Derive")
+            lines.append("")
+            lines.append(_quote_ops(v1["description"]) + " " + _quote_ops(v2["description"]))
+        elif vid == "16.9.1":
+            lines.append("")
+            lines.append("### 16.9 Multiple Seals in Sequence")
+            lines.append("")
+            lines.append(_quote_ops(vec["description"]))
+        else:
+            lines.append("")
+            lines.append(f"### {vid} {vec['title']}")
+            lines.append("")
+            lines.append(_quote_ops(vec["description"]))
+
         lines.append("")
 
-        # --- Build Python code block ---
-        if vid == "16.5":
-            # Special: two protocol runs side by side
+        # --- Code block ---
+        if vid == "16.1":
+            lines.append("```python")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('output = p.derive(b"output", 32)')
+            lines.append("```")
+        elif vid == "16.2":
+            lines.append("```python")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('p.mix(b"key", b"test-key-material")')
+            lines.append('p.mix(b"nonce", b"test-nonce-value")')
+            lines.append('output = p.derive(b"output", 32)')
+            lines.append("```")
+        elif vid == "16.3":
+            lines.append("```python")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('p.mix(b"key", b"test-key-material")')
+            lines.append('ct_tag = p.seal(b"message", b"hello, world!")')
+            lines.append('output = p.derive(b"output", 32)')
+            lines.append("```")
+        elif vid == "16.4":
+            lines.append("```python")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('p.mix(b"key", b"test-key-material")')
+            lines.append('ct = p.mask(b"unauthenticated", b"mask this data")')
+            lines.append('ct_tag = p.seal(b"authenticated", b"seal this data")')
+            lines.append("```")
+        elif vid == "16.5.1":
             lines.append("```python")
             lines.append("# Without Ratchet")
             lines.append("p = Protocol()")
@@ -322,7 +330,6 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('output_after_ratchet = p.derive(b"output", 32)')
             lines.append("```")
         elif vid == "16.6":
-            # Fork with comment
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
@@ -333,7 +340,6 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)')
             lines.append("```")
         elif vid == "16.7":
-            # Seal + Open round-trip
             lines.append("```python")
             lines.append("# Sender")
             lines.append("sender = Protocol()")
@@ -354,7 +360,6 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('confirm = receiver.derive(b"confirm", 32)')
             lines.append("```")
         elif vid == "16.8":
-            # Tampered ciphertext
             lines.append("```python")
             lines.append("# Sender")
             lines.append("sender = Protocol()")
@@ -364,7 +369,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('ct_tag = sender.seal(b"message", b"hello, world!")')
             lines.append('sender_after = sender.derive(b"after", 32)')
             lines.append("")
-            lines.append("# Receiver — tampered[0] ^= 0xff")
+            lines.append("# Receiver \u2014 tampered[0] ^= 0xff")
             lines.append("receiver = Protocol()")
             lines.append(f'receiver.init(b"{init_label}")')
             lines.append('receiver.mix(b"key", b"test-key-material")')
@@ -375,8 +380,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('pt = receiver.open(b"message", ct, tag)  # returns None')
             lines.append('receiver_after = receiver.derive(b"after", 32)')
             lines.append("```")
-        elif vid == "16.9":
-            # Multiple seals
+        elif vid == "16.9.1":
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
@@ -386,74 +390,56 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('ct_tag_2 = p.seal(b"msg", b"second message")')
             lines.append('ct_tag_3 = p.seal(b"msg", b"third message")')
             lines.append("```")
-        else:
-            # Generic: render operations directly
-            lines.append("```python")
-            lines.append("p = Protocol()")
-            for op in ops:
-                lines.append(_thyrse_op_line(op, init_label))
-            lines.append("```")
 
         lines.append("")
 
-        # --- Build table ---
+        # --- Table ---
         if vid == "16.1":
-            lines.append("| Field         | Value                                                              |")
-            lines.append("|---------------|--------------------------------------------------------------------|")
-            lines.append(f"| Derive output | `{exp['derive_output_hex']}` |")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            lines.append(f"| Derive output | `{exp['derive']}` |")
         elif vid == "16.2":
-            lines.append("| Field         | Value                                                              |")
-            lines.append("|---------------|--------------------------------------------------------------------|")
-            lines.append(f"| key data      | `{exp['key_data_hex']}`                               |")
-            lines.append(f"| nonce data    | `{exp['nonce_data_hex']}`                                 |")
-            lines.append(f"| Derive output | `{exp['derive_output_hex']}` |")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            lines.append(f"| Derive output | `{exp['derive']}` |")
         elif vid == "16.3":
-            lines.append("| Field                  | Value                                                                                        |")
-            lines.append("|------------------------|----------------------------------------------------------------------------------------------|")
-            lines.append(f"| key data               | `{exp['key_data_hex']}`                                                         |")
-            lines.append(f"| plaintext              | `{exp['plaintext_hex']}`                                                                 |")
-            lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal_output_hex']}` |")
-            lines.append(f"| Derive output          | `{exp['derive_output_hex']}`                           |")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
+            lines.append(f"| Derive output | `{exp['derive']}` |")
         elif vid == "16.4":
-            lines.append("| Field                  | Value                                                                                          |")
-            lines.append("|------------------------|------------------------------------------------------------------------------------------------|")
-            lines.append(f"| key data               | `{exp['key_data_hex']}`                                                           |")
-            lines.append(f"| Mask plaintext         | `{exp['mask_plaintext_hex']}`                                                                 |")
-            lines.append(f"| Mask output (ct)       | `{exp['mask_output_hex']}`                                                                 |")
-            lines.append(f"| Seal plaintext         | `{exp['seal_plaintext_hex']}`                                                                 |")
-            lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal_output_hex']}` |")
-        elif vid == "16.5":
-            lines.append("| Field                  | Value                                                              |")
-            lines.append("|------------------------|--------------------------------------------------------------------|")
-            lines.append(f"| key data               | `{exp['key_data_hex']}`                               |")
-            lines.append(f"| Derive (no Ratchet)    | `{exp['derive_no_ratchet_hex']}` |")
-            lines.append(f"| Derive (after Ratchet) | `{exp['derive_after_ratchet_hex']}` |")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            lines.append(f"| Mask output (ct) | `{exp['mask']}` |")
+            lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
+        elif vid == "16.5.1":
+            v2 = by_id["16.5.2"]
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            lines.append(f"| Derive (no Ratchet) | `{exp['derive']}` |")
+            lines.append(f"| Derive (after Ratchet) | `{v2['expected']['derive']}` |")
         elif vid == "16.6":
-            lines.append("| Branch                       | Derive output                                                      |")
-            lines.append("|------------------------------|--------------------------------------------------------------------|")
-            lines.append(f"| Base (ordinal 0)             | `{exp['base_derive_hex']}` |")
-            lines.append(f"| Clone 1 / \"prover\" (ord 1)   | `{exp['clone_1_derive_hex']}` |")
-            lines.append(f"| Clone 2 / \"verifier\" (ord 2) | `{exp['clone_2_derive_hex']}` |")
+            lines.append("| Branch | Derive output |")
+            lines.append("|--------|---------------|")
+            lines.append(f"| Base (ordinal 0) | `{exp['base_derive']}` |")
+            lines.append(f"| Clone 1 / \"prover\" (ordinal 1) | `{exp['clone_1_derive']}` |")
+            lines.append(f"| Clone 2 / \"verifier\" (ordinal 2) | `{exp['clone_2_derive']}` |")
         elif vid == "16.7":
-            lines.append("| Field                          | Value                                                                                        |")
-            lines.append("|--------------------------------|----------------------------------------------------------------------------------------------|")
-            lines.append(f"| ad data                        | `{exp['ad_data_hex']}`                                                             |")
-            lines.append(f"| plaintext                      | `{exp['plaintext_hex']}`                                                                 |")
-            lines.append(f"| Seal output (ct \u2016 tag)         | `{exp['seal_output_hex']}` |")
-            lines.append(f"| Open plaintext                 | `{exp['open_plaintext_hex']}`                                                                 |")
-            lines.append(f"| Derive(\"confirm\") \u2014 both sides | (matches between sender and receiver)                                                        |")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
         elif vid == "16.8":
-            lines.append("| Field                                | Value                                                                                        |")
-            lines.append("|--------------------------------------|----------------------------------------------------------------------------------------------|")
-            lines.append(f"| Seal output                          | `{exp['seal_output_hex']}` |")
-            lines.append(f"| Tampered (first byte XOR 0xff)       | `{exp['tampered_hex']}` |")
-            lines.append(f"| Open result                          | \u22a5 (authentication failed)                                                                    |")
-        elif vid == "16.9":
-            lines.append("| Seal | Plaintext (hex)                | Output (ct \u2016 tag)                                                                              |")
-            lines.append("|------|--------------------------------|------------------------------------------------------------------------------------------------|")
-            lines.append(f"| 1    | `{exp['seal_1_plaintext_hex']}`   | `{exp['seal_1_output_hex']}`   |")
-            lines.append(f"| 2    | `{exp['seal_2_plaintext_hex']}` | `{exp['seal_2_output_hex']}` |")
-            lines.append(f"| 3    | `{exp['seal_3_plaintext_hex']}`   | `{exp['seal_3_output_hex']}`   |")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
+            lines.append("| Open result | \u22a5 (authentication failed) |")
+        elif vid == "16.9.1":
+            v2, v3 = by_id["16.9.2"], by_id["16.9.3"]
+            lines.append("| Seal | Output (ct \u2016 tag) |")
+            lines.append("|------|-------------------|")
+            lines.append(f"| 1 | `{exp['seal']}` |")
+            lines.append(f"| 2 | `{v2['expected']['seal']}` |")
+            lines.append(f"| 3 | `{v3['expected']['seal']}` |")
 
     return "\n".join(lines)
 

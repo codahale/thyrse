@@ -997,8 +997,8 @@ p.init(b"test.vector")
 output = p.derive(b"output", 32)
 ```
 
-| Field         | Value                                                              |
-|---------------|--------------------------------------------------------------------|
+| Field | Value |
+|-------|-------|
 | Derive output | `25feba088971a4b573101369ea1c8d83e6f102c2dc46e5cceb81a0b97fca514c` |
 
 ### 16.2 Init + Mix + Mix + Derive
@@ -1013,10 +1013,8 @@ p.mix(b"nonce", b"test-nonce-value")
 output = p.derive(b"output", 32)
 ```
 
-| Field         | Value                                                              |
-|---------------|--------------------------------------------------------------------|
-| key data      | `746573742d6b65792d6d6174657269616c`                               |
-| nonce data    | `746573742d6e6f6e63652d76616c7565`                                 |
+| Field | Value |
+|-------|-------|
 | Derive output | `0db4090efec2ba935dac63a18d88df04859d1dedf4a60f428393674520b67e39` |
 
 ### 16.3 Init + Mix + Seal + Derive
@@ -1031,12 +1029,10 @@ ct_tag = p.seal(b"message", b"hello, world!")
 output = p.derive(b"output", 32)
 ```
 
-| Field                  | Value                                                                                        |
-|------------------------|----------------------------------------------------------------------------------------------|
-| key data               | `746573742d6b65792d6d6174657269616c`                                                         |
-| plaintext              | `68656c6c6f2c20776f726c6421`                                                                 |
+| Field | Value |
+|-------|-------|
 | Seal output (ct ‖ tag) | `dde795eebaaa663b55e904c1e4da1c6c6f1c770b9c90fd17b8add38741dd5e4c821ad0e5aeb4bbfbc18d89ebe4` |
-| Derive output          | `e6a99cd5ac77af8370dd09e5f1ea020b1ded0a7415a9dadcbe6133e917dd2498`                           |
+| Derive output | `e6a99cd5ac77af8370dd09e5f1ea020b1ded0a7415a9dadcbe6133e917dd2498` |
 
 ### 16.4 Init + Mix + Mask + Seal
 
@@ -1050,17 +1046,14 @@ ct = p.mask(b"unauthenticated", b"mask this data")
 ct_tag = p.seal(b"authenticated", b"seal this data")
 ```
 
-| Field                  | Value                                                                                          |
-|------------------------|------------------------------------------------------------------------------------------------|
-| key data               | `746573742d6b65792d6d6174657269616c`                                                           |
-| Mask plaintext         | `6d61736b20746869732064617461`                                                                 |
-| Mask output (ct)       | `21fc87f3008b3cff62fb2584c970`                                                                 |
-| Seal plaintext         | `7365616c20746869732064617461`                                                                 |
+| Field | Value |
+|-------|-------|
+| Mask output (ct) | `21fc87f3008b3cff62fb2584c970` |
 | Seal output (ct ‖ tag) | `f078ea89c7dea34a821c8470544ec5a70061c75aa9de8a1d49e4a9e816455ca54f78e50a2a1981d1c0a47cfe4d20` |
 
-### 16.5 Init + Mix + Ratchet + Derive
+### 16.5 Ratchet + Derive
 
-Forward secrecy: output differs from `Derive` without `Ratchet`.
+Baseline `Derive` output without `Ratchet`, for comparison with §16.5.2. `Derive` output changes after `Ratchet`, demonstrating forward secrecy.
 
 ```python
 # Without Ratchet
@@ -1077,10 +1070,9 @@ p.ratchet(b"forward-secrecy")
 output_after_ratchet = p.derive(b"output", 32)
 ```
 
-| Field                  | Value                                                              |
-|------------------------|--------------------------------------------------------------------|
-| key data               | `746573742d6b65792d6d6174657269616c`                               |
-| Derive (no Ratchet)    | `b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf` |
+| Field | Value |
+|-------|-------|
+| Derive (no Ratchet) | `b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf` |
 | Derive (after Ratchet) | `23be92e694890a8b3d6fb5b4885b3b5a63539ad8da6fc5e8e20cf34728dbeb91` |
 
 ### 16.6 Fork + Derive
@@ -1097,11 +1089,11 @@ clone_1_output = clones[0].derive(b"output", 32)  # "prover" (ordinal 1)
 clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)
 ```
 
-| Branch                       | Derive output                                                      |
-|------------------------------|--------------------------------------------------------------------|
-| Base (ordinal 0)             | `53fa58633361a67384c7a6d8df0e6163dac581024e9786856442edf13e5b787c` |
-| Clone 1 / "prover" (ord 1)   | `329696ce84ae7aef8577db9841d82956b60f9f7ce38449d8b83092f3a46a89ad` |
-| Clone 2 / "verifier" (ord 2) | `19644cc5d0a5bc8f52eb647a581b85ba868ce0cb3561f8d2a58f1bf6ed1a3e82` |
+| Branch | Derive output |
+|--------|---------------|
+| Base (ordinal 0) | `53fa58633361a67384c7a6d8df0e6163dac581024e9786856442edf13e5b787c` |
+| Clone 1 / "prover" (ordinal 1) | `329696ce84ae7aef8577db9841d82956b60f9f7ce38449d8b83092f3a46a89ad` |
+| Clone 2 / "verifier" (ordinal 2) | `19644cc5d0a5bc8f52eb647a581b85ba868ce0cb3561f8d2a58f1bf6ed1a3e82` |
 
 ### 16.7 Seal + Open Round-Trip
 
@@ -1127,13 +1119,9 @@ pt = receiver.open(b"message", ct, tag)
 confirm = receiver.derive(b"confirm", 32)
 ```
 
-| Field                          | Value                                                                                        |
-|--------------------------------|----------------------------------------------------------------------------------------------|
-| ad data                        | `6173736f6369617465642064617461`                                                             |
-| plaintext                      | `68656c6c6f2c20776f726c6421`                                                                 |
-| Seal output (ct ‖ tag)         | `1383ffe1d63304655b9b94ae27f2a50ea1734e2df148381c2080d70ad86bac40e84d08e43b48b0b9f4a106156a` |
-| Open plaintext                 | `68656c6c6f2c20776f726c6421`                                                                 |
-| Derive("confirm") — both sides | (matches between sender and receiver)                                                        |
+| Field | Value |
+|-------|-------|
+| Seal output (ct ‖ tag) | `1383ffe1d63304655b9b94ae27f2a50ea1734e2df148381c2080d70ad86bac40e84d08e43b48b0b9f4a106156a` |
 
 ### 16.8 Seal + Open with Tampered Ciphertext
 
@@ -1160,15 +1148,14 @@ pt = receiver.open(b"message", ct, tag)  # returns None
 receiver_after = receiver.derive(b"after", 32)
 ```
 
-| Field                                | Value                                                                                        |
-|--------------------------------------|----------------------------------------------------------------------------------------------|
-| Seal output                          | `6e73c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a` |
-| Tampered (first byte XOR 0xff)       | `9173c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a` |
-| Open result                          | ⊥ (authentication failed)                                                                    |
+| Field | Value |
+|-------|-------|
+| Seal output (ct ‖ tag) | `6e73c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a` |
+| Open result | ⊥ (authentication failed) |
 
 ### 16.9 Multiple Seals in Sequence
 
-Each `Seal` derives a different key because the transcript advances via tag absorption.
+First of three sequential Seals. Each derives a different key because the transcript advances via tag absorption.
 
 ```python
 p = Protocol()
@@ -1180,9 +1167,9 @@ ct_tag_2 = p.seal(b"msg", b"second message")
 ct_tag_3 = p.seal(b"msg", b"third message")
 ```
 
-| Seal | Plaintext (hex)                | Output (ct ‖ tag)                                                                              |
-|------|--------------------------------|------------------------------------------------------------------------------------------------|
-| 1    | `6669727374206d657373616765`   | `f58f5895735ec5679a75651160f0e2b29ea495e5a13e482d22c5bd1f58c75a345a9dacbf4205022b27f809fcc2`   |
-| 2    | `7365636f6e64206d657373616765` | `2b6b64822aa4ac6716aaf6226e20d4d9f1c6ac6bafbe00761b03663b3e574d91be5fa8918945fa311214cfa83e1b` |
-| 3    | `7468697264206d657373616765`   | `86de20dad1084ed184d23aa56a3c3001a468b67c6687b2ab93e5b640008b6c912f88b6a3a88cd4283a7719c273`   |
+| Seal | Output (ct ‖ tag) |
+|------|-------------------|
+| 1 | `f58f5895735ec5679a75651160f0e2b29ea495e5a13e482d22c5bd1f58c75a345a9dacbf4205022b27f809fcc2` |
+| 2 | `2b6b64822aa4ac6716aaf6226e20d4d9f1c6ac6bafbe00761b03663b3e574d91be5fa8918945fa311214cfa83e1b` |
+| 3 | `86de20dad1084ed184d23aa56a3c3001a468b67c6687b2ab93e5b640008b6c912f88b6a3a88cd4283a7719c273` |
 <!-- end:vectors:docs/thyrse-test-vectors.json:thyrse -->
