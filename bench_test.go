@@ -6,7 +6,7 @@ import (
 	"github.com/codahale/thyrse/internal/testdata"
 )
 
-func BenchmarkDerive(b *testing.B) {
+func BenchmarkProtocol_Derive(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -20,7 +20,7 @@ func BenchmarkDerive(b *testing.B) {
 	}
 }
 
-func BenchmarkSeal(b *testing.B) {
+func BenchmarkProtocol_Seal(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -35,7 +35,7 @@ func BenchmarkSeal(b *testing.B) {
 	}
 }
 
-func BenchmarkOpen(b *testing.B) {
+func BenchmarkProtocol_Open(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -53,7 +53,7 @@ func BenchmarkOpen(b *testing.B) {
 	}
 }
 
-func BenchmarkMask(b *testing.B) {
+func BenchmarkProtocol_Mask(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -68,7 +68,7 @@ func BenchmarkMask(b *testing.B) {
 	}
 }
 
-func BenchmarkUnmask(b *testing.B) {
+func BenchmarkProtocol_Unmask(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -85,7 +85,7 @@ func BenchmarkUnmask(b *testing.B) {
 	}
 }
 
-func BenchmarkMix(b *testing.B) {
+func BenchmarkProtocol_Mix(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -99,7 +99,7 @@ func BenchmarkMix(b *testing.B) {
 	}
 }
 
-func BenchmarkMaskStream(b *testing.B) {
+func BenchmarkProtocol_MaskStream(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -116,7 +116,7 @@ func BenchmarkMaskStream(b *testing.B) {
 	}
 }
 
-func BenchmarkUnmaskStream(b *testing.B) {
+func BenchmarkProtocol_UnmaskStream(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		b.Run(size.Name, func(b *testing.B) {
 			p := New("bench")
@@ -135,7 +135,7 @@ func BenchmarkUnmaskStream(b *testing.B) {
 	}
 }
 
-func BenchmarkRatchet(b *testing.B) {
+func BenchmarkProtocol_Ratchet(b *testing.B) {
 	p := New("bench")
 	b.ReportAllocs()
 	for b.Loop() {
@@ -143,7 +143,7 @@ func BenchmarkRatchet(b *testing.B) {
 	}
 }
 
-func BenchmarkFork(b *testing.B) {
+func BenchmarkProtocol_Fork(b *testing.B) {
 	p := New("bench")
 	values := [][]byte{[]byte("alice"), []byte("bob")}
 	b.ReportAllocs()
