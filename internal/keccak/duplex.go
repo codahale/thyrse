@@ -260,6 +260,9 @@ func (a *Duplex) Chain(b *Duplex, dsA, dsB byte) {
 // different states but must be at the same position), permutes both in parallel
 // via State2, and leaves both at pos=0 ready to squeeze.
 func (a *Duplex) PadPermute2(b *Duplex, ds byte) {
+	if a.pos != b.pos {
+		panic("keccak: PadPermute2 with mismatched positions")
+	}
 	var s2 State2
 	for i := range Lanes {
 		s2.a[i] = [2]uint64{a.s.a[i], b.s.a[i]}
