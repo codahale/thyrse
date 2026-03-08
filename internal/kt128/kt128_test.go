@@ -31,6 +31,27 @@ func unhex(s string) []byte {
 	return b
 }
 
+// readCustom finalizes h with the given customization string and reads output.
+// This is a test helper for RFC vector compatibility.
+func readCustom(h *Hasher, custom []byte, out []byte) {
+	h.finalize(custom)
+	if !h.squeezed {
+		h.ts.PadPermute(h.ds)
+		h.squeezed = true
+	}
+	h.ts.Squeeze(out)
+}
+
+// sumHelper returns a 32-byte hash without modifying the original hasher.
+// Test-only replacement for the removed Sum method.
+func sumHelper(h *Hasher) []byte {
+	clone := h.clone()
+	clone.finalize(nil)
+	out := make([]byte, 32)
+	clone.Read(out)
+	return out
+}
+
 // RFC 9861 Section 5 KT128 test vectors.
 var rfcVectors = []struct {
 	name   string
@@ -173,13 +194,13 @@ var rfcVectors = []struct {
 func TestRFCVectors(t *testing.T) {
 	for _, tc := range rfcVectors {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewCustom(tc.custom)
+			h := New()
 			if tc.msg != nil {
 				_, _ = h.Write(tc.msg)
 			}
 
 			out := make([]byte, tc.outLen)
-			_, _ = h.Read(out)
+			readCustom(h, tc.custom, out)
 
 			var got []byte
 			if tc.last32 {
@@ -253,7 +274,7 @@ func TestSumNonDestructive(t *testing.T) {
 	_, _ = h.Write(ptn(4913))
 
 	// Sum should not affect subsequent Read.
-	sum := h.Sum(nil)
+	sum := sumHelper(h)
 
 	h2 := New()
 	_, _ = h2.Write(ptn(4913))
@@ -261,10 +282,10 @@ func TestSumNonDestructive(t *testing.T) {
 	_, _ = h2.Read(out)
 
 	if !bytes.Equal(sum, out) {
-		t.Error("Sum() result differs from Read()")
+		t.Error("sumHelper() result differs from Read()")
 	}
 
-	// After Sum, Write+Read should still work on original hasher.
+	// After sumHelper, Write+Read should still work on original hasher.
 	_, _ = h.Write(ptn(100))
 	got := make([]byte, 32)
 	_, _ = h.Read(got)
@@ -276,7 +297,7 @@ func TestSumNonDestructive(t *testing.T) {
 	_, _ = h3.Read(want)
 
 	if !bytes.Equal(got, want) {
-		t.Error("Read() after Sum()+Write() produced wrong result")
+		t.Error("Read() after sumHelper()+Write() produced wrong result")
 	}
 }
 
@@ -287,16 +308,17 @@ func TestClone(t *testing.T) {
 			msg := ptn(size)
 
 			// Write all data, clone, verify both produce the same output.
-			h := NewCustom([]byte("test"))
+			h := New()
 			_, _ = h.Write(msg)
 
 			clone := h.Clone()
 
+			// Use readCustom with a custom string to test clone + custom finalization.
 			want := make([]byte, 64)
-			_, _ = h.Read(want)
+			readCustom(h, []byte("test"), want)
 
 			got := make([]byte, 64)
-			_, _ = clone.Read(got)
+			readCustom(clone, []byte("test"), got)
 
 			if !bytes.Equal(got, want) {
 				t.Errorf("size=%d: clone output mismatch", size)
@@ -305,7 +327,7 @@ func TestClone(t *testing.T) {
 	}
 
 	t.Run("independent after clone", func(t *testing.T) {
-		h := NewCustom([]byte("test"))
+		h := New()
 		_, _ = h.Write(ptn(BlockSize + 1))
 
 		clone := h.Clone()
@@ -314,13 +336,187 @@ func TestClone(t *testing.T) {
 		_, _ = h.Write([]byte("extra"))
 
 		out1 := make([]byte, 64)
-		_, _ = h.Read(out1)
+		readCustom(h, []byte("test"), out1)
 
 		out2 := make([]byte, 64)
-		_, _ = clone.Read(out2)
+		readCustom(clone, []byte("test"), out2)
 
 		if bytes.Equal(out1, out2) {
 			t.Error("clone and original produced identical output after diverging")
+		}
+	})
+}
+
+func TestChain(t *testing.T) {
+	t.Run("different customizations produce different outputs", func(t *testing.T) {
+		h := New()
+		_, _ = h.Write(ptn(100))
+
+		dstA := make([]byte, 32)
+		dstB := make([]byte, 32)
+		h.Chain([]byte("A"), dstA, []byte("B"), dstB)
+
+		if bytes.Equal(dstA, dstB) {
+			t.Error("Chain with different customization strings produced identical outputs")
+		}
+	})
+
+	t.Run("swapped customizations swap outputs", func(t *testing.T) {
+		// Chain with (A, B).
+		h1 := New()
+		_, _ = h1.Write(ptn(100))
+		ab1 := make([]byte, 32)
+		ab2 := make([]byte, 32)
+		h1.Chain([]byte("A"), ab1, []byte("B"), ab2)
+
+		// Chain with (B, A).
+		h2 := New()
+		_, _ = h2.Write(ptn(100))
+		ba1 := make([]byte, 32)
+		ba2 := make([]byte, 32)
+		h2.Chain([]byte("B"), ba1, []byte("A"), ba2)
+
+		if !bytes.Equal(ab1, ba2) {
+			t.Error("swapped customizations: A output from (A,B) != B output from (B,A)")
+		}
+		if !bytes.Equal(ab2, ba1) {
+			t.Error("swapped customizations: B output from (A,B) != A output from (B,A)")
+		}
+	})
+
+	t.Run("matches sequential finalization (single-node)", func(t *testing.T) {
+		// Single-node: message fits in one chunk.
+		msg := ptn(100)
+
+		h := New()
+		_, _ = h.Write(msg)
+		dstA := make([]byte, 32)
+		dstB := make([]byte, 32)
+		h.Chain([]byte("X"), dstA, []byte("Y"), dstB)
+
+		// Compare with sequential readCustom.
+		hA := New()
+		_, _ = hA.Write(msg)
+		wantA := make([]byte, 32)
+		readCustom(hA, []byte("X"), wantA)
+
+		hB := New()
+		_, _ = hB.Write(msg)
+		wantB := make([]byte, 32)
+		readCustom(hB, []byte("Y"), wantB)
+
+		if !bytes.Equal(dstA, wantA) {
+			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
+		}
+		if !bytes.Equal(dstB, wantB) {
+			t.Errorf("Chain dstB mismatch with sequential\ngot  %x\nwant %x", dstB, wantB)
+		}
+	})
+
+	t.Run("matches sequential finalization (tree-mode)", func(t *testing.T) {
+		// Tree-mode: message > 8192 bytes.
+		msg := ptn(BlockSize*3 + 500)
+
+		h := New()
+		_, _ = h.Write(msg)
+		dstA := make([]byte, 32)
+		dstB := make([]byte, 32)
+		h.Chain([]byte("X"), dstA, []byte("Y"), dstB)
+
+		// Compare with sequential readCustom.
+		hA := New()
+		_, _ = hA.Write(msg)
+		wantA := make([]byte, 32)
+		readCustom(hA, []byte("X"), wantA)
+
+		hB := New()
+		_, _ = hB.Write(msg)
+		wantB := make([]byte, 32)
+		readCustom(hB, []byte("Y"), wantB)
+
+		if !bytes.Equal(dstA, wantA) {
+			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
+		}
+		if !bytes.Equal(dstB, wantB) {
+			t.Errorf("Chain dstB mismatch with sequential\ngot  %x\nwant %x", dstB, wantB)
+		}
+	})
+
+	t.Run("empty customization via Chain matches Read", func(t *testing.T) {
+		msg := ptn(4913)
+
+		h := New()
+		_, _ = h.Write(msg)
+		dstA := make([]byte, 32)
+		dstB := make([]byte, 32)
+		h.Chain(nil, dstA, nil, dstB)
+
+		// Both should match Read() with empty customization.
+		hRef := New()
+		_, _ = hRef.Write(msg)
+		want := make([]byte, 32)
+		_, _ = hRef.Read(want)
+
+		if !bytes.Equal(dstA, want) {
+			t.Errorf("Chain(nil) dstA != Read()\ngot  %x\nwant %x", dstA, want)
+		}
+		if !bytes.Equal(dstB, want) {
+			t.Errorf("Chain(nil) dstB != Read()\ngot  %x\nwant %x", dstB, want)
+		}
+	})
+
+	t.Run("tree-mode with large message", func(t *testing.T) {
+		// Test with a message that exercises multi-leaf tree hashing.
+		msg := ptn(83521)
+
+		h := New()
+		_, _ = h.Write(msg)
+		dstA := make([]byte, 32)
+		dstB := make([]byte, 32)
+		h.Chain([]byte("alpha"), dstA, []byte("beta"), dstB)
+
+		if bytes.Equal(dstA, dstB) {
+			t.Error("Chain with different customization strings produced identical outputs for large message")
+		}
+
+		// Verify against sequential.
+		hA := New()
+		_, _ = hA.Write(msg)
+		wantA := make([]byte, 32)
+		readCustom(hA, []byte("alpha"), wantA)
+
+		if !bytes.Equal(dstA, wantA) {
+			t.Errorf("Chain dstA mismatch with sequential for large message\ngot  %x\nwant %x", dstA, wantA)
+		}
+	})
+
+	t.Run("does not mutate original hasher", func(t *testing.T) {
+		h := New()
+		_, _ = h.Write(ptn(100))
+
+		// Take a snapshot of the state by cloning and reading.
+		ref := h.clone()
+
+		dstA := make([]byte, 32)
+		dstB := make([]byte, 32)
+		h.Chain([]byte("A"), dstA, []byte("B"), dstB)
+
+		// Original should still be usable: another Chain should give the same result.
+		dstA2 := make([]byte, 32)
+		dstB2 := make([]byte, 32)
+		h.Chain([]byte("A"), dstA2, []byte("B"), dstB2)
+
+		if !bytes.Equal(dstA, dstA2) || !bytes.Equal(dstB, dstB2) {
+			t.Error("calling Chain twice on the same hasher produced different results")
+		}
+
+		// Original should still produce the same Read output as before Chain.
+		out := make([]byte, 32)
+		_, _ = h.Read(out)
+		refOut := make([]byte, 32)
+		_, _ = ref.Read(refOut)
+		if !bytes.Equal(out, refOut) {
+			t.Error("Chain mutated the original hasher's Read output")
 		}
 	})
 }

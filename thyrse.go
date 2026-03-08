@@ -65,13 +65,13 @@ func (p *Protocol) Mix(label string, data []byte) {
 // MixDigest absorbs streaming data by pre-hashing through KT128. The Init label is used as the KT128 customization
 // string, binding the digest to the protocol identity.
 func (p *Protocol) MixDigest(label string, r io.Reader) error {
-	kh := kt128.NewCustom([]byte(p.initLabel))
+	kh := kt128.New()
 	if _, err := io.Copy(kh, r); err != nil {
 		return err
 	}
 
 	var digest [chainValueSize]byte
-	_, _ = kh.Read(digest[:])
+	_, _ = kh.ReadCustom([]byte(p.initLabel), digest[:])
 
 	p.writeOpLabel(opMixDigest, label)
 	p.writeEncodeString(digest[:])
@@ -88,7 +88,7 @@ func (p *Protocol) MixWriter(label string) *MixWriter {
 	return &MixWriter{
 		p:     p,
 		label: label,
-		kh:    kt128.NewCustom([]byte(p.initLabel)),
+		kh:    kt128.New(),
 	}
 }
 
@@ -111,7 +111,7 @@ func (mw *MixWriter) Branch() *Protocol {
 	kh := mw.kh.Clone()
 
 	var digest [chainValueSize]byte
-	_, _ = kh.Read(digest[:])
+	_, _ = kh.ReadCustom([]byte(mw.p.initLabel), digest[:])
 
 	p := mw.p.Clone()
 	p.writeOpLabel(opMixDigest, mw.label)
@@ -123,7 +123,7 @@ func (mw *MixWriter) Branch() *Protocol {
 // called exactly once.
 func (mw *MixWriter) Close() error {
 	var digest [chainValueSize]byte
-	_, _ = mw.kh.Read(digest[:])
+	_, _ = mw.kh.ReadCustom([]byte(mw.p.initLabel), digest[:])
 
 	mw.p.writeOpLabel(opMixDigest, mw.label)
 	mw.p.writeEncodeString(digest[:])

@@ -19,9 +19,8 @@ const (
 	leafDS = 0x0B
 )
 
-// Hasher is an incremental KT128 instance that implements hash.Hash and io.Reader.
+// Hasher is an incremental KT128 instance.
 type Hasher struct {
-	suffix    []byte        // C || lengthEncode(|C|), precomputed at construction, immutable
 	buf       []byte        // buffered message/leaf data
 	ts        keccak.Duplex // final-node sponge state
 	leafCount int           // total leaf CVs written to ts so far
@@ -31,20 +30,9 @@ type Hasher struct {
 	squeezed  bool          // true once PadPermute has been called
 }
 
-// emptySuffix is the suffix for empty customization: lengthEncode(0) = [0x00].
-var emptySuffix = []byte{0x00}
-
 // New returns a new Hasher with empty customization.
 func New() *Hasher {
-	return &Hasher{suffix: emptySuffix}
-}
-
-// NewCustom returns a new Hasher with the given customization string.
-func NewCustom(c []byte) *Hasher {
-	suffix := make([]byte, 0, len(c)+9)
-	suffix = append(suffix, c...)
-	suffix = append(suffix, enc.LengthEncode(uint64(len(c)))...)
-	return &Hasher{suffix: suffix}
+	return &Hasher{}
 }
 
 // Write absorbs message bytes. It must not be called after Read or Sum.
@@ -164,9 +152,10 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 	h.leafCount += nLeaves
 }
 
-// Read squeezes output from the XOF. On the first call, it finalizes absorption.
+// Read squeezes output from the XOF. On the first call, it finalizes absorption
+// with empty customization.
 func (h *Hasher) Read(p []byte) (int, error) {
-	h.finalize()
+	h.finalize(nil)
 	if !h.squeezed {
 		h.ts.PadPermute(h.ds)
 		h.squeezed = true
@@ -175,10 +164,41 @@ func (h *Hasher) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Sum appends the current 32-byte hash to b without changing the underlying state.
-func (h *Hasher) Sum(b []byte) []byte {
-	clone := &Hasher{
-		suffix:    h.suffix,
+// ReadCustom squeezes output from the XOF with the given customization string.
+// On the first call, it finalizes absorption with the customization suffix.
+func (h *Hasher) ReadCustom(custom []byte, p []byte) (int, error) {
+	h.finalize(custom)
+	if !h.squeezed {
+		h.ts.PadPermute(h.ds)
+		h.squeezed = true
+	}
+	h.ts.Squeeze(p)
+	return len(p), nil
+}
+
+// Chain clones the internal state, applies customA and customB as KT128
+// customization suffixes to each clone, finalizes both, and squeezes output
+// into dstA and dstB respectively. The two outputs are independent.
+//
+// The final PadPermute is performed in parallel using the 2x permutation.
+func (h *Hasher) Chain(customA []byte, dstA []byte, customB []byte, dstB []byte) {
+	a := h.clone()
+	b := h.clone()
+
+	a.finalize(customA)
+	b.finalize(customB)
+
+	// Both clones have the same ds byte and same sponge position.
+	// Use parallel PadPermute to avoid two sequential permutations.
+	a.ts.PadPermute2(&b.ts, a.ds)
+
+	a.ts.Squeeze(dstA)
+	b.ts.Squeeze(dstB)
+}
+
+// clone returns an independent copy of the Hasher.
+func (h *Hasher) clone() *Hasher {
+	return &Hasher{
 		buf:       slices.Clone(h.buf),
 		ts:        h.ts,
 		leafCount: h.leafCount,
@@ -187,28 +207,14 @@ func (h *Hasher) Sum(b []byte) []byte {
 		finalized: h.finalized,
 		squeezed:  h.squeezed,
 	}
-	clone.finalize()
-
-	out := make([]byte, 32)
-	_, _ = clone.Read(out)
-	return append(b, out...)
 }
 
 // Clone returns an independent copy of the Hasher. The original and clone evolve independently.
 func (h *Hasher) Clone() *Hasher {
-	return &Hasher{
-		suffix:    h.suffix, // immutable, safe to share
-		buf:       slices.Clone(h.buf),
-		ts:        h.ts,
-		leafCount: h.leafCount,
-		ds:        h.ds,
-		treeMode:  h.treeMode,
-		finalized: h.finalized,
-		squeezed:  h.squeezed,
-	}
+	return h.clone()
 }
 
-// Reset resets the Hasher to its initial state, retaining the customization string.
+// Reset resets the Hasher to its initial state.
 func (h *Hasher) Reset() {
 	h.buf = h.buf[:0]
 	h.ts.Reset()
@@ -219,21 +225,25 @@ func (h *Hasher) Reset() {
 	h.squeezed = false
 }
 
-// Size returns the default output size in bytes.
-func (h *Hasher) Size() int { return 32 }
+// customSuffix appends C || right_encode(|C|) to dst and returns the result.
+func customSuffix(dst []byte, c []byte) []byte {
+	if len(c) == 0 {
+		return append(dst, 0x00)
+	}
+	dst = append(dst, c...)
+	dst = append(dst, enc.LengthEncode(uint64(len(c)))...)
+	return dst
+}
 
-// BlockSize returns the KT128 chunk size.
-func (h *Hasher) BlockSize() int { return BlockSize }
-
-// finalize appends the suffix and computes the final hash.
-func (h *Hasher) finalize() {
+// finalize appends the customization suffix and computes the final hash.
+func (h *Hasher) finalize(custom []byte) {
 	if h.finalized {
 		return
 	}
 	h.finalized = true
 
-	// Append suffix to buffered data.
-	h.buf = append(h.buf, h.suffix...)
+	// Append customization suffix to buffered data.
+	h.buf = customSuffix(h.buf, custom)
 
 	if !h.treeMode {
 		if len(h.buf) <= BlockSize {

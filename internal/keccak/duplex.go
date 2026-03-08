@@ -253,6 +253,28 @@ func (a *Duplex) Chain(b *Duplex, dsA, dsB byte) {
 	b.pos = 0
 }
 
+// PadPermute2 applies pad10*1 padding with ds to both a and b (which may have
+// different states but must be at the same position), permutes both in parallel
+// via State2, and leaves both at pos=0 ready to squeeze.
+func (a *Duplex) PadPermute2(b *Duplex, ds byte) {
+	var s2 State2
+	for i := range Lanes {
+		s2.a[i] = [2]uint64{a.s.a[i], b.s.a[i]}
+	}
+	xorByteInWord(&s2.a[a.pos>>3][0], a.pos, ds)
+	xorByteInWord(&s2.a[a.pos>>3][1], a.pos, ds)
+	endLane := (Rate - 1) >> 3
+	xorByteInWord(&s2.a[endLane][0], Rate-1, 0x80)
+	xorByteInWord(&s2.a[endLane][1], Rate-1, 0x80)
+	s2.Permute12()
+	for i := range Lanes {
+		a.s.a[i] = s2.a[i][0]
+		b.s.a[i] = s2.a[i][1]
+	}
+	a.pos = 0
+	b.pos = 0
+}
+
 // Equal returns 1 if d and other represent identical states, 0 otherwise.
 // The comparison is constant-time with respect to the keccak state.
 func (d *Duplex) Equal(other *Duplex) int {
