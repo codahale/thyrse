@@ -283,3 +283,19 @@ class TestSeal(unittest.TestCase):
         self.assertEqual(s2.hex(), "2b6b64822aa4ac6716aaf6226e20d4d9f1c6ac6bafbe00761b03663b3e574d91be5fa8918945fa311214cfa83e1b")
         s3 = p.seal(b"msg", b"third message")
         self.assertEqual(s3.hex(), "86de20dad1084ed184d23aa56a3c3001a468b67c6687b2ab93e5b640008b6c912f88b6a3a88cd4283a7719c273")
+
+
+class TestFork(unittest.TestCase):
+    def test_fork_derive_16_6(self):
+        """§16.6: Fork with two branches, each producing Derive."""
+        p = Protocol()
+        p.init(b"test.vector")
+        p.mix(b"key", b"test-key-material")
+        clones = p.fork(b"role", b"prover", b"verifier")
+
+        base_out = p.derive(b"output", 32)
+        self.assertEqual(base_out.hex(), "53fa58633361a67384c7a6d8df0e6163dac581024e9786856442edf13e5b787c")
+        prover_out = clones[0].derive(b"output", 32)
+        self.assertEqual(prover_out.hex(), "329696ce84ae7aef8577db9841d82956b60f9f7ce38449d8b83092f3a46a89ad")
+        verifier_out = clones[1].derive(b"output", 32)
+        self.assertEqual(verifier_out.hex(), "19644cc5d0a5bc8f52eb647a581b85ba868ce0cb3561f8d2a58f1bf6ed1a3e82")

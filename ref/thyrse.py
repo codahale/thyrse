@@ -94,3 +94,27 @@ class Protocol:
         if not _hmac.compare_digest(computed_tag, tag):
             return None
         return pt
+
+    def fork(self, label: bytes, *values: bytes) -> list["Protocol"]:
+        N = len(values)
+        snapshot = bytes(self.transcript)
+        self._append_frame(OP_FORK, label,
+            left_encode(N) + left_encode(0) + encode_string(b""))
+        clones = []
+        for i, val in enumerate(values, start=1):
+            clone = Protocol()
+            clone.transcript = bytearray(snapshot)
+            clone._append_frame(OP_FORK, label,
+                left_encode(N) + left_encode(i) + encode_string(val))
+            clones.append(clone)
+        return clones
+
+    def clone(self) -> "Protocol":
+        copy = Protocol()
+        copy.transcript = bytearray(self.transcript)
+        return copy
+
+    def clear(self):
+        for i in range(len(self.transcript)):
+            self.transcript[i] = 0
+        self.transcript = bytearray()
