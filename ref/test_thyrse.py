@@ -170,3 +170,20 @@ class TestInitDerive(unittest.TestCase):
         p.mix(b"nonce", b"test-nonce-value")
         output = p.derive(b"output", 32)
         self.assertEqual(output.hex(), "0db4090efec2ba935dac63a18d88df04859d1dedf4a60f428393674520b67e39")
+
+
+class TestRatchet(unittest.TestCase):
+    def test_ratchet_16_5(self):
+        """§16.5: Derive output differs with and without Ratchet."""
+        p1 = Protocol()
+        p1.init(b"test.vector")
+        p1.mix(b"key", b"test-key-material")
+        out1 = p1.derive(b"output", 32)
+        self.assertEqual(out1.hex(), "b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf")
+
+        p2 = Protocol()
+        p2.init(b"test.vector")
+        p2.mix(b"key", b"test-key-material")
+        p2.ratchet(b"forward-secrecy")
+        out2 = p2.derive(b"output", 32)
+        self.assertEqual(out2.hex(), "23be92e694890a8b3d6fb5b4885b3b5a63539ad8da6fc5e8e20cf34728dbeb91")

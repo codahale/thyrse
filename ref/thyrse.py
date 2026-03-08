@@ -59,3 +59,8 @@ class Protocol:
         results = self._finalize({CS_CHAIN: H, CS_DERIVE: output_len})
         self._reset_chain(OP_DERIVE, results[CS_CHAIN])
         return results[CS_DERIVE]
+
+    def ratchet(self, label: bytes):
+        self._append_frame(OP_RATCHET, label)
+        results = self._finalize({CS_RATCHET: H})
+        self._reset_chain(OP_RATCHET, results[CS_RATCHET])
