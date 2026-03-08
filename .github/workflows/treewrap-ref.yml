@@ -8,14 +8,14 @@ on:
       - 'docs/treewrap-spec.md'
       - 'docs/treewrap-test-vectors.json'
       - 'ref/**'
-      - 'tools/embed_treewrap.py'
+      - 'tools/embed.py'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'docs/treewrap-spec.md'
       - 'docs/treewrap-test-vectors.json'
       - 'ref/**'
-      - 'tools/embed_treewrap.py'
+      - 'tools/embed.py'
 
 permissions:
   contents: read
@@ -50,5 +50,5 @@ jobs:
 
     - name: Embed and check for changes
       run: |
-        python3 tools/embed_treewrap.py docs/treewrap-spec.md
+        python3 tools/embed.py docs/treewrap-spec.md
         git diff --exit-code docs/treewrap-spec.md
