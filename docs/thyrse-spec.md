@@ -662,7 +662,9 @@ global indifferentiability budget.
 
 **Combined bound.**
 
-$$\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma + t)^2}{2^{c+1}} + q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{q^2}{2^{8H+1}} + \varepsilon_{\mathrm{tw}}$$
+```math
+\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma + t)^2}{2^{c+1}} + q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{q^2}{2^{8H+1}} + \varepsilon_{\mathrm{tw}}
+```
 
 where:
 
@@ -703,7 +705,9 @@ The bound in §13.7 covers a single protocol session. In a multi-user setting wi
 all sessions. If the adversary makes `t` offline Keccak-p queries and the `U` sessions collectively
 process `σ_total` Keccak-p calls, the indifferentiability term is:
 
-$$\varepsilon_{\mathrm{indiff}} \leq \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}}$$
+```math
+\varepsilon_{\mathrm{indiff}} \leq \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}}
+```
 
 The adversary does not gain a per-user multiplier because indifferentiability is a global property of the
 permutation.
@@ -712,14 +716,18 @@ permutation.
 RO-KDF argument, each session key is derived from a KT128 evaluation on a transcript containing
 unpredictable key material. This gives a multi-target advantage of:
 
-$$\varepsilon_{\mathrm{mu\text{-}key}} \leq U \cdot \varepsilon_{\mathrm{kdf}}(0)$$
+```math
+\varepsilon_{\mathrm{mu\text{-}key}} \leq U \cdot \varepsilon_{\mathrm{kdf}}(0)
+```
 
 For 256-bit key material and an adversary with budget `t = 2⁶⁴` across `U = 2³²` users:
 `ε_mu-key ≈ 2³² · 2⁶⁴ / 2²⁵⁶ = 2⁻¹⁶⁰`.
 
 **Multi-user chain collisions.** The probability of a cross-session chain collision is:
 
-$$\varepsilon_{\mathrm{mu\text{-}chain}} \leq \frac{(U \cdot q)^2}{2^{513}}$$
+```math
+\varepsilon_{\mathrm{mu\text{-}chain}} \leq \frac{(U \cdot q)^2}{2^{513}}
+```
 
 For `U = 2³²` sessions with `q = 2³²` finalizations each:
 `(2⁶⁴)² / 2⁵¹³ = 2⁻³⁸⁵`.
@@ -729,7 +737,9 @@ total number of forgery attempts.
 
 **Combined multi-user bound:**
 
-$$\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + U \cdot q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{(U \cdot q)^2}{2^{513}} + \frac{S}{2^{256}}$$
+```math
+\varepsilon_{\mathrm{mu\text{-}total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + U \cdot q \cdot \varepsilon_{\mathrm{kdf}}(0) + \frac{(U \cdot q)^2}{2^{513}} + \frac{S}{2^{256}}
+```
 
 **Ratcheting as mitigation.** After a `Ratchet` operation, the session state contains only a chain
 value — a 512-bit pseudorandom string with no algebraic structure exploitable in a multi-target search.

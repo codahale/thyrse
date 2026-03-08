@@ -25,11 +25,11 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 | f      | Keccak-p[1600,12] | Underlying permutation (1600-bit state, 12 rounds)    |
 | R      | 168               | Sponge rate (bytes)                                   |
 | C      | 32                | Capacity (bytes); key and chain value size            |
-| $\tau$ | 32                | Tag size (bytes); equal to C for this instantiation   |
+| $`\tau`$ | 32                | Tag size (bytes); equal to C for this instantiation   |
 | B      | 8192              | Chunk size (bytes), matching KangarooTwelve           |
 
-**Parameter constraints.** $C + 8 \leq R - 1$ (init material `key || LEU64(index)` = $C + 8 = 40$ bytes fits in a
-single rate block). $\max(\tau, C) < R$ (tag and chain value outputs fit in a single squeeze block).
+**Parameter constraints.** $`C + 8 \leq R - 1`$ (init material `key || LEU64(index)` = $`C + 8 = 40`$ bytes fits in a
+single rate block). $`\max(\tau, C) < R`$ (tag and chain value outputs fit in a single squeeze block).
 
 ## 3. Dependencies
 
@@ -118,14 +118,14 @@ def _duplex_absorb(D: _DuplexState, data: bytes) -> _DuplexState:
 <!-- end:code:ref/duplex.py:duplex_all -->
 
 > [!NOTE]
-> `_duplex_pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $R-1$). Initialization
+> `_duplex_pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $`R-1`$). Initialization
 > uses domain byte `0x08`; chain value finalization uses `0x0B`; the tag `_duplex_pad_permute` in
 > `EncryptAndMAC`/`DecryptAndMAC` uses `0x07` (n=1) or `0x06` (n>1). Intermediate encrypt/decrypt blocks use the full
-> $R = 168$ byte rate and permute without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb
+> $`R = 168`$ byte rate and permute without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb
 > for non-final blocks. Both `_duplex_encrypt` and `_duplex_decrypt` overwrite the rate with ciphertext, so state
 > evolution is identical regardless of direction. `_duplex_absorb` XOR-absorbs data into the rate without padding,
 > permuting via raw `keccak_p1600` when the rate is full. Chain value finalization calls `_duplex_pad_permute` to mix
-> all data before squeezing; the output fits in a single squeeze block since $C = 32 \ll R = 168$.
+> all data before squeezing; the output fits in a single squeeze block since $`C = 32 \ll R = 168`$.
 
 ## 5. TreeWrap128
 
@@ -141,19 +141,19 @@ The encodings used here (`left_encode`, `encode_string`, `length_encode`) are de
 
 TreeWrap128 uses the Sakura final-node-growing topology with kangaroo hopping, following KangarooTwelve (ePrint
 2016/770, Sections 1 and 3.3). The final node (index 0) is a duplex that encrypts chunk 0 directly (the "message
-hop"). Chunks 1 through $n-1$ are processed by independent leaf Duplexes that produce chain values (the "chaining hop").
+hop"). Chunks 1 through $`n-1`$ are processed by independent leaf Duplexes that produce chain values (the "chaining hop").
 
-For $n = 1$, the final node encrypts the entire message and produces the tag via `pad_permute(0x07)`. The Sakura frame
+For $`n = 1`$, the final node encrypts the entire message and produces the tag via `pad_permute(0x07)`. The Sakura frame
 bits are: message hop `'1'` + final `'1'` = `'11'`, yielding domain byte `0x07` (delimited suffix `'111'`).
 
-For $n > 1$, the final node is a duplex that:
+For $`n > 1`$, the final node is a duplex that:
 
 1. Inits with `key || LEU64(0)` via `pad_permute(0x08)`.
 2. Encrypts chunk 0 (the message hop).
 3. Absorbs `HOP_FRAME` (`0x03 || 0x00^7`), the Sakura message-hop / chaining-hop framing.
-4. Absorbs chain values $\mathit{cv}_1 \;\|\; \cdots \;\|\; \mathit{cv}_{n-1}$.
+4. Absorbs chain values $`\mathit{cv}_1 \;\|\; \cdots \;\|\; \mathit{cv}_{n-1}`$.
 5. Absorbs `length_encode(n-1) || 0xFF || 0xFF`.
-6. Calls `pad_permute(0x06)` and squeezes the $\tau$-byte tag.
+6. Calls `pad_permute(0x06)` and squeezes the $`\tau`$-byte tag.
 
 The transition from overwrite-mode encryption (step 2) to XOR-mode absorption (step 3) does not require a permutation:
 the overwrite-mode equivalence (Lemma 2 in Section 6) ensures that the sponge state after encrypting chunk 0 is
@@ -164,10 +164,10 @@ The Sakura frame bits at the tag are: chaining hop `'0'` + final `'1'` = `'01'`,
 (delimited suffix `'011'`). The fields above are:
 
 - **`HOP_FRAME`** (8 bytes): the Sakura message-hop / chaining-hop frame `'110^{62}'` packed LSB-first as `0x03 || 0x00^7`.
-- **`cv_i`** (C = 32 bytes each): the chain value squeezed from leaf $i$ (for $i = 1, \ldots, n-1$).
-- **`length_encode(n-1)`**: the Sakura coded nrCVs field encoding the number of chain values ($n-1$, since the final
+- **`cv_i`** (C = 32 bytes each): the chain value squeezed from leaf $`i`$ (for $`i = 1, \ldots, n-1`$).
+- **`length_encode(n-1)`**: the Sakura coded nrCVs field encoding the number of chain values ($`n-1`$, since the final
   node handles chunk 0), encoded per RFC 9861.
-- **`0xFF || 0xFF`**: the Sakura interleaving block size encoding $I = \infty$ (no block interleaving); mantissa and
+- **`0xFF || 0xFF`**: the Sakura interleaving block size encoding $`I = \infty`$ (no block interleaving); mantissa and
   exponent both `0xFF`.
 
 Each domain byte stores a variable-length suffix bit-string LSB-first, with a delimiter `1` bit immediately after the
@@ -191,13 +191,13 @@ The following table summarizes the five domain separation bytes used by TreeWrap
 
 **Domain separation.** The key is in the sponge state via `init` (domain byte `0x08`), not prepended to an input
 string. Both the final node and every leaf call `init(key, index)` with distinct indices: the final node uses index 0,
-while leaves use indices $1, \ldots, n-1$. The final node's tag domain byte (`0x06` or `0x07`) is distinct from all
+while leaves use indices $`1, \ldots, n-1`$. The final node's tag domain byte (`0x06` or `0x07`) is distinct from all
 leaf domain bytes (`0x08`, `0x0B`), providing an additional layer of separation.
 
 **Encoding injectivity.** The chaining-hop suffix `length_encode(n-1) || 0xFF || 0xFF` is self-delimiting: `0xFF`
 cannot be a valid `length_encode` byte-count (chain-value counts fit in at most 8 bytes), so the interleaving block
-size bytes are unambiguously terminal, and the byte immediately preceding them gives the byte-count of $n-1$. Given
-$n-1$, the chain values are parsed as $n-1$ consecutive $C$-byte blocks following the `HOP_FRAME`.
+size bytes are unambiguously terminal, and the byte immediately preceding them gives the byte-count of $`n-1`$. Given
+$`n-1`$, the chain values are parsed as $`n-1`$ consecutive $`C`$-byte blocks following the `HOP_FRAME`.
 
 ### 5.1 Internal Functions: EncryptAndMAC / DecryptAndMAC
 
@@ -212,13 +212,13 @@ derivation and tag verification.
 
 - `key`: A C-byte key. MUST be pseudorandom (computationally indistinguishable from uniform) and unique per invocation
   (no two calls share a key).
-- `plaintext` / `ciphertext`: Data of any length (may be empty). Maximum length is $(2^{64} - 1) \cdot B$ bytes, since
+- `plaintext` / `ciphertext`: Data of any length (may be empty). Maximum length is $`(2^{64} - 1) \cdot B`$ bytes, since
   leaf indices are encoded as 8-byte little-endian integers.
 
 *Outputs:*
 
 - `ciphertext` / `plaintext`: Same length as the input data.
-- `tag`: A $\tau$-byte MAC tag.
+- `tag`: A $`\tau`$-byte MAC tag.
 
 *Procedure:*
 
@@ -283,7 +283,7 @@ def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
 ```
 <!-- end:code:ref/treewrap.py:internal_functions -->
 
-The final node (index 0) always encrypts chunk 0. Leaf operations for chunks 1 through $n-1$ are independent and may
+The final node (index 0) always encrypts chunk 0. Leaf operations for chunks 1 through $`n-1`$ are independent and may
 execute in parallel. Tag computation begins as soon as all chain values are available. `decrypt_and_mac` produces the
 same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write ciphertext into the sponge rate (Section 4).
 
@@ -344,19 +344,19 @@ Keccak-p[1600,12]. The argument has two layers:
   into keyed-duplex PRF properties of the leaf ciphers (FKD, Section 6.2): pseudorandomness of rate outputs,
   structural state equivalence, and fixed-key bijection.
 
-All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $c = 256$ bits and $\tau = 32$ tag
+All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $`c = 256`$ bits and $`\tau = 32`$ tag
 bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
-adversary. Related-key security is also out of scope: all claims assume the master key $K$ is uniformly random and
+adversary. Related-key security is also out of scope: all claims assume the master key $`K`$ is uniformly random and
 independent of any other keys in the system.
 
 > [!CAUTION]
-> **Nonce reuse is catastrophic.** Reusing the same $(K, N, AD)$ triple with different equal-length
+> **Nonce reuse is catastrophic.** Reusing the same $`(K, N, AD)`$ triple with different equal-length
 > messages produces identical keystreams, leaking the XOR of all plaintexts (two-time pad). This
-> enables full plaintext recovery given one known plaintext. Nonce uniqueness per $(K, AD)$ pair is a
+> enables full plaintext recovery given one known plaintext. Nonce uniqueness per $`(K, AD)`$ pair is a
 > hard security requirement (Section 7.4), not a quality-of-implementation concern.
 
 **Length leakage.** TreeWrap128 ciphertexts reveal the exact plaintext length: `|ct| = |M|` (plus the
-fixed $\tau$-byte tag). This is inherent to any stream-cipher-based AEAD and is not mitigated by this
+fixed $`\tau`$-byte tag). This is inherent to any stream-cipher-based AEAD and is not mitigated by this
 construction. Applications requiring length hiding must pad plaintexts before encryption.
 
 **Assumption scope.** Concrete bounds in this section are conditional on Keccak-p[1600,12] behaving as an ideal
@@ -368,8 +368,8 @@ permutation at the claimed workloads. This is a modeling assumption, not a proof
 > distance 5–10) are reported in DDS14. On reduced-capacity contest instances (Keccak[c=160]): 6-round
 > collision solutions are publicly reported (Keccak Crunchy Crypto Contest). In the raw-permutation setting
 > (Keccak-f[1600] with full state access, no keying): differential distinguishers reach 8 rounds at
-> complexity $2^{491.47}$ (DGPW11), and zero-sum distinguishers reach 16 rounds (of the original 18) at
-> complexity $2^{1023.88}$ (AM09). All known results above 6 rounds are in the unkeyed raw-permutation
+> complexity $`2^{491.47}`$ (DGPW11), and zero-sum distinguishers reach 16 rounds (of the original 18) at
+> complexity $`2^{1023.88}`$ (AM09). All known results above 6 rounds are in the unkeyed raw-permutation
 > setting and require state access or control that the keyed sponge/duplex denies.
 > (See the Keccak Team third-party table and reduced-round references in Section 9.)
 >
@@ -382,51 +382,50 @@ permutation at the claimed workloads. This is a modeling assumption, not a proof
 
 Let:
 
-- $\sigma$: total online Keccak-p calls performed by the construction across all oracle queries
+- $`\sigma`$: total online Keccak-p calls performed by the construction across all oracle queries
   (including KDF, leaf-sponge, and chaining-hop tag permutation calls).
-- $t$: adversary offline Keccak-p calls (an analysis parameter representing direct access to the ideal
-  permutation $\pi$ in the ideal-permutation model, not a deployment-controlled quantity; Section 7.4 provides
-  operational guidance on choosing $t$ for bound evaluation).
-- $S$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
-- $Q$: total number of AEAD outputs (encryption-oracle responses plus any outputs the adversary compares in a forgery or
+- $`t`$: adversary offline Keccak-p calls (an analysis parameter representing direct access to the ideal
+  permutation $`\pi`$ in the ideal-permutation model, not a deployment-controlled quantity; Section 7.4 provides
+  operational guidance on choosing $`t`$ for bound evaluation).
+- $`S`$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
+- $`Q`$: total number of AEAD outputs (encryption-oracle responses plus any outputs the adversary compares in a forgery or
   commitment game) in one security experiment (per key epoch); each encryption-oracle response (ciphertext + tag) counts
   as one AEAD output. Used in birthday-style collision bounds.
-- $q_{\mathrm{ctx}}$: number of distinct context strings $X$ queried to the KDF in one security experiment.
-- $n = \max(1, \lceil |M|/B \rceil)$: number of chunks for a message of length $|M|$.
-- Throughout Section 6, $c = 8C = 256$ denotes the capacity in bits.
+- $`q_{\mathrm{ctx}}`$: number of distinct context strings $`X`$ queried to the KDF in one security experiment.
+- $`n = \max(1, \lceil |M|/B \rceil)`$: number of chunks for a message of length $`|M|`$.
+- Throughout Section 6, $`c = 8C = 256`$ denotes the capacity in bits.
 
 Define:
 
-$$
+```math
 \varepsilon_{\mathrm{cap}} \;\stackrel{\mathrm{def}}{=}\; \frac{(\sigma + t)^2}{2^{c+1}}.
-$$
-
-This is the capacity birthday bound. Let $\mathsf{Bad}_{\mathrm{perm}}$ be the event that the ideal permutation
-exhibits a capacity-part collision among any pair of the $\sigma + t$ total evaluations (online construction calls and
+```
+This is the capacity birthday bound. Let $`\mathsf{Bad}_{\mathrm{perm}}`$ be the event that the ideal permutation
+exhibits a capacity-part collision among any pair of the $`\sigma + t`$ total evaluations (online construction calls and
 adversary offline calls). A *capacity-part collision* occurs when two distinct Keccak-p evaluations produce equal
-256-bit capacity outputs (the low $c$ bits of the 1600-bit state). By the birthday bound,
-$\Pr[\mathsf{Bad}_{\mathrm{perm}}] \leq \binom{\sigma+t}{2} \cdot 2^{-c} \leq \varepsilon_{\mathrm{cap}}$.
+256-bit capacity outputs (the low $`c`$ bits of the 1600-bit state). By the birthday bound,
+$`\Pr[\mathsf{Bad}_{\mathrm{perm}}] \leq \binom{\sigma+t}{2} \cdot 2^{-c} \leq \varepsilon_{\mathrm{cap}}`$.
 
-Let $\varepsilon_{\mathrm{ks}}(q, \ell, \mu, N)$ denote the MRV15 PRF advantage bound for $q$ keyed-sponge or
-keyed-duplex evaluations of at most $\ell$ input blocks (or duplexing calls) each, $\mu$ total blocks across all
-evaluations ($\mu \leq q\ell$), and $N$ adversary offline $\pi$-queries. MRV15 Theorems 1 (FKS) and 2 (FKD) yield
+Let $`\varepsilon_{\mathrm{ks}}(q, \ell, \mu, N)`$ denote the MRV15 PRF advantage bound for $`q`$ keyed-sponge or
+keyed-duplex evaluations of at most $`\ell`$ input blocks (or duplexing calls) each, $`\mu`$ total blocks across all
+evaluations ($`\mu \leq q\ell`$), and $`N`$ adversary offline $`\pi`$-queries. MRV15 Theorems 1 (FKS) and 2 (FKD) yield
 bounds of the same three-term structure but with different capacity terms; see Section 6.2.
 
 **PRP/PRF switching.** The ideal permutation samples without replacement. Throughout Section 6, "uniform" and
-"independent" outputs from $\pi$ on distinct inputs are understood modulo the PRP/PRF switching distance
-$\sigma^2 / 2^{1601}$, which is negligible compared to $\varepsilon_{\mathrm{cap}}$ for $c = 256 \ll 1600$. This cost
+"independent" outputs from $`\pi`$ on distinct inputs are understood modulo the PRP/PRF switching distance
+$`\sigma^2 / 2^{1601}`$, which is negligible compared to $`\varepsilon_{\mathrm{cap}}`$ for $`c = 256 \ll 1600`$. This cost
 is not repeated in individual theorem statements.
 
 Throughout this section, "capacity state," "capacity output," and "capacity projection" all refer to the 256-bit
 low-order portion of the 1600-bit Keccak-p state.
 
-**Exact uniformity under $\neg\mathsf{Bad}_{\mathrm{perm}}$.** In the ideal-permutation model, conditioned on
-$\neg\mathsf{Bad}_{\mathrm{perm}}$, every $\pi$-call on a fresh (never-before-seen) 1600-bit input produces a truly
-uniform 1600-bit output — not merely computationally pseudorandom. Since $\neg\mathsf{Bad}_{\mathrm{perm}}$ ensures all
+**Exact uniformity under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$.** In the ideal-permutation model, conditioned on
+$`\neg\mathsf{Bad}_{\mathrm{perm}}`$, every $`\pi`$-call on a fresh (never-before-seen) 1600-bit input produces a truly
+uniform 1600-bit output — not merely computationally pseudorandom. Since $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ ensures all
 capacity outputs are pairwise distinct, and the Domain Separation Lemma (Section 6.3) ensures rate contents are distinct
-across roles, each construction $\pi$-call has a fresh input. Outputs are therefore exactly uniform. This principle is
-the engine for the bare-bound analyses in Sections 6.7–6.9: once $\neg\mathsf{Bad}_{\mathrm{perm}}$ is conditioned
-away (at cost $\varepsilon_{\mathrm{cap}}$), the remaining advantage reduces to structural collision and forgery
+across roles, each construction $`\pi`$-call has a fresh input. Outputs are therefore exactly uniform. This principle is
+the engine for the bare-bound analyses in Sections 6.7–6.9: once $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ is conditioned
+away (at cost $`\varepsilon_{\mathrm{cap}}`$), the remaining advantage reduces to structural collision and forgery
 probabilities over truly uniform values.
 
 Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
@@ -440,106 +439,103 @@ squeeze keystream/tag). This matches MRV15's Full Keyed Duplex (FKD) model
 rather than the single-evaluation Full Keyed Sponge (FKS). The two theorems
 yield bounds of different form in the capacity term.
 
-**Theorem (MRV15, Theorem 2 — FKD).** Let $\mathrm{FKD}^{\pi}_K$ be the
-full-state keyed duplex instantiated with an ideal permutation $\pi$ on $b$
-bits, capacity $c$, and key length $k$. For an adversary making $q$ duplex
-evaluations, each consisting of at most $\ell$ duplexing calls, $\mu \leq q\ell$
-total duplexing calls across all evaluations, and $N$ offline $\pi$-queries:
+**Theorem (MRV15, Theorem 2 — FKD).** Let $`\mathrm{FKD}^{\pi}_K`$ be the
+full-state keyed duplex instantiated with an ideal permutation $`\pi`$ on $`b`$
+bits, capacity $`c`$, and key length $`k`$. For an adversary making $`q`$ duplex
+evaluations, each consisting of at most $`\ell`$ duplexing calls, $`\mu \leq q\ell`$
+total duplexing calls across all evaluations, and $`N`$ offline $`\pi`$-queries:
 
-$$
+```math
 \mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKD}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
   \;\leq\;
   \frac{(q\ell)^2}{2^b}
   \;+\; \frac{(q\ell)^2}{2^c}
   \;+\; \frac{\mu N}{2^k}.
-$$
+```
+**Theorem (MRV15, Theorem 1 — FKS).** Let $`\mathrm{FKS}^{\pi}_K`$ be the
+full-state keyed sponge with the same parameters. For an adversary making $`q`$
+sponge evaluations of at most $`\ell`$ input blocks each, $`\mu \leq q\ell`$ total
+blocks, and $`N`$ offline $`\pi`$-queries:
 
-**Theorem (MRV15, Theorem 1 — FKS).** Let $\mathrm{FKS}^{\pi}_K$ be the
-full-state keyed sponge with the same parameters. For an adversary making $q$
-sponge evaluations of at most $\ell$ input blocks each, $\mu \leq q\ell$ total
-blocks, and $N$ offline $\pi$-queries:
-
-$$
+```math
 \mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKS}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
   \;\leq\;
   \frac{2(q\ell)^2}{2^b}
   \;+\; \frac{2q^2\ell}{2^c}
   \;+\; \frac{\mu N}{2^k}.
-$$
-
+```
 Both theorems are due to Mennink, Reyhanitabar, and Vizár (Asiacrypt 2015).
-The structural difference is in the capacity term: FKD has $(q\ell)^2 / 2^c$
-(scaling with $q^2\ell^2$), while FKS has $2q^2\ell / 2^c$ (scaling with
-$q^2\ell$). FKS thus provides a tighter capacity bound per query when $\ell$ is
+The structural difference is in the capacity term: FKD has $`(q\ell)^2 / 2^c`$
+(scaling with $`q^2\ell^2`$), while FKS has $`2q^2\ell / 2^c`$ (scaling with
+$`q^2\ell`$). FKS thus provides a tighter capacity bound per query when $`\ell`$ is
 large.
 
-For TreeWrap128 the parameters are $b = 1600$, $c = 256$, $k = c = 256$. Each
-leaf is a single duplex evaluation ($q = 1$), so at the per-leaf level the FKD
-bound simplifies to $\ell^2/2^b + \ell^2/2^c + \mu N/2^k$, and
-$\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$ captures the advantage for leaf $i$
-with $l_i$ duplexing calls. With $q = 1$ the capacity terms of FKD and FKS
-coincide up to a factor of 2 ($\ell^2/2^c$ vs.\ $2\ell/2^c$; for $\ell \geq 2$
+For TreeWrap128 the parameters are $`b = 1600`$, $`c = 256`$, $`k = c = 256`$. Each
+leaf is a single duplex evaluation ($`q = 1`$), so at the per-leaf level the FKD
+bound simplifies to $`\ell^2/2^b + \ell^2/2^c + \mu N/2^k`$, and
+$`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$ captures the advantage for leaf $`i`$
+with $`l_i`$ duplexing calls. With $`q = 1`$ the capacity terms of FKD and FKS
+coincide up to a factor of 2 ($`\ell^2/2^c`$ vs.\ $`2\ell/2^c`$; for $`\ell \geq 2`$
 FKD is actually looser). The KDF sponge (Section 6.4) is a single-evaluation
 keyed sponge covered by MRV15 Theorem 1 (FKS).
 
 **Term analysis for TreeWrap128.** The FKD bound has three terms:
 
-1. **Full-state birthday** $\frac{(q\ell)^2}{2^{1600}}$: negligible at
-   $b = 1600$. Even for $q\ell = 2^{128}$ this term is below $2^{-1344}$.
+1. **Full-state birthday** $`\frac{(q\ell)^2}{2^{1600}}`$: negligible at
+   $`b = 1600`$. Even for $`q\ell = 2^{128}`$ this term is below $`2^{-1344}`$.
 
-2. **Online-vs-online capacity term** $\frac{(q\ell)^2}{2^{256}}$: scales with
-   $q^2\ell^2$. For TreeWrap128 *leaves* with $q = 1$, this simplifies to
-   $\ell^2/2^{256}$. With $\ell \approx 49$ blocks per full 8192-byte chunk
-   ($\lfloor 8192/168 \rfloor + 1$), the per-leaf capacity term is
-   $49^2 / 2^{256} \approx 2^{-244.8}$, which is negligible. For the *KDF*
-   sponge (FKS, Theorem 1), the capacity term is instead $2q^2\ell / 2^c$,
-   which scales with $q^2\ell$ rather than $q^2\ell^2$ — an $\ell$-factor
+2. **Online-vs-online capacity term** $`\frac{(q\ell)^2}{2^{256}}`$: scales with
+   $`q^2\ell^2`$. For TreeWrap128 *leaves* with $`q = 1`$, this simplifies to
+   $`\ell^2/2^{256}`$. With $`\ell \approx 49`$ blocks per full 8192-byte chunk
+   ($`\lfloor 8192/168 \rfloor + 1`$), the per-leaf capacity term is
+   $`49^2 / 2^{256} \approx 2^{-244.8}`$, which is negligible. For the *KDF*
+   sponge (FKS, Theorem 1), the capacity term is instead $`2q^2\ell / 2^c`$,
+   which scales with $`q^2\ell`$ rather than $`q^2\ell^2`$ — an $`\ell`$-factor
    improvement over the FKD form — and is the dominant online-online term in
    the multi-query KDF setting.
 
-3. **Online-vs-offline term** $\frac{\mu N}{2^{256}}$: dominant when the
-   adversary's offline computation budget $N$ (denoted $t$ elsewhere in this
+3. **Online-vs-offline term** $`\frac{\mu N}{2^{256}}`$: dominant when the
+   adversary's offline computation budget $`N`$ (denoted $`t`$ elsewhere in this
    document) is significant. This term is linear in the total absorbed block
-   count $\mu$ rather than quadratic. It is identical in FKS and FKD.
+   count $`\mu`$ rather than quadratic. It is identical in FKS and FKD.
 
 **Key-loading: outer-keyed sponge.** MRV15's FKD initialises with the key placed
-in the capacity portion of the state: $S \gets 0^{b-k} \| K$. TreeWrap128
+in the capacity portion of the state: $`S \gets 0^{b-k} \| K`$. TreeWrap128
 instead absorbs the key into the rate via standard sponge absorption: the
-byte-string $K \| \mathrm{LEU64}(\mathit{index})$ is XOR'd into rate positions,
-followed by pad-and-permute with domain byte $\mathtt{0x08}$. This is the
-*outer-keyed sponge* construction $\mathrm{Sponge}(K \| M)$. Andreeva, Daemen,
+byte-string $`K \| \mathrm{LEU64}(\mathit{index})`$ is XOR'd into rate positions,
+followed by pad-and-permute with domain byte $`\mathtt{0x08}`$. This is the
+*outer-keyed sponge* construction $`\mathrm{Sponge}(K \| M)`$. Andreeva, Daemen,
 Mennink, and Van Assche (ADMV15, FSE 2015) prove PRF security of both inner-
 and outer-keyed sponges using a modular proof approach. The single-target
 outer-keyed sponge bound (Theorems 5 + 6, combined in the ideal-permutation
 model) is:
 
-$$
+```math
 \mathrm{Adv}^{\mathrm{ind}[1]}_{\mathrm{OKS}}(M,\mu,N)
   \;\leq\; \frac{M^2 + 2\mu N}{2^c} + \lambda(N) + \frac{2\!\left(\frac{k}{r}\right)\!N}{2^b},
-$$
-
-where $M$ is the data complexity (number of construction calls to $\pi$), $\mu$ is the
-total maximum multiplicity, $N$ is the adversary's offline $\pi$-query budget,
-and $\lambda(N)$ is a key-recovery term bounded in ADMV15 Lemma 2. The dominant
-terms — $M^2/2^c$ (online-vs-online) and $2\mu N/2^c$ (online-vs-offline) — are
+```
+where $`M`$ is the data complexity (number of construction calls to $`\pi`$), $`\mu`$ is the
+total maximum multiplicity, $`N`$ is the adversary's offline $`\pi`$-query budget,
+and $`\lambda(N)`$ is a key-recovery term bounded in ADMV15 Lemma 2. The dominant
+terms — $`M^2/2^c`$ (online-vs-online) and $`2\mu N/2^c`$ (online-vs-offline) — are
 the same form as MRV15's capacity and online-vs-offline terms, differing only
-by a factor of 2 on the $\mu N$ term. The additional key-derivation terms
-($\lambda(N)$ and $2(k/r)N/2^b$) arise from the root-key derivation step in the
+by a factor of 2 on the $`\mu N`$ term. The additional key-derivation terms
+($`\lambda(N)`$ and $`2(k/r)N/2^b`$) arise from the root-key derivation step in the
 outer-keyed construction and are negligible at TreeWrap128's parameters
-($k/r < 1$, $b = 1600$). After the init permutation call, the full state is
-$\pi(K \| \mathit{index} \| \mathtt{0x08}\text{-pad} \| 0^c)$; since $K$ is
-secret and uniform, this $\pi$-input is unique with overwhelming probability,
+($`k/r < 1`$, $`b = 1600`$). After the init permutation call, the full state is
+$`\pi(K \| \mathit{index} \| \mathtt{0x08}\text{-pad} \| 0^c)`$; since $`K`$ is
+secret and uniform, this $`\pi`$-input is unique with overwhelming probability,
 and the resulting state is uniformly random over the adversary's view. The
 subsequent duplex operation proceeds from this uniform state, which is exactly
 the precondition for MRV15's internal proof. The init call is accounted for in
-$\mu$ (total absorbed blocks).
+$`\mu`$ (total absorbed blocks).
 
 **Overwrite-mode coverage.** MRV15 structurally assumes XOR-absorb. TreeWrap128's
 encrypt operation produces identical state evolution:
-$\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]$ followed by
-$S[\mathit{pos}] \gets \mathit{ct}[j]$ yields the same state byte as
-$S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]$, since
-$\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]$ in both paths.
+$`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ followed by
+$`S[\mathit{pos}] \gets \mathit{ct}[j]`$ yields the same state byte as
+$`S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]`$, since
+$`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ in both paths.
 Overwrite mode is therefore algebraically identical to XOR-absorb for state
 evolution. The ciphertext bytes the adversary observes are precisely the rate
 outputs (post-overwrite state bytes), which is the information MRV15 models as
@@ -547,43 +543,43 @@ observable duplex output; no additional leakage occurs. BDPVA11 (Algorithm 5,
 Theorem 2) provides independent confirmation of overwrite-mode security.
 
 **Squeeze-phase coverage.** MRV15's FKD includes explicit squeeze output at each
-duplexing call. TreeWrap128's tags ($\tau = 32$ bytes) and chain values
-($C = 32$ bytes) are single-block squeezes well within one rate block
-($R = 168$ bytes). These outputs are directly covered by Theorem 2.
+duplexing call. TreeWrap128's tags ($`\tau = 32`$ bytes) and chain values
+($`C = 32`$ bytes) are single-block squeezes well within one rate block
+($`R = 168`$ bytes). These outputs are directly covered by Theorem 2.
 
 > [!NOTE]
 > The BDPVA07 flat sponge claim gives a generic
-> $N^2 / 2^{c+1}$ bound (where $N$ is total permutation calls) for the unkeyed sponge setting, which
-> yields $(\sigma + t)^2 / 2^{c+1}$ in the online/offline decomposition used here. MRV15 provides
+> $`N^2 / 2^{c+1}`$ bound (where $`N`$ is total permutation calls) for the unkeyed sponge setting, which
+> yields $`(\sigma + t)^2 / 2^{c+1}`$ in the online/offline decomposition used here. MRV15 provides
 > tighter bounds for the keyed setting that TreeWrap128 exclusively uses.
 > BDPVA07 remains valid as a fallback analysis but is superseded here. For the
 > KDF (FKS, Theorem 1), the principal improvement is that the online-vs-online
-> term scales with $q^2\ell$ rather than $q^2\ell^2$, eliminating a factor of
-> $\ell$ from the dominant birthday-like term. For leaves (FKD, Theorem 2),
-> the capacity term is $(q\ell)^2/2^c$, which has the same $q^2\ell^2$ scaling
-> as the birthday bound but with $q = 1$ per leaf the term reduces to
-> $\ell^2/2^c$, still well below the global BDPVA07 bound.
+> term scales with $`q^2\ell`$ rather than $`q^2\ell^2`$, eliminating a factor of
+> $`\ell`$ from the dominant birthday-like term. For leaves (FKD, Theorem 2),
+> the capacity term is $`(q\ell)^2/2^c`$, which has the same $`q^2\ell^2`$ scaling
+> as the birthday bound but with $`q = 1`$ per leaf the term reduces to
+> $`\ell^2/2^c`$, still well below the global BDPVA07 bound.
 
 ### 6.3 Domain Separation Lemma
 
-**Lemma (Domain separation).** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$ (Section 6.1), the construction's $\pi$-calls partition into disjoint sets by role, such that no two calls from different roles share a full 1600-bit input.
+**Lemma (Domain separation).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ (Section 6.1), the construction's $`\pi`$-calls partition into disjoint sets by role, such that no two calls from different roles share a full 1600-bit input.
 
 | Set | Role | Domain byte | Distinguishing mechanism |
 |-----|------|-------------|--------------------------|
-| $\mathcal{K}$ | KDF | `0x09` | Padded, domain byte `0x09` |
-| $\mathcal{I}$ | Duplex init | `0x08` | Padded, domain byte `0x08` |
-| $\mathcal{C}$ | Chain value | `0x0B` | Padded, domain byte `0x0B` |
-| $\mathcal{T}_s$ | Single-node tag | `0x07` | Padded, domain byte `0x07` |
-| $\mathcal{T}_f$ | Chaining-hop tag | `0x06` | Padded, domain byte `0x06` |
-| $\mathcal{U}$ | Unpadded intermediate | — | Secret capacity from keyed init |
+| $`\mathcal{K}`$ | KDF | `0x09` | Padded, domain byte `0x09` |
+| $`\mathcal{I}`$ | Duplex init | `0x08` | Padded, domain byte `0x08` |
+| $`\mathcal{C}`$ | Chain value | `0x0B` | Padded, domain byte `0x0B` |
+| $`\mathcal{T}_s`$ | Single-node tag | `0x07` | Padded, domain byte `0x07` |
+| $`\mathcal{T}_f`$ | Chaining-hop tag | `0x06` | Padded, domain byte `0x06` |
+| $`\mathcal{U}`$ | Unpadded intermediate | — | Secret capacity from keyed init |
 
 *Proof sketch.* Three cases:
 
-1. **Padded vs. padded (different domain bytes).** The domain byte occupies a fixed position in the TurboSHAKE padding frame (byte position `pos` in `pad_permute`). Two padded blocks with different domain bytes differ in that byte position, hence have different rate content and different full $\pi$-inputs regardless of capacity.
+1. **Padded vs. padded (different domain bytes).** The domain byte occupies a fixed position in the TurboSHAKE padding frame (byte position `pos` in `pad_permute`). Two padded blocks with different domain bytes differ in that byte position, hence have different rate content and different full $`\pi`$-inputs regardless of capacity.
 
-2. **Padded vs. unpadded.** Unpadded intermediate blocks (set $\mathcal{U}$) carry no domain byte or `0x80` padding. Their capacity inputs are inherited from the keyed init chain: the initial capacity is zero; after the init `pad_permute`, the capacity output is nonzero with overwhelming probability (it is the capacity projection of $\pi$ on a fresh input); each subsequent $\pi$-call inherits the previous call's capacity output. Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, all capacity outputs are pairwise distinct across the $\sigma + t$ evaluations. The only $\pi$-call with zero capacity input is the initial state (used exclusively by padded init calls), so no unpadded block's capacity input can equal any padded block's capacity input. Combined with the rate-content difference (unpadded blocks lack domain bytes and `0x80` padding), the full 1600-bit $\pi$-inputs are distinct.
+2. **Padded vs. unpadded.** Unpadded intermediate blocks (set $`\mathcal{U}`$) carry no domain byte or `0x80` padding. Their capacity inputs are inherited from the keyed init chain: the initial capacity is zero; after the init `pad_permute`, the capacity output is nonzero with overwhelming probability (it is the capacity projection of $`\pi`$ on a fresh input); each subsequent $`\pi`$-call inherits the previous call's capacity output. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, all capacity outputs are pairwise distinct across the $`\sigma + t`$ evaluations. The only $`\pi`$-call with zero capacity input is the initial state (used exclusively by padded init calls), so no unpadded block's capacity input can equal any padded block's capacity input. Combined with the rate-content difference (unpadded blocks lack domain bytes and `0x80` padding), the full 1600-bit $`\pi`$-inputs are distinct.
 
-3. **Within a set.** Calls within the same role are distinguished by either different keys (different rate content at init) or different capacity inputs inherited from prior calls in the chain (guaranteed distinct under $\neg\mathsf{Bad}_{\mathrm{perm}}$). For unpadded intermediate blocks ($\mathcal{U}$) specifically: two intermediate blocks from *different* duplex instances (different leaves or final node vs. leaf) have different capacity inputs because their init permutation calls have different rate content ($\mathtt{key} \| \mathrm{LEU64}(i)$ vs. $\mathtt{key} \| \mathrm{LEU64}(j)$ for $i \neq j$), producing distinct capacity outputs that propagate through each instance's chain. Two intermediate blocks at *different positions* within the *same* duplex instance have different capacity inputs because each inherits the previous call's capacity output, which is pairwise distinct under $\neg\mathsf{Bad}_{\mathrm{perm}}$.
+3. **Within a set.** Calls within the same role are distinguished by either different keys (different rate content at init) or different capacity inputs inherited from prior calls in the chain (guaranteed distinct under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$). For unpadded intermediate blocks ($`\mathcal{U}`$) specifically: two intermediate blocks from *different* duplex instances (different leaves or final node vs. leaf) have different capacity inputs because their init permutation calls have different rate content ($`\mathtt{key} \| \mathrm{LEU64}(i)`$ vs. $`\mathtt{key} \| \mathrm{LEU64}(j)`$ for $`i \neq j`$), producing distinct capacity outputs that propagate through each instance's chain. Two intermediate blocks at *different positions* within the *same* duplex instance have different capacity inputs because each inherits the previous call's capacity output, which is pairwise distinct under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$.
 
 **Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Keccak delimited suffix (ePrint 2013/231) using the standard encoding: a variable-length suffix bit-string is stored LSB-first in the byte, with a delimiter `1` bit immediately after the last suffix bit. The inner-node bytes (`0x08`, `0x0B`, `0x09`) use 3-bit suffixes (delimiter at bit 3), while the final-node bytes (`0x07`, `0x06`) use 2-bit suffixes (delimiter at bit 2). All follow the Keccak delimited-suffix convention. The last suffix bit encodes the Sakura node type: `0` for inner/leaf, `1` for final.
 
@@ -599,7 +595,7 @@ Inner/final node separability follows directly from Sakura Lemma 4: the final-no
 
 **Design constraint.** Future modifications to domain byte assignments MUST preserve Sakura delimited-suffix encoding compliance and the node-type partition between inner and final roles.
 
-**Consequence.** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, each role's $\pi$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation), Sections 6.6–6.9 (independent leaf and tag analysis), and Section 6.10 (CMT-4 commitment analysis).
+**Consequence.** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, each role's $`\pi`$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation), Sections 6.6–6.9 (independent leaf and tag analysis), and Section 6.10 (CMT-4 commitment analysis).
 
 ### 6.4 Bridge Theorem: KDF to Random Key
 
@@ -608,16 +604,14 @@ MRV15 framework (Section 6.2) and domain separation (Section 6.3).
 
 **Context encoding and derived-key map.** Define the AEAD context encoding:
 
-$$
+```math
 X = \mathrm{encode\_string}(K)\,\|\,\mathrm{encode\_string}(N)\,\|\,\mathrm{encode\_string}(AD),
-$$
-
+```
 and the derived-key map:
 
-$$
+```math
 F(X) = \mathrm{TurboSHAKE128}(X,\;\mathtt{0x09},\;C).
-$$
-
+```
 **Games.**
 
 ```
@@ -633,49 +627,48 @@ Enc/Dec use:                         Enc/Dec use:
   [proceed with tw_key]               [proceed with tw_key]
 ```
 
-Where $\mathrm{ES} = \mathrm{encode\_string}$, $\mathrm{TS128} = \mathrm{TurboSHAKE128}$, $R$ is a lazy random
-function $\{0,1\}^* \to \{0,1\}^{8C}$. The adversary's oracle access depends on the security goal (encryption oracle
+Where $`\mathrm{ES} = \mathrm{encode\_string}`$, $`\mathrm{TS128} = \mathrm{TurboSHAKE128}`$, $`R`$ is a lazy random
+function $`\{0,1\}^* \to \{0,1\}^{8C}`$. The adversary's oracle access depends on the security goal (encryption oracle
 for IND-CPA, encryption + decryption oracles for IND-CCA2, encryption + forgery oracle for INT-CTXT). The game
 hop replaces only the KDF; all oracles and winning conditions are otherwise identical to the standard definitions.
 CMT-4 (Section 6.10) does not use this bridge; see that section for its standalone game definition.
 
 **Hop justification.**
 
-1. **Domain separation (Section 6.3).** Under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the KDF's $\pi$-calls (set
-   $\mathcal{K}$, domain byte `0x09`) are on inputs disjoint from all other components' $\pi$-calls. The KDF sponge
+1. **Domain separation (Section 6.3).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the KDF's $`\pi`$-calls (set
+   $`\mathcal{K}`$, domain byte `0x09`) are on inputs disjoint from all other components' $`\pi`$-calls. The KDF sponge
    evaluation is therefore functionally independent of the leaf ciphers and final-node Duplex.
 
 2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a single-evaluation keyed sponge (absorb context, squeeze
-   once) with uniformly random master key $K$. By the outer-keyed sponge result (ADMV15; see Section 6.2), after the
+   once) with uniformly random master key $`K`$. By the outer-keyed sponge result (ADMV15; see Section 6.2), after the
    init permutation the state is uniformly random. MRV15 Theorem 1 (FKS) applies: the KDF's output on distinct
-   context strings $X$ is indistinguishable from a PRF with advantage at most
-   $\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)$, where
-   $q_{\mathrm{ctx}}$ is the number of distinct contexts, $\ell_{\mathrm{kdf}}$ is the maximum number of input blocks
-   per KDF call, and $\mu_{\mathrm{kdf}}$ is the total KDF input blocks.
+   context strings $`X`$ is indistinguishable from a PRF with advantage at most
+   $`\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)`$, where
+   $`q_{\mathrm{ctx}}`$ is the number of distinct contexts, $`\ell_{\mathrm{kdf}}`$ is the maximum number of input blocks
+   per KDF call, and $`\mu_{\mathrm{kdf}}`$ is the total KDF input blocks.
 
-3. **PRF-to-RF switching.** By the standard PRF-RF switching lemma, a PRF with $q_{\mathrm{ctx}}$ queries is
+3. **PRF-to-RF switching.** By the standard PRF-RF switching lemma, a PRF with $`q_{\mathrm{ctx}}`$ queries is
    indistinguishable from a lazy random function with advantage at most
-   $\varepsilon_{\mathrm{ctx\text{-}coll}} \le q_{\mathrm{ctx}}^2 / 2^{8C+1}$
-   (the collision probability among $q_{\mathrm{ctx}}$ uniform $8C$-bit outputs).
+   $`\varepsilon_{\mathrm{ctx\text{-}coll}} \le q_{\mathrm{ctx}}^2 / 2^{8C+1}`$
+   (the collision probability among $`q_{\mathrm{ctx}}`$ uniform $`8C`$-bit outputs).
 
 **Bound:**
 
-$$
+```math
 \left|\Pr[\mathsf{G}_0=1]-\Pr[\mathsf{G}_1=1]\right| \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}},
-$$
-
-where $\varepsilon_{\mathrm{cap}}$ covers $\mathsf{Bad}_{\mathrm{perm}}$ (needed for domain separation),
-$\varepsilon_{\mathrm{ks}}$ is the MRV15 PRF bound for the KDF, and
-$\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}$ covers derived-key collisions.
+```
+where $`\varepsilon_{\mathrm{cap}}`$ covers $`\mathsf{Bad}_{\mathrm{perm}}`$ (needed for domain separation),
+$`\varepsilon_{\mathrm{ks}}`$ is the MRV15 PRF bound for the KDF, and
+$`\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}`$ covers derived-key collisions.
 
 > [!NOTE]
-> The $\varepsilon_{\mathrm{cap}}$ term already covers all capacity collisions globally, including those
-> internal to the KDF. The MRV15 capacity terms ($(q\ell)^2/2^b$ and $2q^2\ell/2^c$ in the FKS bound) are
-> therefore subsumed by $\varepsilon_{\mathrm{cap}}$. The non-redundant contribution from
-> $\varepsilon_{\mathrm{ks}}$ is the online-vs-offline term $\mu_{\mathrm{kdf}}\, t / 2^k$, which captures
+> The $`\varepsilon_{\mathrm{cap}}`$ term already covers all capacity collisions globally, including those
+> internal to the KDF. The MRV15 capacity terms ($`(q\ell)^2/2^b`$ and $`2q^2\ell/2^c`$ in the FKS bound) are
+> therefore subsumed by $`\varepsilon_{\mathrm{cap}}`$. The non-redundant contribution from
+> $`\varepsilon_{\mathrm{ks}}`$ is the online-vs-offline term $`\mu_{\mathrm{kdf}}\, t / 2^k`$, which captures
 > key-recovery-style attacks not covered by the capacity birthday bound.
 
-Let $\mathsf{CtxColl}$ denote the event of a derived-key collision among distinct contexts. This context-collision term
+Let $`\mathsf{CtxColl}`$ denote the event of a derived-key collision among distinct contexts. This context-collision term
 is per experiment/per key epoch.
 
 > [!NOTE]
@@ -683,48 +676,47 @@ is per experiment/per key epoch.
 > this analysis. Because MRV15 is a direct PRF result in the ideal-permutation model, no composition theorem is needed,
 > and the Ristenpart-Shacham-Shrimpton (RSS11) multi-stage caveat does not arise.
 
-**Summary.** The fixed-key AEAD goals below (Sections 6.7–6.9) are analyzed in $\mathsf{G}_1$, conditioned on
-$\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. Section 6.5 defines the bare-game framework and the
+**Summary.** The fixed-key AEAD goals below (Sections 6.7–6.9) are analyzed in $`\mathsf{G}_1`$, conditioned on
+$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$. Section 6.5 defines the bare-game framework and the
 total-advantage decomposition used by those sections. CMT-4 (Section 6.10) is a multi-key notion with a standalone
 proof that does not use this bridge.
 
 ### 6.5 Bare-Game Framework
 
-All analyses in Sections 6.6–6.9 work in $\mathsf{G}_1$ (Section 6.4) conditioned on
-$\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$. The costs of these events
-($\varepsilon_{\mathrm{cap}}$ and $\varepsilon_{\mathrm{ctx\text{-}coll}}$) are charged once in the bridge theorem
+All analyses in Sections 6.6–6.9 work in $`\mathsf{G}_1`$ (Section 6.4) conditioned on
+$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$. The costs of these events
+($`\varepsilon_{\mathrm{cap}}`$ and $`\varepsilon_{\mathrm{ctx\text{-}coll}}`$) are charged once in the bridge theorem
 and do not recur. (CMT-4, Section 6.10, is a multi-key notion with a standalone bound.)
 
-Define the **bare advantage** $\mathrm{Adv}_{\Pi}^{\mathrm{bare}}$ as the adversary's advantage against the internal
-functions under independent uniformly random per-context keys, conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$. Each
+Define the **bare advantage** $`\mathrm{Adv}_{\Pi}^{\mathrm{bare}}`$ as the adversary's advantage against the internal
+functions under independent uniformly random per-context keys, conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Each
 AEAD property's total advantage decomposes as:
 
-$$
+```math
 \mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
-$$
-
+```
 Under the exact uniformity principle (Section 6.1), all bare-bound analyses reduce to structural collision and forgery
 probabilities over truly uniform values.
 
 ### 6.6 Leaf Security Lemmas
 
-Assume a fixed, uniformly random, secret key $K_{tw} \in \{0,1\}^{8C}$.
+Assume a fixed, uniformly random, secret key $`K_{tw} \in \{0,1\}^{8C}`$.
 
 **Lemma 1 (Keyed-duplex pseudorandomness).**
-For any keyed duplex initialized with `K_tw || LEU64(i)` (where $K_{tw}$ is a uniformly random secret key and $i$ is a
+For any keyed duplex initialized with `K_tw || LEU64(i)` (where $`K_{tw}`$ is a uniformly random secret key and $`i`$ is a
 public index), in the ideal-permutation model, the PRF advantage distinguishing the rate outputs (keystream bytes and
-terminal squeeze bytes) from uniformly random is at most $\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$ is the
-number of duplexing calls for leaf $i$ and $t$ is the adversary offline Keccak-p budget (Section 6.1). This holds for both overwrite-mode
+terminal squeeze bytes) from uniformly random is at most $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$, where $`l_i`$ is the
+number of duplexing calls for leaf $`i`$ and $`t`$ is the adversary offline Keccak-p budget (Section 6.1). This holds for both overwrite-mode
 absorption (used during encryption) and standard XOR-mode absorption (used during framing and chain-value absorption in the final node).
 
-*Proof.* Each leaf is a keyed duplex with uniformly random key $K_{tw}$ (from $\mathsf{G}_1$). By the Domain Separation
-Lemma (Section 6.3), under $\neg\mathsf{Bad}_{\mathrm{perm}}$, the leaf's $\pi$-calls are disjoint from all other
+*Proof.* Each leaf is a keyed duplex with uniformly random key $`K_{tw}`$ (from $`\mathsf{G}_1`$). By the Domain Separation
+Lemma (Section 6.3), under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the leaf's $`\pi`$-calls are disjoint from all other
 roles. Applying MRV15 Theorem 2 (FKD, Section 6.2) — including the outer-keyed initialization (ADMV15) and
-overwrite-mode coverage established there — the PRF advantage for leaf $i$ is at most
-$\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)$, where $l_i$ is the number of duplexing calls for leaf $i$.
+overwrite-mode coverage established there — the PRF advantage for leaf $`i`$ is at most
+$`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$, where $`l_i`$ is the number of duplexing calls for leaf $`i`$.
 
 **Lemma 2 (State-direction equivalence).**
-For fixed $(K_{tw}, i)$ and any plaintext-ciphertext pair of equal length, `encrypt` and `decrypt` induce identical
+For fixed $`(K_{tw}, i)`$ and any plaintext-ciphertext pair of equal length, `encrypt` and `decrypt` induce identical
 internal states because both write ciphertext bytes into the rate. This is structural (no probabilistic component): the overwrite rule `S[pos] = ct[j]` is executed
 identically in both directions. In `encrypt`, the ciphertext byte is computed as `pt[j] XOR S[pos]` and then written
 back via the overwrite; in `decrypt`, the ciphertext byte is already available and written directly. Either way, the
@@ -732,31 +724,31 @@ state after the overwrite contains the same ciphertext byte at the same position
 therefore the tag -- are identical.
 
 **Lemma 3 (Fixed-key bijection).**
-For fixed $(K_{tw}, i)$ and message length, the encrypt function is a deterministic, invertible map on the message
-space. Each ciphertext byte $\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]$ uniquely determines
-$\mathit{pt}[j]$ given the state, and the state evolution (overwriting $S[\mathit{pos}]$ with $\mathit{ct}[j]$) is
+For fixed $`(K_{tw}, i)`$ and message length, the encrypt function is a deterministic, invertible map on the message
+space. Each ciphertext byte $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ uniquely determines
+$`\mathit{pt}[j]`$ given the state, and the state evolution (overwriting $`S[\mathit{pos}]`$ with $`\mathit{ct}[j]`$) is
 identical in both directions (Lemma 2). Therefore encryption is a bijection between equal-length plaintexts and
 ciphertexts. Invertibility is witnessed by the decrypt function, which reverses each byte-level XOR step given
-the same state evolution (Lemma 2). Because each chunk is processed by an independent leaf with its own $(K_{tw}, i)$,
-and each leaf's encrypt is individually a bijection, the full $n$-leaf encrypt function (which concatenates the
+the same state evolution (Lemma 2). Because each chunk is processed by an independent leaf with its own $`(K_{tw}, i)`$,
+and each leaf's encrypt is individually a bijection, the full $`n`$-leaf encrypt function (which concatenates the
 per-leaf outputs) is also a bijection between equal-length plaintexts and ciphertexts for a fixed key and chunking.
-Chunking is determined solely by total message length (ceiling division by $B$), so equal-length messages always have
+Chunking is determined solely by total message length (ceiling division by $`B`$), so equal-length messages always have
 identical chunking.
 
 This bijection is used in Section 6.10 (CMT-4) to rule out two different plaintexts opening the same ciphertext under
 one key.
 
 **Final-node tag (n = 1).** For single-chunk messages, the final node is a single Duplex that inits with
-$(K_{tw}, 0)$ via `pad_permute(0x08)`, encrypts the entire message (overwrite mode, covered by Lemma 2), and squeezes
+$`(K_{tw}, 0)`$ via `pad_permute(0x08)`, encrypts the entire message (overwrite mode, covered by Lemma 2), and squeezes
 the tag via `pad_permute(0x07)`. This is one continuous FKD evaluation. MRV15 Theorem 2 (FKD) applies to the entire
 sequence, with the outer-keyed initialization covered by ADMV15 (same argument as Section 6.2). By domain separation
-(Section 6.3, set $\mathcal{T}_s$), the final node's tag-squeeze $\pi$-call is disjoint from all leaf and KDF calls.
-The tag output is therefore pseudorandom with advantage at most $\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)$,
-where $\ell_f$ covers all duplexing calls in the final node (init + encryption blocks + tag squeeze).
+(Section 6.3, set $`\mathcal{T}_s`$), the final node's tag-squeeze $`\pi`$-call is disjoint from all leaf and KDF calls.
+The tag output is therefore pseudorandom with advantage at most $`\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)`$,
+where $`\ell_f`$ covers all duplexing calls in the final node (init + encryption blocks + tag squeeze).
 
 **Final-node tag (n > 1).** For multi-chunk messages, the final node is a single Duplex that:
 
-1. Inits with $(K_{tw}, 0)$ via `pad_permute(0x08)`.
+1. Inits with $`(K_{tw}, 0)`$ via `pad_permute(0x08)`.
 2. Encrypts chunk 0 (overwrite mode, covered by Lemma 2).
 3. XOR-absorbs HOP_FRAME and chain values (standard XOR-absorb).
 4. Applies `pad_permute(0x06)` and squeezes the tag.
@@ -764,8 +756,8 @@ where $\ell_f$ covers all duplexing calls in the final node (init + encryption b
 This is one continuous FKD evaluation. The overwrite-mode equivalence (Lemma 2) covers the encryption phase; standard
 XOR-absorb covers framing and chain-value absorption. MRV15 Theorem 2 (FKD) applies to the entire sequence, with the
 outer-keyed initialization covered by ADMV15 (same argument as Section 6.2). By domain separation (Section 6.3, set
-$\mathcal{T}_f$), the final node's tag-squeeze $\pi$-call is disjoint from all leaf and KDF calls. The tag output is
-therefore pseudorandom with advantage at most $\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)$, where $\ell_f$
+$`\mathcal{T}_f`$), the final node's tag-squeeze $`\pi`$-call is disjoint from all leaf and KDF calls. The tag output is
+therefore pseudorandom with advantage at most $`\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)`$, where $`\ell_f`$
 covers all duplexing calls in the final node (init + encryption blocks + absorption blocks + tag squeeze).
 
 **Consequence.**
@@ -786,50 +778,50 @@ Oracle Enc_b(N, AD, M0, M1):
 ```
 
 By the bridge theorem (Section 6.4), it suffices to bound
-$\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}}$ -- the IND-CPA advantage of the internal functions under
+$`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}}`$ -- the IND-CPA advantage of the internal functions under
 independent uniformly random per-context keys.
 
-**Claim.** Within $\mathsf{G}_1$ conditioned on
-$\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$, the IND-CPA advantage of the internal functions is
-negligible: $\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}$ (the PRP/PRF switching
-distance, absorbed by $\varepsilon_{\mathrm{cap}}$ per the Section 6.1 convention).
+**Claim.** Within $`\mathsf{G}_1`$ conditioned on
+$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$, the IND-CPA advantage of the internal functions is
+negligible: $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}`$ (the PRP/PRF switching
+distance, absorbed by $`\varepsilon_{\mathrm{cap}}`$ per the Section 6.1 convention).
 
-*Justification.* In $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$:
+*Justification.* In $`\mathsf{G}_1`$ conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$:
 
-- Each encryption query uses a fresh nonce (nonce-respecting), so each context string $X$ is distinct.
-- Distinct contexts map to independent uniformly random keys in $\mathsf{G}_1$.
-- Under a truly random key $K_{tw}$ (from the lazy RF in $\mathsf{G}_1$) and the ideal permutation conditioned on
-  $\neg\mathsf{Bad}_{\mathrm{perm}}$, the ciphertext distribution is independent of the adversary's plaintext choice.
+- Each encryption query uses a fresh nonce (nonce-respecting), so each context string $`X`$ is distinct.
+- Distinct contexts map to independent uniformly random keys in $`\mathsf{G}_1`$.
+- Under a truly random key $`K_{tw}`$ (from the lazy RF in $`\mathsf{G}_1`$) and the ideal permutation conditioned on
+  $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the ciphertext distribution is independent of the adversary's plaintext choice.
   The argument proceeds by induction over rate blocks (using the keyed-sponge pseudorandomness from Section 6.2 and
   Lemma 1, Section 6.6), showing that each ciphertext block is uniformly distributed regardless of the plaintext:
-  - *Block 0:* The `init` step absorbed the truly random key $K_{tw}$ and applied $\pi$ via `pad_permute` (one
+  - *Block 0:* The `init` step absorbed the truly random key $`K_{tw}`$ and applied $`\pi`$ via `pad_permute` (one
     permutation call); the resulting state is uniformly random (see Lemma 1, Section 6.6). The first rate block of
-    keystream bytes — $S[0]$ through $S[R{-}1]$ — comes directly from this post-init permutation output, so they are
-    uniform. (The next $\pi$-call occurs only when `pos` reaches $R$ during encryption, producing the state for
+    keystream bytes — $`S[0]`$ through $`S[R{-}1]`$ — comes directly from this post-init permutation output, so they are
+    uniform. (The next $`\pi`$-call occurs only when `pos` reaches $`R`$ during encryption, producing the state for
     Block 1.) The ciphertext byte
-    $\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]$ is uniform because XOR with a uniform value is uniform.
-    The state is then overwritten: $S[\mathit{pos}] \leftarrow \mathit{ct}[j]$. Crucially, the overwritten state
+    $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is uniform because XOR with a uniform value is uniform.
+    The state is then overwritten: $`S[\mathit{pos}] \leftarrow \mathit{ct}[j]`$. Crucially, the overwritten state
     contains the *ciphertext* byte (which is uniform), not the plaintext byte. The adversary's plaintext choice
-    determines *which* uniform value $\mathit{ct}[j]$ takes (via the XOR), but not its *distribution*.
-  - *Block $j > 0$:* The overwrite rule has written $\mathit{ct}[0..j{-}1]$ (uniform by the inductive hypothesis)
+    determines *which* uniform value $`\mathit{ct}[j]`$ takes (via the XOR), but not its *distribution*.
+  - *Block $`j > 0`$:* The overwrite rule has written $`\mathit{ct}[0..j{-}1]`$ (uniform by the inductive hypothesis)
     into the rate. The capacity state is carried forward from the previous permutation output. Conditioned on
-    $\neg\mathsf{Bad}_{\mathrm{perm}}$, this capacity has not appeared in any other permutation call, so the full
+    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, this capacity has not appeared in any other permutation call, so the full
     permutation input (rate || capacity) is fresh. The ideal permutation on a fresh input produces a uniformly random
-    output. Therefore $\mathit{ct}[j]$ is again uniform, and the same overwrite argument applies.
+    output. Therefore $`\mathit{ct}[j]`$ is again uniform, and the same overwrite argument applies.
   - By induction, all ciphertext bytes are uniform. Since only ciphertext bytes (not plaintext bytes) enter the sponge
     state via the overwrite rule, the state evolution is determined by the uniform ciphertext sequence, not by the
     adversary's plaintext choice. Two different plaintexts produce different ciphertext values but with identical
     (uniform) distributions.
-  - **Final partial block.** The last block may contain $0 \le k < R$ ciphertext bytes followed by `pad_permute`. The
-    $k$ ciphertext bytes are uniform by the same XOR-with-uniform-state argument as intra-block bytes above. The
-    `pad_permute` call writes the domain byte and 0x80 padding into fixed rate positions and applies $\pi$. Under
-    $\neg\mathsf{Bad}_{\mathrm{perm}}$, the resulting capacity state is fresh (distinct from all prior capacity
+  - **Final partial block.** The last block may contain $`0 \le k < R`$ ciphertext bytes followed by `pad_permute`. The
+    $`k`$ ciphertext bytes are uniform by the same XOR-with-uniform-state argument as intra-block bytes above. The
+    `pad_permute` call writes the domain byte and 0x80 padding into fixed rate positions and applies $`\pi`$. Under
+    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the resulting capacity state is fresh (distinct from all prior capacity
     outputs), so the squeeze output (tag or chain value) is also approximately uniform. The partial block therefore
     inherits the same uniformity guarantee as full blocks.
 
 The adversary therefore receives approximately uniformly random ciphertexts regardless of which plaintext it submits.
 
-The bare IND-CPA advantage is therefore zero (absorbed into $\varepsilon_{\mathrm{cap}}$ via the PRP/PRF switching
+The bare IND-CPA advantage is therefore zero (absorbed into $`\varepsilon_{\mathrm{cap}}`$ via the PRP/PRF switching
 convention of Section 6.1). The total bound follows from the decomposition in Section 6.5.
 
 ### 6.8 INT-CTXT
@@ -850,32 +842,31 @@ Oracle Forge(N, AD, C):
   return TreeWrap128.Decrypt(K, N, AD, C) != None
 ```
 
-**Claim.** $\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.$
+**Claim.** $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.`$
 
-*Justification.* In $\mathsf{G}_1$ conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}$, each
-forgery attempt targets a context with a uniformly random key. By the exact uniformity principle (Section 6.1), the tag-squeeze $\pi$-call has a fresh input
-(distinct capacity state under $\neg\mathsf{Bad}_{\mathrm{perm}}$), so the tag is a truly uniform $\tau$-byte value. Each forgery attempt — i.e., a (ciphertext, tag) pair not previously output by the
-encryption oracle (standard INT-CTXT definition) — must guess the correct $\tau$-byte tag value, succeeding with
-probability at most $2^{-8\tau}$.
+*Justification.* In $`\mathsf{G}_1`$ conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$, each
+forgery attempt targets a context with a uniformly random key. By the exact uniformity principle (Section 6.1), the tag-squeeze $`\pi`$-call has a fresh input
+(distinct capacity state under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the tag is a truly uniform $`\tau`$-byte value. Each forgery attempt — i.e., a (ciphertext, tag) pair not previously output by the
+encryption oracle (standard INT-CTXT definition) — must guess the correct $`\tau`$-byte tag value, succeeding with
+probability at most $`2^{-8\tau}`$.
 
 Even if the adversary has previously queried encryption on the same context and observed one valid tag, a different
-ciphertext produces a different tag. For $n = 1$: a different ciphertext produces different rate content after
-overwrite, diverging capacity states at the next permutation call (under $\neg\mathsf{Bad}_{\mathrm{perm}}$), yielding
-an independent tag. For $n > 1$: a different ciphertext in at least one chunk produces a different chain value;
+ciphertext produces a different tag. For $`n = 1`$: a different ciphertext produces different rate content after
+overwrite, diverging capacity states at the next permutation call (under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), yielding
+an independent tag. For $`n > 1`$: a different ciphertext in at least one chunk produces a different chain value;
 the final node absorbs different data, producing a different capacity state and hence a different tag.
 
 If the forged ciphertext has a different length, the chunking or final-block `pos` differs, producing a structurally
-different tag computation. If the forgery targets a different context $(N', AD')$, the derived key differs, so the tag
+different tag computation. If the forgery targets a different context $`(N', AD')`$, the derived key differs, so the tag
 computation is independent (different init capacity states, no capacity collision under
-$\neg\mathsf{Bad}_{\mathrm{perm}}$). Across $S$ attempts (union bound):
+$`\neg\mathsf{Bad}_{\mathrm{perm}}`$). Across $`S`$ attempts (union bound):
 
-$$
+```math
 \mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le \frac{S}{2^{8\tau}}.
-$$
-
+```
 The total bound follows from the decomposition in Section 6.5.
 
-If tags are truncated to $T<\tau$ bytes, replace $S/2^{8\tau}$ with $S/2^{8T}$. Truncation below $\tau/2 = 16$ bytes reduces the INT-CTXT bound below the 128-bit security target at the Section 7.4 baseline forgery budget.
+If tags are truncated to $`T<\tau`$ bytes, replace $`S/2^{8\tau}`$ with $`S/2^{8T}`$. Truncation below $`\tau/2 = 16`$ bytes reduces the INT-CTXT bound below the 128-bit security target at the Section 7.4 baseline forgery budget.
 
 ### 6.9 IND-CCA2 (Nonce-Respecting)
 
@@ -884,24 +875,22 @@ IND-CCA2 follows from IND-CPA and INT-CTXT via the generic composition theorem o
 **Step 1: Bare-level composition.** By BN00 Theorem 3.2, for the internal functions under a fixed
 random key:
 
-$$
+```math
 \mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} + 2\,\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}.
-$$
-
+```
 An IND-CCA2 adversary has access to both an encryption oracle and a decryption oracle. By INT-CTXT, the decryption
 oracle rejects all adversary-crafted queries (except with probability
-$\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}$), so it provides no useful information beyond what the
+$`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}`$), so it provides no useful information beyond what the
 encryption oracle already reveals. Removing the decryption oracle reduces the game to IND-CPA.
 
 **Step 2: Substitute bare bounds.** From Sections 6.7 and 6.8:
-$\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}$ (absorbed by
-$\varepsilon_{\mathrm{cap}}$ per the Section 6.1 convention) and
-$\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}$. Therefore:
+$`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}`$ (absorbed by
+$`\varepsilon_{\mathrm{cap}}`$ per the Section 6.1 convention) and
+$`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}`$. Therefore:
 
-$$
+```math
 \mathrm{Adv}_{\mathrm{IND\text{-}CCA2}}^{\mathrm{bare}} \le \frac{2S}{2^{8\tau}}.
-$$
-
+```
 **Step 3: Total bound.** The total bound follows from the decomposition in Section 6.5.
 
 > *Note on construction type.* TreeWrap128 is structurally an encrypt-and-MAC scheme (the tag is derived from the
@@ -913,7 +902,7 @@ $$
 > that the tag depends on the ciphertext (ciphertext bytes are written into the rate before the tag squeeze), which is
 > why INT-CTXT holds despite the shared state.
 
-Nonce reuse for the same $(K,N,AD)$ is out of scope for this claim and breaks standard nonce-respecting
+Nonce reuse for the same $`(K,N,AD)`$ is out of scope for this claim and breaks standard nonce-respecting
 IND-CCA2 formulations.
 
 ### 6.10 CMT-4
@@ -932,67 +921,64 @@ Game CMT-4(A):
      and TreeWrap128.Encrypt(K', N', AD', M') = C*
 ```
 
-The adversary has direct access to the ideal permutation $\pi$ and its inverse (no encryption oracle is needed since the
-scheme is deterministic and the adversary knows the keys). Define $L = \mathrm{KDF}(K, N, AD)$ and
-$L' = \mathrm{KDF}(K', N', AD')$.
+The adversary has direct access to the ideal permutation $`\pi`$ and its inverse (no encryption oracle is needed since the
+scheme is deterministic and the adversary knows the keys). Define $`L = \mathrm{KDF}(K, N, AD)`$ and
+$`L' = \mathrm{KDF}(K', N', AD')`$.
 
-- **Case 1: same context, different message.** $(K,N,AD)=(K',N',AD')$, so $M \neq M'$ (since
-  full tuples are distinct). Both openings use the same derived key $L = L'$ and the same chunking
+- **Case 1: same context, different message.** $`(K,N,AD)=(K',N',AD')`$, so $`M \neq M'`$ (since
+  full tuples are distinct). Both openings use the same derived key $`L = L'`$ and the same chunking
   (equal-length messages). By Lemma 3 (fixed-key bijection, Section 6.6), the encrypt function is a
   bijection on equal-length messages for a fixed key. Two different messages cannot produce the same
   ciphertext. This case is **impossible**.
-- **Case 2: different context, KDF collision.** $(K,N,AD)\neq(K',N',AD')$ but $L = L'$. The
-  $\mathrm{encode\_string}$ encoding is injective and self-delimiting, so distinct $(K,N,AD)$ triples produce
-  distinct KDF input strings. A collision $L = L'$ on distinct inputs is a collision in TurboSHAKE128.
+- **Case 2: different context, KDF collision.** $`(K,N,AD)\neq(K',N',AD')`$ but $`L = L'`$. The
+  $`\mathrm{encode\_string}`$ encoding is injective and self-delimiting, so distinct $`(K,N,AD)`$ triples produce
+  distinct KDF input strings. A collision $`L = L'`$ on distinct inputs is a collision in TurboSHAKE128.
   In the ideal-permutation model, sponge collision resistance gives
-  $\Pr[\text{Case 2}] \leq (t + \sigma_v)^2 / 2^{c+1}$,
-  where $t$ is the adversary's offline $\pi$-query budget and $\sigma_v$ is the $\pi$-calls for the two
+  $`\Pr[\text{Case 2}] \leq (t + \sigma_v)^2 / 2^{c+1}`$,
+  where $`t`$ is the adversary's offline $`\pi`$-query budget and $`\sigma_v`$ is the $`\pi`$-calls for the two
   verification encryptions in the game.
-- **Case 3: different context, different derived keys.** $L \neq L'$. Both encryptions must produce the
-  same $C^\star = \mathit{ct}^\star \| T^\star$. By domain separation (Section 6.3) and the exact uniformity
-  principle (Section 6.1), the final-node squeeze $\pi$-call under $L'$ has a fresh input (its capacity is
-  distinct from every $\pi$-call under $L$, conditioned on $\neg\mathsf{Bad}_{\mathrm{perm}}$). The tag under
-  $L'$ is therefore uniform over $\{0,1\}^{8\tau}$ and independent of $T^\star$, so each candidate
-  $(ct^\star, T^\star)$ matches with probability $1/2^{8\tau}$. However, the adversary can use its $t$
-  offline $\pi$-queries and $\sigma_v$ verification $\pi$-calls to evaluate both tag functions on multiple
-  candidate ciphertexts. By a union bound over at most $t + \sigma_v$ candidates, the match probability is
-  at most $(t + \sigma_v)/2^{8\tau}$. The $\neg\mathsf{Bad}_{\mathrm{perm}}$ conditioning cost is subsumed
-  by the $(t + \sigma_v)^2 / 2^{c+1}$ term — both are birthday-on-capacity bounds of the same order.
+- **Case 3: different context, different derived keys.** $`L \neq L'`$. Both encryptions must produce the
+  same $`C^\star = \mathit{ct}^\star \| T^\star`$. By domain separation (Section 6.3) and the exact uniformity
+  principle (Section 6.1), the final-node squeeze $`\pi`$-call under $`L'`$ has a fresh input (its capacity is
+  distinct from every $`\pi`$-call under $`L`$, conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$). The tag under
+  $`L'`$ is therefore uniform over $`\{0,1\}^{8\tau}`$ and independent of $`T^\star`$, so each candidate
+  $`(ct^\star, T^\star)`$ matches with probability $`1/2^{8\tau}`$. However, the adversary can use its $`t`$
+  offline $`\pi`$-queries and $`\sigma_v`$ verification $`\pi`$-calls to evaluate both tag functions on multiple
+  candidate ciphertexts. By a union bound over at most $`t + \sigma_v`$ candidates, the match probability is
+  at most $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed
+  by the $`(t + \sigma_v)^2 / 2^{c+1}`$ term — both are birthday-on-capacity bounds of the same order.
 
 Therefore:
 
-$$
+```math
 \mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{t + \sigma_v}{2^{8\tau}}.
-$$
+```
+For $`c = 256`$, $`\tau = 32`$: both terms are $`\leq 2^{-128}`$ when $`t + \sigma_v \leq 2^{64}`$. The first term gives $`(2^{64})^2/2^{257} \approx 2^{-129}`$; the second gives $`2^{64}/2^{256} = 2^{-192}`$.
 
-For $c = 256$, $\tau = 32$: both terms are $\leq 2^{-128}$ when $t + \sigma_v \leq 2^{64}$. The first term gives $(2^{64})^2/2^{257} \approx 2^{-129}$; the second gives $2^{64}/2^{256} = 2^{-192}$.
-
-Tag truncation degrades the second term to $(t + \sigma_v)/2^{8T}$; for $T < 16$ and $t = 2^{64}$, this exceeds $2^{-128}$.
+Tag truncation degrades the second term to $`(t + \sigma_v)/2^{8T}`$; for $`T < 16`$ and $`t = 2^{64}`$, this exceeds $`2^{-128}`$.
 
 ### 6.11 Summary of Bounds
 
 Each property's total advantage combines the bridge-hop cost (Section 6.4) with the bare advantage
 (Sections 6.7–6.9):
 
-$$
+```math
 \mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
-$$
-
-| Property | $\mathrm{Adv}^{\mathrm{bare}}$ | Total |
+```
+| Property | $`\mathrm{Adv}^{\mathrm{bare}}`$ | Total |
 |----------|-------------------------------|-------|
-| IND-CPA  | $0$ | $\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}}$ |
-| INT-CTXT | $S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}$ |
-| IND-CCA2 | $2S / 2^{8\tau}$ | $\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}$ |
+| IND-CPA  | $`0`$ | $`\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}}`$ |
+| INT-CTXT | $`S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}`$ |
+| IND-CCA2 | $`2S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}`$ |
 
 CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the bridge decomposition:
 
-$$
+```math
 \mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{t + \sigma_v}{2^{8\tau}}.
-$$
-
-Where $\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}$,
-$\mu_{\mathrm{kdf}}\, t / 2^k$ is the non-redundant online-vs-offline key-recovery term from the MRV15 PRF bound (Section 6.2; capacity terms subsumed by $\varepsilon_{\mathrm{cap}}$), and
-$\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}$ is the PRF-RF switching cost.
+```
+Where $`\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}`$,
+$`\mu_{\mathrm{kdf}}\, t / 2^k`$ is the non-redundant online-vs-offline key-recovery term from the MRV15 PRF bound (Section 6.2; capacity terms subsumed by $`\varepsilon_{\mathrm{cap}}`$), and
+$`\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}`$ is the PRF-RF switching cost.
 Parameters are defined in Section 6.1.
 
 ## 7. Operational Security
@@ -1011,13 +997,13 @@ per-invocation key uniqueness and tag verification externally. This is an advanc
 | IND-CPA-like confidentiality | Ensure keys are unique and computationally indistinguishable from uniform per invocation. Keys derived from low-entropy sources or non-injective mappings degrade the IND-CPA bound by the key's min-entropy deficit: the bridge theorem (Section 6.4) assumes each per-invocation key is an independent draw from a uniform distribution. |
 | INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.                                  |
 | IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
-| CMT-4                        | Derive `EncryptAndMAC` keys via a collision-resistant mapping from caller-level inputs. The CMT-4 bound for the caller's scheme is $\varepsilon_{\mathrm{cr}}(\text{KDF}) + (t + \sigma_v)/2^{8\tau}$; see Section 6.10 Cases 2–3. |
+| CMT-4                        | Derive `EncryptAndMAC` keys via a collision-resistant mapping from caller-level inputs. The CMT-4 bound for the caller's scheme is $`\varepsilon_{\mathrm{cr}}(\text{KDF}) + (t + \sigma_v)/2^{8\tau}`$; see Section 6.10 Cases 2–3. |
 
 ### 7.2 Chunk Reordering, Length Changes, and Empty Input
 
 - Reordering chunks changes leaf-index binding (`key || LEU64(index)`), so recomputed tag changes.
-- Truncation/extension changes chunk count $n$, changing `length_encode(n-1)` in the chaining-hop suffix.
-- Empty plaintext uses $n=1$: the final node encrypts the empty message and produces the tag via `pad_permute(0x07)`.
+- Truncation/extension changes chunk count $`n`$, changing `length_encode(n-1)` in the chaining-hop suffix.
+- Empty plaintext uses $`n=1`$: the final node encrypts the empty message and produces the tag via `pad_permute(0x07)`.
 
 ### 7.3 Side Channels
 
@@ -1034,55 +1020,54 @@ epoch) and rotate to a fresh master key before exceeding them.
 
 Implementations MUST maintain the following per-key-epoch counters:
 
-- $q_{\mathrm{enc}}$: number of encryption invocations.
-- $\sigma_{\mathrm{total}} = \sigma_{\mathrm{treewrap128}} + \sigma_{\mathrm{other\ keccak\ uses\ in\ scope}}$ (i.e., all Keccak-p evaluations sharing the same ideal-permutation instance within one key epoch).
-- $q_{\mathrm{nonce}}$: number of random nonces used (only for random-nonce deployments).
-- $S$: number of failed decryption/verification attempts processed (forgery attempts).
+- $`q_{\mathrm{enc}}`$: number of encryption invocations.
+- $`\sigma_{\mathrm{total}} = \sigma_{\mathrm{treewrap128}} + \sigma_{\mathrm{other\ keccak\ uses\ in\ scope}}`$ (i.e., all Keccak-p evaluations sharing the same ideal-permutation instance within one key epoch).
+- $`q_{\mathrm{nonce}}`$: number of random nonces used (only for random-nonce deployments).
+- $`S`$: number of failed decryption/verification attempts processed (forgery attempts).
 
 Required baseline profile (MUST):
 
-- Enforce $\sigma_{\mathrm{total}} \le 2^{60}$.
-- Define and enforce an encryption-invocation cap $q_{\mathrm{enc}} \le q_{\mathrm{enc,cap}}$ per key epoch.
+- Enforce $`\sigma_{\mathrm{total}} \le 2^{60}`$.
+- Define and enforce an encryption-invocation cap $`q_{\mathrm{enc}} \le q_{\mathrm{enc,cap}}`$ per key epoch.
 - Enforce nonce uniqueness per key epoch. Deterministic nonces (counters or sequences) MUST NOT repeat within one key
   epoch; random-nonce deployments SHOULD use a large nonce space (e.g., 192 or 256 bits).
 - Nonces MUST be at least 16 bytes. Random nonces SHOULD be at least 192 bits.
-- Tag output MUST be at least 16 bytes ($T \geq \tau/2$). Truncation below 16 bytes voids the 128-bit security target for both INT-CTXT and CMT-4.
-- For deterministic nonces, choose $q_{\mathrm{enc,cap}}$ so nonce values cannot wrap or repeat within the epoch.
+- Tag output MUST be at least 16 bytes ($`T \geq \tau/2`$). Truncation below 16 bytes voids the 128-bit security target for both INT-CTXT and CMT-4.
+- For deterministic nonces, choose $`q_{\mathrm{enc,cap}}`$ so nonce values cannot wrap or repeat within the epoch.
 - If random nonces are used, additionally enforce
-  $q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b_n+1} \le p_{\mathrm{nonce}}$ for nonce bit-length $b_n$ and chosen nonce-collision target
-  $p_{\mathrm{nonce}}$.
-- Define and enforce a failed-verification budget $S_{\mathrm{cap}}$ per key epoch (RECOMMENDED: $S_{\mathrm{cap}} = 2^{32}$).
-  If $S > S_{\mathrm{cap}}$, implementations MUST stop accepting further decryption attempts for that epoch and rotate to
+  $`q_{\mathrm{nonce}}(q_{\mathrm{nonce}}-1)/2^{b_n+1} \le p_{\mathrm{nonce}}`$ for nonce bit-length $`b_n`$ and chosen nonce-collision target
+  $`p_{\mathrm{nonce}}`$.
+- Define and enforce a failed-verification budget $`S_{\mathrm{cap}}`$ per key epoch (RECOMMENDED: $`S_{\mathrm{cap}} = 2^{32}`$).
+  If $`S > S_{\mathrm{cap}}`$, implementations MUST stop accepting further decryption attempts for that epoch and rotate to
   a fresh key epoch before resuming.
 - On any cap exceedance (workload, invocation, nonce, or failed-verification policy), implementations MUST rotate to a
   fresh key epoch before any further encryption.
 
 Analysis interpretation (normative for this profile): evaluate the Section 6 bounds using default offline-work profile
-$t = 2^{64}$.
+$`t = 2^{64}`$.
 
-Expert profile (non-normative): deployments with stronger review/monitoring may choose workload caps above $2^{60}$, up
-to $2^{64}$, using the same counter model.
+Expert profile (non-normative): deployments with stronger review/monitoring may choose workload caps above $`2^{60}`$, up
+to $`2^{64}`$, using the same counter model.
 
 Security interpretation remains the Section 6 bound family evaluated at observed counters, with adversary offline budget
-parameter $t$ treated as an analysis parameter (not an operationally measurable quantity).
+parameter $`t`$ treated as an analysis parameter (not an operationally measurable quantity).
 
-**Multi-user security.** For deployments spanning $U$ independent master keys, the
-$\mathsf{Bad}_{\mathrm{perm}}$ event is global (a capacity collision among *any* pair of the system-wide
-$\sigma + t$ evaluations), so $\varepsilon_{\mathrm{cap}}$ is charged once with $\sigma = \sum_u \sigma_u$.
+**Multi-user security.** For deployments spanning $`U`$ independent master keys, the
+$`\mathsf{Bad}_{\mathrm{perm}}`$ event is global (a capacity collision among *any* pair of the system-wide
+$`\sigma + t`$ evaluations), so $`\varepsilon_{\mathrm{cap}}`$ is charged once with $`\sigma = \sum_u \sigma_u`$.
 The remaining per-key terms (online-vs-offline key recovery, context collisions, and bare advantages)
 are independent across keys and summed via union bound. The total multi-user advantage is:
 
-$$
+```math
 \mathrm{Adv}_{\mathrm{multi}} \le \varepsilon_{\mathrm{cap}}(\sigma_{\mathrm{global}}, t) + U \cdot \left(\frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\right).
-$$
-
+```
 Non-normative sensitivity profiles for reviewers:
 
 | Profile  | Offline-work parameter | Typical audience                      |
 |----------|------------------------|---------------------------------------|
-| Baseline | $t = 2^{64}$           | default deployment conformance        |
-| Audit    | $t = 2^{60}$           | realistic adversary budget; confirms margin at lower workloads |
-| Extended | $t = 2^{72}$           | research-oriented stress analysis     |
+| Baseline | $`t = 2^{64}`$           | default deployment conformance        |
+| Audit    | $`t = 2^{60}`$           | realistic adversary budget; confirms margin at lower workloads |
+| Extended | $`t = 2^{72}`$           | research-oriented stress analysis     |
 
 Profile choice changes only analytical interpretation of bounds; it does not change algorithm behavior, implementation
 requirements, or interoperability.
@@ -1107,7 +1092,7 @@ techniques that make this possible, progressing from data layout through schedul
 - **Share one scheduling pipeline for encrypt and decrypt.** Both directions use the same chunk batching, index
   binding, and chain-value accumulation logic; only the XOR direction differs.
 - **Keep domain bytes and index mapping exact.** The constants `0x08`, `0x0B`, `0x09`, `0x07`, `0x06` and the
-  `key ‖ LEU64(index)` binding (index 0 for the final node, 1 through $n$ for leaves) are structural for
+  `key ‖ LEU64(index)` binding (index 0 for the final node, 1 through $`n`$ for leaves) are structural for
   interoperability and security analysis.
 - **No misuse resistance (MRAE).** TreeWrap128 is not SIV-style: nonce reuse leaks plaintext XOR (Section 6.7).
   Applications requiring nonce-misuse resistance should use a dedicated MRAE construction.
@@ -1180,42 +1165,40 @@ string (Section 6.1). This stronger property is useful for protocols that derive
 
 ### 8.1 Operational Safety Limits
 
-Operational planning assumptions used in this section: $p = 2^{-50}$, 1500-byte messages, TreeWrap128 cost
-$\approx 11$ Keccak-p calls/message (1 KDF + 10 leaf calls), $\ell \approx 49$ max input blocks per keyed-sponge
+Operational planning assumptions used in this section: $`p = 2^{-50}`$, 1500-byte messages, TreeWrap128 cost
+$`\approx 11`$ Keccak-p calls/message (1 KDF + 10 leaf calls), $`\ell \approx 49`$ max input blocks per keyed-sponge
 evaluation, and per-key accounting (single key / key epoch). Figures are conditional on the Section 6 model assumptions
 for Keccak-p[1600,12] and the selected offline-work profile.
 
 Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term across the construction is
-the KDF's FKS capacity term $2q^2\ell / 2^c$ (Theorem 1). Per-leaf FKD capacity terms (Theorem 2) are negligible since
-each leaf has $q = 1$. For a conservative estimate, set $q$ to the number of TreeWrap128 encryptions and $\ell = 49$
-(worst-case blocks absorbed per message, which overstates the per-evaluation input length and is therefore safe). With $c = 256$ and target
-$p = 2^{-50}$: $q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}$, so $q \lesssim 2^{99.5}$ messages. At 1500
-bytes/message the proof-bound volume is approximately $2^{80}$ GiB per key epoch. This is an analytical upper bound,
+the KDF's FKS capacity term $`2q^2\ell / 2^c`$ (Theorem 1). Per-leaf FKD capacity terms (Theorem 2) are negligible since
+each leaf has $`q = 1`$. For a conservative estimate, set $`q`$ to the number of TreeWrap128 encryptions and $`\ell = 49`$
+(worst-case blocks absorbed per message, which overstates the per-evaluation input length and is therefore safe). With $`c = 256`$ and target
+$`p = 2^{-50}`$: $`q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}`$, so $`q \lesssim 2^{99.5}`$ messages. At 1500
+bytes/message the proof-bound volume is approximately $`2^{80}`$ GiB per key epoch. This is an analytical upper bound,
 not the practical deployment limit when random nonces are used.
 
 For deployment planning, use:
 
-$$
+```math
 \text{practical per-key volume} = \min(\text{proof-bound volume},\ \text{nonce-collision-limited volume}).
-$$
+```
+With uniformly random 128-bit nonces and collision target $`p = 2^{-50}`$, the nonce budget is approximately
+$`q_{\mathrm{nonce}} \lesssim 2^{39.5}`$ encryptions per key (birthday approximation), so at 1500 bytes/message:
 
-With uniformly random 128-bit nonces and collision target $p = 2^{-50}$, the nonce budget is approximately
-$q_{\mathrm{nonce}} \lesssim 2^{39.5}$ encryptions per key (birthday approximation), so at 1500 bytes/message:
-
-$$
+```math
 \text{nonce-collision-limited volume} \approx 2^{39.5} \cdot 1500\ \text{bytes} \approx 2^{20.1}\ \text{GiB}.
-$$
-
+```
 TreeWrap128 supports longer nonces (e.g., 192 or 256 bits) with the same construction; this increases the random-nonce
 collision budget in the usual birthday way.
 
-Example planning table (collision target $p = 2^{-50}$, record size = 1500 bytes):
+Example planning table (collision target $`p = 2^{-50}`$, record size = 1500 bytes):
 
 | Nonce size | Record size | Limiting factor  | Approx safe volume per key epoch |
 |------------|-------------|------------------|----------------------------------|
-| 128-bit    | 1500 B      | nonce collisions | $\approx 2^{20.1}$ GiB           |
-| 192-bit    | 1500 B      | nonce collisions | $\approx 2^{52.1}$ GiB           |
-| 256-bit    | 1500 B      | proof bound      | $\approx 2^{80}$ GiB             |
+| 128-bit    | 1500 B      | nonce collisions | $`\approx 2^{20.1}`$ GiB           |
+| 192-bit    | 1500 B      | nonce collisions | $`\approx 2^{52.1}`$ GiB           |
+| 256-bit    | 1500 B      | proof bound      | $`\approx 2^{80}`$ GiB             |
 
 For a different record size, scale the nonce-collision-limited rows linearly with bytes/record and then apply the same
 minimum rule against the proof-bound volume.
@@ -1247,7 +1230,7 @@ proof-bound figure alone.
 - **[BDPVAVK23]** Bertoni, G., Daemen, J., Hoffert, S., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B.
   "TurboSHAKE." IACR ePrint 2023/342. Primary specification and design rationale for TurboSHAKE.
 - **[BH22]** Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT 2022.
-  Defines the CMT-4 committing security notion (§3, E-notion with $\ell = 4$). Section 6.10 uses this game directly.
+  Defines the CMT-4 committing security notion (§3, E-notion with $`\ell = 4`$). Section 6.10 uses this game directly.
 - **[BN00]** Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the
   Generic Composition Paradigm." ASIACRYPT 2000. Proves that IND-CPA + INT-CTXT implies IND-CCA2; used in Section 6.9.
 - **[CDMP05]** Coron, J.-S., Dodis, Y., Malinaud, C., and Puniya, P. "Merkle-Damgård Revisited: How to Construct a Hash
@@ -1497,34 +1480,36 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 <!-- end:vectors:docs/treewrap-test-vectors.json:aead -->
 
-## Appendix A. Exact Per-Query $\sigma$ Formula
+## Appendix A. Exact Per-Query $`\sigma`$ Formula
 
-For a single `TreeWrap128` query on a message of length $L$ bytes with
-$n = \max(1, \lceil L / B \rceil)$ chunks of sizes $\ell_0, \ldots, \ell_{n-1}$, the per-query contribution to
-$\sigma$ is:
+For a single `TreeWrap128` query on a message of length $`L`$ bytes with
+$`n = \max(1, \lceil L / B \rceil)`$ chunks of sizes $`\ell_0, \ldots, \ell_{n-1}`$, the per-query contribution to
+$`\sigma`$ is:
 
-$$\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_input}|}{R} \right\rfloor + 1\right)}_{\text{KDF}} + \underbrace{\left(1 + \left\lfloor \frac{\ell_0}{R} \right\rfloor + d_f\right)}_{\text{final node}} + \underbrace{\sum_{i=1}^{n-1}\left(2 + \left\lfloor \frac{\ell_i}{R} \right\rfloor\right)}_{\text{leaves}}$$
+```math
+\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_input}|}{R} \right\rfloor + 1\right)}_{\text{KDF}} + \underbrace{\left(1 + \left\lfloor \frac{\ell_0}{R} \right\rfloor + d_f\right)}_{\text{final node}} + \underbrace{\sum_{i=1}^{n-1}\left(2 + \left\lfloor \frac{\ell_i}{R} \right\rfloor\right)}_{\text{leaves}}
+```
 
-where $d_f$ is the number of permutation calls during the final node's tag phase (1 for the tag `pad_permute`, plus
-any additional calls from absorbing HOP_FRAME, chain values, and the chaining-hop suffix when $n > 1$).
+where $`d_f`$ is the number of permutation calls during the final node's tag phase (1 for the tag `pad_permute`, plus
+any additional calls from absorbing HOP_FRAME, chain values, and the chaining-hop suffix when $`n > 1`$).
 
 More precisely:
 
-- **KDF term.** $|\mathit{kdf\_input}|$ is the byte length of
+- **KDF term.** $`|\mathit{kdf\_input}|`$ is the byte length of
   `encode_string(K) || encode_string(N) || encode_string(AD)`.
   Each `encode_string` contributes `left_encode(8|x|)` (2-3 bytes for practical lengths) plus the field itself. For a
-  32-byte key, 12-byte nonce, and empty AD, $|\mathit{kdf\_input}| = (3+32) + (2+12) + (2+0) = 51$ bytes, giving
-  $\lfloor 51 / 168 \rfloor + 1 = 1$ Keccak-p call.
+  32-byte key, 12-byte nonce, and empty AD, $`|\mathit{kdf\_input}| = (3+32) + (2+12) + (2+0) = 51`$ bytes, giving
+  $`\lfloor 51 / 168 \rfloor + 1 = 1`$ Keccak-p call.
   (The `+1` accounts for TurboSHAKE's pad+permute step even when the absorb phase ends exactly on a rate boundary.)
-- **Final node term.** The final node (index 0) costs $1$ (init `pad_permute`) $+$
-  $\lfloor \ell_0 / R \rfloor$ (unpadded intermediate permutations during chunk-0 encryption) $+$ $d_f$ (tag phase).
-  For $n = 1$: $d_f = 1$ (one `pad_permute(0x07)`). For $n > 1$: $d_f$ accounts for absorbing the 8-byte HOP_FRAME,
-  $(n-1)$ chain values of $C$ bytes each, the chaining-hop suffix ($|\mathrm{length\_encode}(n-1)| + 2$ bytes), and the
+- **Final node term.** The final node (index 0) costs $`1`$ (init `pad_permute`) $`+`$
+  $`\lfloor \ell_0 / R \rfloor`$ (unpadded intermediate permutations during chunk-0 encryption) $`+`$ $`d_f`$ (tag phase).
+  For $`n = 1`$: $`d_f = 1`$ (one `pad_permute(0x07)`). For $`n > 1`$: $`d_f`$ accounts for absorbing the 8-byte HOP_FRAME,
+  $`(n-1)`$ chain values of $`C`$ bytes each, the chaining-hop suffix ($`|\mathrm{length\_encode}(n-1)| + 2`$ bytes), and the
   final `pad_permute(0x06)`. These are XOR-absorbed contiguously into the rate starting from the position left after
   chunk-0 encryption.
-- **Leaf term.** Each leaf (indices $1, \ldots, n-1$) costs $2$ (init `pad_permute` + terminal `pad_permute` for
-  `chain_value`) $+$ $\lfloor \ell_i / R \rfloor$ (unpadded intermediate permutations on full-rate blocks). For a
-  full $B = 8192$-byte chunk: $2 + \lfloor 8192 / 168 \rfloor = 2 + 48 = 50$. The leaf sum is empty when $n = 1$.
+- **Leaf term.** Each leaf (indices $`1, \ldots, n-1`$) costs $`2`$ (init `pad_permute` + terminal `pad_permute` for
+  `chain_value`) $`+`$ $`\lfloor \ell_i / R \rfloor`$ (unpadded intermediate permutations on full-rate blocks). For a
+  full $`B = 8192`$-byte chunk: $`2 + \lfloor 8192 / 168 \rfloor = 2 + 48 = 50`$. The leaf sum is empty when $`n = 1`$.
 
 ## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
 
@@ -1613,8 +1598,8 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
 
 ### Integer and String Encodings
 
-`left_encode` and `encode_string` follow NIST SP 800-185. `length_encode` follows RFC 9861: for $x = 0$ it returns a
-single `0x00` byte rather than `0x00 0x01`. TreeWrap128 only calls `length_encode` with $n \geq 2$, so the difference is
+`left_encode` and `encode_string` follow NIST SP 800-185. `length_encode` follows RFC 9861: for $`x = 0`$ it returns a
+single `0x00` byte rather than `0x00 0x01`. TreeWrap128 only calls `length_encode` with $`n \geq 2`$, so the difference is
 unreachable in practice.
 
 <!-- begin:code:ref/encodings.py:encodings_all -->
@@ -1648,12 +1633,11 @@ It is not part of the normative algorithm definition.
 
 The security bounds in Section 6 include a capacity birthday bound term:
 
-$$
+```math
 \varepsilon_{\mathrm{cap}} = \frac{(\sigma + t)^2}{2^{c+1}}.
-$$
-
-This is the simplest conservative estimate for combined online ($\sigma$) and offline ($t$) Keccak-p call budgets.
-For tighter per-key planning under the MRV15 keyed-sponge framework, use $\varepsilon_{\mathrm{ks}}$ from Section 6.2,
+```
+This is the simplest conservative estimate for combined online ($`\sigma`$) and offline ($`t`$) Keccak-p call budgets.
+For tighter per-key planning under the MRV15 keyed-sponge framework, use $`\varepsilon_{\mathrm{ks}}`$ from Section 6.2,
 which provides beyond-birthday-bound security for the keyed setting.
 
 When a deployment uses multiple Keccak-based components under related security assumptions, a conservative practice is
@@ -1668,19 +1652,18 @@ sigma_total = sigma_treewrap128 + sigma_turboshake + sigma_k12 + sigma_other_kec
 ```
 
 where each term is the count of online Keccak-p[1600,12] calls made by that component in the window.
-This is the same $\sigma_{\mathrm{total}}$ counter model used normatively in Section 7.4.
+This is the same $`\sigma_{\mathrm{total}}`$ counter model used normatively in Section 7.4.
 
 Then evaluate:
 
-$$
+```math
 \varepsilon_{\mathrm{cap}} = \frac{(\sigma_{\mathrm{total}} + t)^2}{2^{257}}
-$$
-
-for your selected adversary offline budget $t$.
+```
+for your selected adversary offline budget $`t`$.
 
 Use this as a planning control:
 
-- if $\varepsilon_{\mathrm{cap}}$ is below your target risk threshold, the window budget is acceptable;
+- if $`\varepsilon_{\mathrm{cap}}`$ is below your target risk threshold, the window budget is acceptable;
 - if not, shorten the window (rotate keys/state sooner), reduce throughput per key, or separate workloads across keys.
 
 ### C.3 What implementers should instrument
