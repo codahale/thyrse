@@ -102,7 +102,7 @@ func (s *State1) FastLoopDecrypt168(src, dst []byte) int {
 	return n
 }
 
-// PadPermute applies TurboSHAKE padding (ds at pos, 0x80 at Rate-1) and permutes.
+// PadPermute applies pad10*1 padding (ds at pos, 0x80 at Rate-1) and permutes.
 func (s *State1) PadPermute(pos int, ds byte) {
 	xorByteInWord(&s.a[pos>>3], pos, ds)
 	xorByteInWord(&s.a[(Rate-1)>>3], Rate-1, 0x80)
@@ -347,7 +347,7 @@ func (s *State2) FastLoopDecrypt168(src, dst []byte, stride int) int {
 	return n
 }
 
-// PadPermute applies TurboSHAKE padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
+// PadPermute applies pad10*1 padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
 func (s *State2) PadPermute(pos int, ds byte) {
 	shift := uint((pos & 7) << 3)
 	dsMask := uint64(ds) << shift
@@ -506,7 +506,7 @@ func (s *State4) FastLoopDecrypt168(src, dst []byte, stride int) int {
 	return n
 }
 
-// PadPermute applies TurboSHAKE padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
+// PadPermute applies pad10*1 padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
 func (s *State4) PadPermute(pos int, ds byte) {
 	shift := uint((pos & 7) << 3)
 	dsMask := uint64(ds) << shift
@@ -683,7 +683,7 @@ func (s *State8) FastLoopDecrypt168(src, dst []byte, stride int) int {
 	return n
 }
 
-// PadPermute applies TurboSHAKE padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
+// PadPermute applies pad10*1 padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
 func (s *State8) PadPermute(pos int, ds byte) {
 	shift := uint((pos & 7) << 3)
 	dsMask := uint64(ds) << shift

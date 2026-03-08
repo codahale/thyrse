@@ -1,10 +1,10 @@
 // Package thyrse implements a transcript-based cryptographic protocol framework.
 //
-// At each finalizing operation, a Keccak sponge is evaluated over the transcript to derive keys, chain values, and
-// pseudorandom output. The transcript encoding is recoverable, providing random-oracle-indifferentiable key derivation
-// via the RO-KDF construction.
+// At each finalizing operation, KT128 is evaluated over the transcript to derive keys, chain values, and pseudorandom
+// output. The transcript uses TKDF encoding, which is recoverable, providing random-oracle-indifferentiable key
+// derivation via the RO-KDF construction.
 //
-// See docs/protocol-spec.md for the full specification.
+// See docs/thyrse-spec.md for the full specification.
 package thyrse
 
 import (
@@ -26,8 +26,8 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 
 // Protocol is a transcript-based cryptographic protocol instance.
 //
-// Operations append frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal) evaluate
-// the sponge over the transcript, derive outputs, and reset the transcript with a chain value.
+// Operations append TKDF frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal)
+// evaluate KT128 over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
 	h          *kt128.Hasher
 	frameStart uint64
@@ -306,18 +306,16 @@ func (p *Protocol) Clear() {
 	p.initLabel = ""
 }
 
-// finalize performs the dual sponge finalization using [kt128.Hasher.Chain].
+// finalize performs KT128 finalization.
 //
-// For Derive, Mask, and Seal: the dsChain output produces the chain value,
-// and the outputDS output produces the output squeezed into dst.
+// For Derive, Mask, and Seal: two KT128 evaluations via [kt128.Hasher.Chain]
+// produce the chain value (dsChain) and the output (outputDS) in parallel.
 //
-// For Ratchet: the dsRatchet output produces the chain value; the dsChain
-// output is discarded.
+// For Ratchet: a single KT128 evaluation produces the chain value (dsRatchet).
 func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
 	if outputDS == dsRatchet {
-		var discard [chainValueSize]byte
-		p.h.Chain([]byte{dsChain}, discard[:], []byte{dsRatchet}, cv[:])
+		_, _ = p.h.ReadCustom([]byte{dsRatchet}, cv[:])
 	} else {
 		p.h.Chain([]byte{dsChain}, cv[:], []byte{outputDS}, dst)
 	}
@@ -435,10 +433,10 @@ func (p *Protocol) writeEncodeString(data []byte) {
 }
 
 const (
-	// chainValueSize is the chain value and pre-hash digest size in bytes (H).
+	// chainValueSize is the chain value size in bytes (H).
 	chainValueSize = 64
 
-	// TurboSHAKE128 domain separation bytes.
+	// KT128 customization strings.
 	dsChain   = 0x20
 	dsDerive  = 0x21
 	dsMask    = 0x22

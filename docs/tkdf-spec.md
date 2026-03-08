@@ -312,7 +312,7 @@ defines a coding convention for tree hash modes and proves that any tree hash mo
 as strong as the underlying hash function: the distinguishing advantage of the tree hash from a random
 oracle, given the inner function is ideal, is at most $q_{\mathrm{tree}}^2 / 2^{c+1}$, where
 $q_{\mathrm{tree}}$ is the number of inner function calls and $c$ is the capacity of the underlying sponge. KT128 is a concrete application of Sakura
-(Bertoni, Daemen, Peeters, Van Assche, Van Keer, 2016). The inner function is TurboSHAKE128, which is indifferentiable from a random oracle
+(Bertoni, Daemen, Peeters, Van Assche, Van Keer, Viguier, 2016). The inner function is TurboSHAKE128, which is indifferentiable from a random oracle
 under the ideal permutation model for Keccak-p[1600,12] (Bertoni, Daemen, Peeters, Van Assche, 2008) with advantage
 $(\sigma + t)^2 / 2^{c+1}$, where $c = 256$ is the capacity, $\sigma$ is the total number of online
 Keccak-p calls, and $t$ is the adversary's offline budget.
@@ -331,7 +331,7 @@ simplifies to $\varepsilon_{\mathrm{indiff}} \leq 2(\sigma + t)^2 / 2^{c+1}$. Wi
 ### 10.2 Domain Separation
 
 KT128 accepts a customization string $S$. Internally, KT128 appends
-$S \mathbin\| \mathrm{right\_encode}(|S|)$ after the message (RFC 9861, §2.3.1; `right_encode` here encodes the
+$S \mathbin\| \mathrm{right\_encode}(|S|)$ after the message (RFC 9861, §3.2; `right_encode` here encodes the
 byte length of $S$, following the RFC convention). This encoding is injective: given the final-node input,
 $|S|$ can be recovered by parsing $\mathrm{right\_encode}$ from the right, then extracting $|S|$ bytes before it to
 obtain $S$. Consequently, the input spaces for distinct customization strings are disjoint, and evaluations
@@ -379,9 +379,9 @@ document and must be established by the instantiating protocol.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing."
   IACR ePrint 2013/231. Applied Cryptography and Network Security (ACNS) 2014. Defines and proves
   soundness of the Sakura tree hash coding convention.
-- Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., and Van Keer, R. "KangarooTwelve: fast hashing
-  based on Keccak-p." IACR ePrint 2016/770. Applied Cryptography and Network Security (ACNS) 2018.
-  Specifies KT128 as a concrete application of Sakura encoding.
+- Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B. "KangarooTwelve:
+  fast hashing based on Keccak-p." IACR ePrint 2016/770. Applied Cryptography and Network Security
+  (ACNS) 2018. Specifies KT128 as a concrete application of Sakura encoding.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "On the Indifferentiability of the Sponge
   Construction." IACR ePrint 2008/014. Eurocrypt 2008. Proves sponge indifferentiability from a random
   oracle under the ideal permutation model.

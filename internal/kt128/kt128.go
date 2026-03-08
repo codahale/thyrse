@@ -26,7 +26,7 @@ type Hasher struct {
 	ts        keccak.Duplex // final-node sponge state
 	pos       uint64        // total bytes written via Write
 	leafCount int           // total leaf CVs written to ts so far
-	ds        byte          // domain separator for finalization (0x07 single-node, 0x06 tree-mode)
+	ds        byte          // KT128 customization byte for finalization (0x07 single-node, 0x06 tree-mode)
 	treeMode  bool          // true once S_0 has been flushed to ts
 	finalized bool          // true once finalize has completed
 	squeezed  bool          // true once PadPermute has been called
@@ -289,7 +289,7 @@ func (h *Hasher) finalize(custom []byte) {
 
 	if !h.treeMode {
 		if len(h.buf) <= BlockSize {
-			// Single-node: TurboSHAKE128(S, 0x07, L).
+			// Single-node: KT128 single-node finalization.
 			h.ts.Reset()
 			h.ds = 0x07
 			h.ts.Absorb(h.buf)
@@ -324,7 +324,7 @@ func (h *Hasher) finalize(custom []byte) {
 		}
 	}
 
-	// Terminator: lengthEncode(leafCount) || 0xFF || 0xFF.
+	// Terminator: LengthEncode(leafCount) || 0xFF || 0xFF.
 	h.ts.Absorb(enc.LengthEncode(uint64(h.leafCount)))
 	h.ts.Absorb([]byte{0xFF, 0xFF})
 }
@@ -332,7 +332,7 @@ func (h *Hasher) finalize(custom []byte) {
 // kt12Marker is the 8-byte KangarooTwelve marker written after S_0.
 var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-// leafStateX1 computes a single leaf state for TurboSHAKE128(data, 0x0B, 32).
+// leafStateX1 computes a single KT128 leaf state.
 func leafStateX1(data []byte, s *keccak.State1) {
 	s.Reset()
 	off := s.FastLoopAbsorb168(data)
