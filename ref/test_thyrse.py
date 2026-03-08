@@ -149,3 +149,24 @@ class TestKT128(unittest.TestCase):
         out = kt128(msg, b"", 32)
         out_short = kt128(msg[:8192], b"", 32)
         self.assertNotEqual(out, out_short)
+
+
+from .thyrse import Protocol
+
+
+class TestInitDerive(unittest.TestCase):
+    def test_init_derive_16_1(self):
+        """§16.1: Init("test.vector") then Derive("output", 32)."""
+        p = Protocol()
+        p.init(b"test.vector")
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), "25feba088971a4b573101369ea1c8d83e6f102c2dc46e5cceb81a0b97fca514c")
+
+    def test_init_mix_mix_derive_16_2(self):
+        """§16.2: Init + Mix + Mix + Derive."""
+        p = Protocol()
+        p.init(b"test.vector")
+        p.mix(b"key", b"test-key-material")
+        p.mix(b"nonce", b"test-nonce-value")
+        output = p.derive(b"output", 32)
+        self.assertEqual(output.hex(), "0db4090efec2ba935dac63a18d88df04859d1dedf4a60f428393674520b67e39")
