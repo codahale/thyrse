@@ -285,6 +285,97 @@ class TestSeal(unittest.TestCase):
         self.assertEqual(s3.hex(), "86de20dad1084ed184d23aa56a3c3001a468b67c6687b2ab93e5b640008b6c912f88b6a3a88cd4283a7719c273")
 
 
+import json
+from pathlib import Path
+
+VECTORS_PATH = Path(__file__).resolve().parent.parent / "docs" / "thyrse-test-vectors.json"
+
+
+class TestVectorsJSON(unittest.TestCase):
+    """Validate JSON test vectors against the reference implementation."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(VECTORS_PATH) as f:
+            cls.doc = json.load(f)
+
+    def _run_ops(self, vec):
+        """Execute operations and return (protocol, outputs, clones)."""
+        init_label = self.doc["init_label"].encode()
+        p = Protocol()
+        outputs = {}
+        clones = []
+
+        for op in vec["operations"]:
+            if op["op"] == "init":
+                p.init(init_label)
+            elif op["op"] == "mix":
+                p.mix(op["label"].encode(), op["data_utf8"].encode())
+            elif op["op"] == "derive":
+                out = p.derive(op["label"].encode(), op["output_len"])
+                outputs.setdefault("derive", []).append(out)
+            elif op["op"] == "ratchet":
+                p.ratchet(op["label"].encode())
+            elif op["op"] == "seal":
+                out = p.seal(op["label"].encode(), op["plaintext_utf8"].encode())
+                outputs.setdefault("seal", []).append(out)
+            elif op["op"] == "mask":
+                out = p.mask(op["label"].encode(), op["plaintext_utf8"].encode())
+                outputs["mask"] = out
+            elif op["op"] == "fork":
+                vals = [v.encode() for v in op["values_utf8"]]
+                clones = p.fork(op["label"].encode(), *vals)
+
+        return p, outputs, clones
+
+    def test_16_1_init_derive(self):
+        vec = self.doc["vectors"][0]
+        _, outputs, _ = self._run_ops(vec)
+        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_output_hex"])
+
+    def test_16_2_init_mix_mix_derive(self):
+        vec = self.doc["vectors"][1]
+        _, outputs, _ = self._run_ops(vec)
+        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_output_hex"])
+
+    def test_16_3_seal_derive(self):
+        vec = self.doc["vectors"][2]
+        _, outputs, _ = self._run_ops(vec)
+        self.assertEqual(outputs["seal"][0].hex(), vec["expected"]["seal_output_hex"])
+        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_output_hex"])
+
+    def test_16_4_mask_seal(self):
+        vec = self.doc["vectors"][3]
+        _, outputs, _ = self._run_ops(vec)
+        self.assertEqual(outputs["mask"].hex(), vec["expected"]["mask_output_hex"])
+        self.assertEqual(outputs["seal"][0].hex(), vec["expected"]["seal_output_hex"])
+
+    def test_16_5_ratchet(self):
+        vec = self.doc["vectors"][4]
+        _, outputs, _ = self._run_ops(vec)
+        self.assertEqual(outputs["derive"][0].hex(), vec["expected"]["derive_after_ratchet_hex"])
+
+    def test_16_6_fork(self):
+        vec = self.doc["vectors"][5]
+        p, _, clones = self._run_ops(vec)
+        # _run_ops already called derive on base via operations; need to re-run manually
+        # since fork+derive on all branches requires special handling
+        p2 = Protocol()
+        p2.init(self.doc["init_label"].encode())
+        p2.mix(b"key", b"test-key-material")
+        clones2 = p2.fork(b"role", b"prover", b"verifier")
+        self.assertEqual(p2.derive(b"output", 32).hex(), vec["expected"]["base_derive_hex"])
+        self.assertEqual(clones2[0].derive(b"output", 32).hex(), vec["expected"]["clone_1_derive_hex"])
+        self.assertEqual(clones2[1].derive(b"output", 32).hex(), vec["expected"]["clone_2_derive_hex"])
+
+    def test_16_9_multiple_seals(self):
+        vec = self.doc["vectors"][8]
+        _, outputs, _ = self._run_ops(vec)
+        self.assertEqual(outputs["seal"][0].hex(), vec["expected"]["seal_1_output_hex"])
+        self.assertEqual(outputs["seal"][1].hex(), vec["expected"]["seal_2_output_hex"])
+        self.assertEqual(outputs["seal"][2].hex(), vec["expected"]["seal_3_output_hex"])
+
+
 class TestFork(unittest.TestCase):
     def test_fork_derive_16_6(self):
         """§16.6: Fork with two branches, each producing Derive."""
