@@ -68,11 +68,11 @@ big-endian encoding of `x`. For example:
 
 For a byte string `x`, we define:
 
-**`length_encode(x)`** = `left_encode(len(x)) ‖ x`
+**`encode_string(x)`** = `left_encode(len(x) × 8) ‖ x`
 
-This encoding is self-delimiting when parsed left-to-right: the `left_encode` prefix determines the length of `x`, and
-the subsequent `len(x)` bytes are `x` itself. A concatenation of `length_encode` values is therefore recoverable — a
-parser can unambiguously extract each element.
+This is NIST SP 800-185's `encode_string`: the `left_encode` prefix encodes the bit-length of `x`, making the encoding
+self-delimiting when parsed left-to-right. A concatenation of `encode_string` values is therefore recoverable — a parser
+can unambiguously extract each element.
 
 ## 6. Domain Separation Bytes
 
@@ -143,7 +143,7 @@ identical. See §11 for transcript validity requirements.
 
 **`Init(label)`**
 
-- `transcript ← 0x10 ‖ length_encode(label)`
+- `transcript ← 0x10 ‖ encode_string(label)`
 
 ### 10.2 Mix
 
@@ -153,7 +153,7 @@ be less than 8 KiB. `Mix` absorbs data directly into the running sponge state wi
 
 **`Mix(label, data)`**
 
-- `transcript ← transcript ‖ 0x11 ‖ length_encode(label) ‖ length_encode(data)`
+- `transcript ← transcript ‖ 0x11 ‖ encode_string(label) ‖ encode_string(data)`
 
 ### 10.3 Mix Digest
 
@@ -168,7 +168,7 @@ absorbed, roughly doubling the cost per byte relative to `Mix`. If the input len
 **`MixDigest(label, data)`**
 
 - `digest ← KT128(data, init_label, H)`
-- `transcript ← transcript ‖ 0x12 ‖ length_encode(label) ‖ length_encode(digest)`
+- `transcript ← transcript ‖ 0x12 ‖ encode_string(label) ‖ encode_string(digest)`
 
 Here `init_label` is the label passed to the `Init` operation that established this protocol instance. Implementations
 MUST retain this value for the lifetime of the instance.
@@ -184,11 +184,11 @@ Let `N = len(values)` and let `t` be the current value of `transcript`.
 
 For the base (ordinal 0):
 
-- `transcript ← t ‖ 0x13 ‖ length_encode(label) ‖ left_encode(N) ‖ left_encode(0) ‖ length_encode("")`
+- `transcript ← t ‖ 0x13 ‖ encode_string(label) ‖ left_encode(N) ‖ left_encode(0) ‖ encode_string("")`
 
 For each clone `i` (1 ≤ i ≤ N), create an independent protocol state with:
 
-- `transcript ← t ‖ 0x13 ‖ length_encode(label) ‖ left_encode(N) ‖ left_encode(i) ‖ length_encode(values[i-1])`
+- `transcript ← t ‖ 0x13 ‖ encode_string(label) ‖ left_encode(N) ‖ left_encode(i) ‖ encode_string(values[i-1])`
 
 `Fork` does not finalize. All N+1 branches share the same transcript up to `t` and diverge via their ordinals and
 values.
@@ -207,7 +207,7 @@ Precondition: `output_len` MUST be greater than zero. Use `Ratchet` for zero-out
 
 1. Append the frame:
 
-- `transcript ← transcript ‖ 0x14 ‖ length_encode(label) ‖ left_encode(output_len)`
+- `transcript ← transcript ‖ 0x14 ‖ encode_string(label) ‖ left_encode(output_len)`
 
 2. Evaluate TurboSHAKE128 twice over the same transcript with different domain bytes:
 
@@ -216,7 +216,7 @@ Precondition: `output_len` MUST be greater than zero. Use `Ratchet` for zero-out
 
 3. Reset the transcript:
 
-- `transcript ← 0x18 ‖ 0x14 ‖ left_encode(1) ‖ length_encode(chain_value)`
+- `transcript ← 0x18 ‖ 0x14 ‖ left_encode(1) ‖ encode_string(chain_value)`
 
 The two TurboSHAKE128 evaluations are independent and may execute in parallel.
 
@@ -230,7 +230,7 @@ Irreversibly advances the protocol state. No user-visible output is produced.
 
 1. Append the frame:
 
-- `transcript ← transcript ‖ 0x15 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x15 ‖ encode_string(label)`
 
 2. Derive a chain value:
 
@@ -238,7 +238,7 @@ Irreversibly advances the protocol state. No user-visible output is produced.
 
 3. Reset the transcript:
 
-- `transcript ← 0x18 ‖ 0x15 ‖ left_encode(1) ‖ length_encode(chain_value)`
+- `transcript ← 0x18 ‖ 0x15 ‖ left_encode(1) ‖ encode_string(chain_value)`
 
 ### 10.7 Mask / Unmask
 
@@ -249,7 +249,7 @@ mechanism (e.g., a signature over the transcript) or when confidentiality alone 
 
 1. Append the frame:
 
-- `transcript ← transcript ‖ 0x16 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x16 ‖ encode_string(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
@@ -262,7 +262,7 @@ mechanism (e.g., a signature over the transcript) or when confidentiality alone 
 
 4. Reset the transcript:
 
-- `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
+- `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(tag)`
 
 The two TurboSHAKE128 evaluations are independent and may execute in parallel.
 
@@ -272,7 +272,7 @@ Return `ciphertext`. The tag is not transmitted.
 
 1. Append the frame (identical to `Mask`):
 
-- `transcript ← transcript ‖ 0x16 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x16 ‖ encode_string(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
@@ -285,7 +285,7 @@ Return `ciphertext`. The tag is not transmitted.
 
 4. Reset the transcript:
 
-- `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
+- `transcript ← 0x18 ‖ 0x16 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(tag)`
 
 Return `plaintext`.
 
@@ -302,7 +302,7 @@ A failed `Open` indicates tampering and permanently invalidates the protocol ins
 
 1. Append the frame:
 
-- `transcript ← transcript ‖ 0x17 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x17 ‖ encode_string(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
@@ -315,7 +315,7 @@ A failed `Open` indicates tampering and permanently invalidates the protocol ins
 
 4. Reset the transcript:
 
-- `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(tag)`
+- `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(tag)`
 
 The two TurboSHAKE128 evaluations are independent and may execute in parallel.
 
@@ -325,7 +325,7 @@ Return `ciphertext ‖ tag`.
 
 1. Append the frame (identical to `Seal`):
 
-- `transcript ← transcript ‖ 0x17 ‖ length_encode(label)`
+- `transcript ← transcript ‖ 0x17 ‖ encode_string(label)`
 
 2. Evaluate TurboSHAKE128 twice:
 
@@ -338,7 +338,7 @@ Return `ciphertext ‖ tag`.
 
 4. Reset the transcript (unconditionally):
 
-- `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ length_encode(chain_value) ‖ length_encode(computed_tag)`
+- `transcript ← 0x18 ‖ 0x17 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(computed_tag)`
 
 5. Verify:
 
@@ -373,17 +373,17 @@ can unambiguously extract each operation:
 1. Read one byte: the operation code.
 2. Based on the operation code:
 
-- **`INIT` (`0x10`):** Parse `length_encode(label)`.
-- **`MIX` (`0x11`):** Parse `length_encode(label)`, then `length_encode(data)`.
-- **`MIX_DIGEST` (`0x12`):** Parse `length_encode(label)`, then `length_encode(digest)`.
-- **`FORK` (`0x13`):** Parse `length_encode(label)`, then `left_encode(N)`, then `left_encode(ordinal)`, then
-  `length_encode(value)`.
-- **`DERIVE` (`0x14`):** Parse `length_encode(label)`, then `left_encode(output_len)`.
-- **`RATCHET` (`0x15`):** Parse `length_encode(label)`.
-- **`MASK` (`0x16`):** Parse `length_encode(label)`.
-- **`SEAL` (`0x17`):** Parse `length_encode(label)`.
+- **`INIT` (`0x10`):** Parse `encode_string(label)`.
+- **`MIX` (`0x11`):** Parse `encode_string(label)`, then `encode_string(data)`.
+- **`MIX_DIGEST` (`0x12`):** Parse `encode_string(label)`, then `encode_string(digest)`.
+- **`FORK` (`0x13`):** Parse `encode_string(label)`, then `left_encode(N)`, then `left_encode(ordinal)`, then
+  `encode_string(value)`.
+- **`DERIVE` (`0x14`):** Parse `encode_string(label)`, then `left_encode(output_len)`.
+- **`RATCHET` (`0x15`):** Parse `encode_string(label)`.
+- **`MASK` (`0x16`):** Parse `encode_string(label)`.
+- **`SEAL` (`0x17`):** Parse `encode_string(label)`.
 - **`CHAIN` (`0x18`):** Read one byte: the origin operation code (`0x14`, `0x15`, `0x16`, or `0x17`). Parse
-  `left_encode(n)`, then parse `n` instances of `length_encode(value)`.
+  `left_encode(n)`, then parse `n` instances of `encode_string(value)`.
 
 3. The next byte is the operation code of the subsequent operation, or the transcript ends.
 
@@ -760,7 +760,7 @@ plaintext or ⊥ ← Open("message", ciphertext, tag)
 - Backendal, M., Clermont, S., Fischlin, M., and Günther, F. "Key Derivation Functions Without a Grain
   of Salt." IACR ePrint 2025/657. Defines the RO-KDF construction requiring recoverable encoding.
 - RFC 9861: KangarooTwelve and TurboSHAKE.
-- NIST SP 800-185: SHA-3 Derived Functions (`left_encode`, `right_encode`).
+- NIST SP 800-185: SHA-3 Derived Functions (`left_encode`, `right_encode`, `encode_string`).
 - TreeWrap128 specification. Defines the tree-parallel authenticated encryption scheme used by Mask and
   Seal. Provides IND-CPA, INT-CTXT, CMT-4, and tag PRF security claims referenced in §13.1.
 - Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop,
@@ -786,7 +786,7 @@ Derive("output", 32)
 
 | Field         | Value                                                              |
 |---------------|--------------------------------------------------------------------|
-| Derive output | `91a9244784060174970bbbe8395f7f7e4d055c16be368594c0707413dcdfcc58` |
+| Derive output | `ec87c46ba1e15dd2d3dd8d65a921d580b0def8e211d221c714a852db5db335e7` |
 
 ### 16.2 Init + Mix + Mix + Derive
 
@@ -803,7 +803,7 @@ Derive("output", 32)
 |---------------|--------------------------------------------------------------------|
 | key data      | `746573742d6b65792d6d6174657269616c`                               |
 | nonce data    | `746573742d6e6f6e63652d76616c7565`                                 |
-| Derive output | `fcac8c24985876bdd4e034552fdbeedca786fb7689a196a3acaf643f1c1c2a6a` |
+| Derive output | `fa88a380fe5f1787388a416bbadb197da65c35ce4a2bffaac27c66ce70afa712` |
 
 ### 16.3 Init + Mix + Seal + Derive
 
@@ -820,8 +820,8 @@ Derive("output", 32)
 |------------------------|----------------------------------------------------------------------------------------------|
 | key data               | `746573742d6b65792d6d6174657269616c`                                                         |
 | plaintext              | `68656c6c6f2c20776f726c6421`                                                                 |
-| Seal output (ct ‖ tag) | `645c4ee5330811bf8f8a2070651ea3c503c78d7ef8f2c03fce2f7f2493a95fd299c4743a56048c4b8beccf2eeb` |
-| Derive output          | `3d0207b0f8e5238cadfb589172fffe8059827243b0b602c27f2cb2814031879b`                           |
+| Seal output (ct ‖ tag) | `dbd96564e96622fc54d40059c68c3bbe5125092687fc71be922b897acfec6ee6ae0018b267ae8d0d5ad3f25086` |
+| Derive output          | `7cc83addda8780f79f6bd4d21ea77533fe6c4cd89fe15992832d7359af7b02c8`                           |
 
 ### 16.4 Init + Mix + Mask + Seal
 
@@ -838,9 +838,9 @@ Seal("authenticated", "seal this data")
 |------------------------|------------------------------------------------------------------------------------------------|
 | key data               | `746573742d6b65792d6d6174657269616c`                                                           |
 | Mask plaintext         | `6d61736b20746869732064617461`                                                                 |
-| Mask output (ct)       | `260ea77cc6b8ee60b060cac87e6f`                                                                 |
+| Mask output (ct)       | `311267c1afd96b79a81dd1c660d2`                                                                 |
 | Seal plaintext         | `7365616c20746869732064617461`                                                                 |
-| Seal output (ct ‖ tag) | `d3d859139486f7f39dd9228fac735abf9b1719ab161559cc834993b17296f801389aabdfcc52c659fcb2feeb48cb` |
+| Seal output (ct ‖ tag) | `b1085cd21292abe9f4f0ccc3ba70f0cf0fcf58c2750bd2711e4fb7c14ba6581199385983f147cd0b3581ec168112` |
 
 ### 16.5 Init + Mix + Ratchet + Derive
 
@@ -860,8 +860,8 @@ Derive("output", 32)                     # with Ratchet
 | Field                  | Value                                                              |
 |------------------------|--------------------------------------------------------------------|
 | key data               | `746573742d6b65792d6d6174657269616c`                               |
-| Derive (no Ratchet)    | `7533c628ab03a2be92718588568284f73f467a54f173d8aaa2035ae3d2672945` |
-| Derive (after Ratchet) | `e1af44127866b8588c68e10f17ff7d1d37f12a4e3526a69d8cb220f241fefd31` |
+| Derive (no Ratchet)    | `aa3a86f09a0dba52914a1fba6c316363c3adef98fc5c4ff7008295b090b69193` |
+| Derive (after Ratchet) | `d7b13566eeb12ba72734d09c91eadf85abd5097aed275df6ac5f93bcdb70f937` |
 
 ### 16.6 Fork + Derive
 
@@ -876,9 +876,9 @@ Derive("output", 32)                     # on each branch
 
 | Branch                       | Derive output                                                      |
 |------------------------------|--------------------------------------------------------------------|
-| Base (ordinal 0)             | `b5b07c94401b4d6e6b9a9289c1ad858327822f7cbe1e459e8d58ccc5b5f40b5d` |
-| Clone 1 / "prover" (ord 1)   | `ab999f91045ddeb4b743a03c9256b9fd7a913e1ebb3fcd28bed9680534292d63` |
-| Clone 2 / "verifier" (ord 2) | `09236bba933c0d9937c93d2bc8ac77f65a87b380a88ad34ffec206e76892c0eb` |
+| Base (ordinal 0)             | `3555f825df4548a124b0a7c3b9ea6d6eb7c9520a2d0e65fbf18b126df370f942` |
+| Clone 1 / "prover" (ord 1)   | `cdd9a0d4e77f028d062fb08cc358c33114433165fec081f4fd9d3a5248522917` |
+| Clone 2 / "verifier" (ord 2) | `4b6ce702e0e221bdb977267f6cea87b801ea94f463e733b6abbc115ae89782b4` |
 
 ### 16.7 MixDigest
 
@@ -893,7 +893,7 @@ Derive("output", 32)
 
 | Field         | Value                                                              |
 |---------------|--------------------------------------------------------------------|
-| Derive output | `7e7a81e3d8c4dd701883430697e1aa956b0ad990a1b0823bc3eaca1f9078d768` |
+| Derive output | `af174384212309ffa4c9ff60bb18a96a9b8a1c3ec9c1d9449bad6a7207504878` |
 
 ### 16.8 Seal + Open Round-Trip
 
@@ -913,9 +913,9 @@ Derive("confirm", 32)                   # both sides
 |--------------------------------|----------------------------------------------------------------------------------------------|
 | ad data                        | `6173736f6369617465642064617461`                                                             |
 | plaintext                      | `68656c6c6f2c20776f726c6421`                                                                 |
-| Seal output (ct ‖ tag)         | `667911010907507537fa5ab3a8345d769cbc1167e26edaaa4a38f38a6430f09be3b7917b1ec1f30d667c811612` |
+| Seal output (ct ‖ tag)         | `b903f8dc5c06b1dfa4d21954a1a76b434bdea9a52f55de1141ee9ab14c00f4620c442a9e1d43494ed9ea4a5a31` |
 | Open plaintext                 | `68656c6c6f2c20776f726c6421`                                                                 |
-| Derive("confirm") — both sides | `1cf32253d292ddb3c3b5ccca4c20daa63f45da40cc47b4598c9643b347035bb9`                           |
+| Derive("confirm") — both sides | `355b1fc37f31822bfc15e48f5180d98918d9e11afef68af0483d623a6252c0af`                           |
 
 ### 16.9 Seal + Open with Tampered Ciphertext
 
@@ -932,11 +932,11 @@ Derive("after", 32)                     # both sides
 
 | Field                                | Value                                                                                        |
 |--------------------------------------|----------------------------------------------------------------------------------------------|
-| Seal output                          | `179a9f4f36547f4ea60a196e670fc58051fc3cdd6ecc8f08a0a10256c7b443a402b852a75f1c38b1fffe3ec7f3` |
-| Tampered (first byte XOR 0xff)       | `e89a9f4f36547f4ea60a196e670fc58051fc3cdd6ecc8f08a0a10256c7b443a402b852a75f1c38b1fffe3ec7f3` |
+| Seal output                          | `b384534abc97b003db373f37acb990390102c05cd8d8c1ee9836eea750e36ce655422f140c0fcfde1ec71ff198` |
+| Tampered (first byte XOR 0xff)       | `4c84534abc97b003db373f37acb990390102c05cd8d8c1ee9836eea750e36ce655422f140c0fcfde1ec71ff198` |
 | Open result                          | ⊥ (authentication failed)                                                                    |
-| Seal-side Derive("after")            | `658908d1d91755d5fb37ed7c6dce9d3710d34a5ec539510ab64b8a5b31ea0355`                           |
-| Open-side Derive("after") [desynced] | `a978e9131f73341787f605755deeebd76e94999933717117bdb5f2aa56ac15e9`                           |
+| Seal-side Derive("after")            | `4b1c9a8425832683ea75835e12fa29f9edd37104fde2b9ee1d3475422fc69765`                           |
+| Open-side Derive("after") [desynced] | `b80e22c2fe18df1a88fd721d36b9503d5167d0f479131210bb83e0d0b773c5f8`                           |
 
 ### 16.10 Multiple Seals in Sequence
 
@@ -953,6 +953,6 @@ Seal("msg", "third message")
 
 | Seal | Plaintext (hex)                | Output (ct ‖ tag)                                                                              |
 |------|--------------------------------|------------------------------------------------------------------------------------------------|
-| 1    | `6669727374206d657373616765`   | `d681dd5ad476651843c17f3cfbc54763223f105b8d47366467f7f73cbc4be367b26ad6a6ae04fc3bd49d14ee45`   |
-| 2    | `7365636f6e64206d657373616765` | `2299b98eb976cf08820419f18f29f50fbf47cca91aa263faed9b18f7780a65166b19a9753b6ffc9c5bb93de6b736` |
-| 3    | `7468697264206d657373616765`   | `a20c4d8f8eb687a8da1eeb5d6ddb8ca054c6d022bc0d0d4cbe97928e2928beaede3810f480c413abff9255d69f`   |
+| 1    | `6669727374206d657373616765`   | `998adcc734cdb43a7c89f44435c8eb1f1084d1957e4c06991d6f0d66c25eb0907fc8753695ef121d2fec419cac`   |
+| 2    | `7365636f6e64206d657373616765` | `0add0cbf66dbc86d309ebf0abdc0339ae9cb4a026cd79ecd22c7fc7f1ce1bddca2d187541aa725d4c32e5c6df5a8` |
+| 3    | `7468697264206d657373616765`   | `590197f8dcd1725160c017038f89789c6f8c9a018982b96666f5eafd112bb2adc35a35ef07077fe2c8fdc16348`   |
