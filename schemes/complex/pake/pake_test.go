@@ -126,6 +126,6 @@ func Example() {
 	fmt.Printf("initiator: %x\n", pInitiator.Derive("state", nil, 16))
 
 	// Output:
-	// responder: e6dc557f78c78e052efa025f7220f4f7
-	// initiator: e6dc557f78c78e052efa025f7220f4f7
+	// responder: 237b594f52ed7debf12fbbb59ed01337
+	// initiator: 237b594f52ed7debf12fbbb59ed01337
 }

@@ -15,7 +15,7 @@ const (
 	KeyedSize = 16
 
 	// BlockSize is the internal block size used by the digest.
-	BlockSize = 168
+	BlockSize = 8192
 )
 
 // New returns a new hash.Hash instance which uses the given domain string.
