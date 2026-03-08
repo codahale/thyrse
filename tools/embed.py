@@ -243,40 +243,43 @@ def _quote_ops(text: str) -> str:
     return _THYRSE_OP_RE.sub(r"`\1`", text)
 
 
-def _thyrse_op_line(op: dict, init_label: str) -> str:
-    """Return one pseudocode line for a Thyrse operation."""
+def _thyrse_op_line(op: dict, init_label: str, var: str = "p") -> str:
+    """Return one Python code line for a Thyrse operation."""
     kind = op["op"]
     if kind == "init":
-        return f'Init("{init_label}")'
+        return f'{var}.init(b"{init_label}")'
     if kind == "mix":
         label = op["label"]
         if "data_utf8" in op:
-            return f'Mix("{label}", "{op["data_utf8"]}")'
-        return f'Mix("{label}", ...)'
+            return f'{var}.mix(b"{label}", b"{op["data_utf8"]}")'
+        return f'{var}.mix(b"{label}", ...)'
     if kind == "derive":
-        return f'Derive("{op["label"]}", {op["output_len"]})'
+        return f'output = {var}.derive(b"{op["label"]}", {op["output_len"]})'
     if kind == "seal":
         label = op["label"]
         if "plaintext_utf8" in op:
-            return f'Seal("{label}", "{op["plaintext_utf8"]}")'
-        return f'Seal("{label}", ...)'
+            return f'ct_tag = {var}.seal(b"{label}", b"{op["plaintext_utf8"]}")'
+        return f'ct_tag = {var}.seal(b"{label}", ...)'
     if kind == "open":
         label = op["label"]
         if op.get("tamper"):
-            return f'Open("{label}", <tampered>)'
-        return f'Open("{label}", <sealed>)'
+            return f'pt = {var}.open(b"{label}", tampered_ct, tampered_tag)'
+        return f'ct, tag = ct_tag[:-{_C}], ct_tag[-{_C}:]\npt = {var}.open(b"{label}", ct, tag)'
     if kind == "mask":
         label = op["label"]
         if "plaintext_utf8" in op:
-            return f'Mask("{label}", "{op["plaintext_utf8"]}")'
-        return f'Mask("{label}", ...)'
+            return f'ct = {var}.mask(b"{label}", b"{op["plaintext_utf8"]}")'
+        return f'ct = {var}.mask(b"{label}", ...)'
     if kind == "ratchet":
-        return f'Ratchet("{op["label"]}")'
+        return f'{var}.ratchet(b"{op["label"]}")'
     if kind == "fork":
         label = op["label"]
-        vals = ", ".join(f'"{v}"' for v in op["values_utf8"])
-        return f'Fork("{label}", {vals})'
+        vals = ", ".join(f'b"{v}"' for v in op["values_utf8"])
+        return f'clones = {var}.fork(b"{label}", {vals})'
     raise ValueError(f"Unknown Thyrse op: {kind!r}")
+
+
+_C = 32  # Tag size for ct/tag splitting.
 
 
 def render_thyrse_vectors(data: dict) -> str:
@@ -301,51 +304,92 @@ def render_thyrse_vectors(data: dict) -> str:
         lines.append(_quote_ops(desc))
         lines.append("")
 
-        # --- Build pseudocode block ---
+        # --- Build Python code block ---
         if vid == "16.5":
             # Special: two protocol runs side by side
-            lines.append("```")
-            lines.append(f'Init("{init_label}")')
-            lines.append(f'Mix("key", "test-key-material")')
-            lines.append('Derive("output", 32)                     # without Ratchet')
+            lines.append("```python")
+            lines.append("# Without Ratchet")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('p.mix(b"key", b"test-key-material")')
+            lines.append('output_no_ratchet = p.derive(b"output", 32)')
             lines.append("")
-            lines.append(f'Init("{init_label}")')
-            lines.append(f'Mix("key", "test-key-material")')
-            lines.append(f'Ratchet("forward-secrecy")')
-            lines.append('Derive("output", 32)                     # with Ratchet')
+            lines.append("# With Ratchet")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('p.mix(b"key", b"test-key-material")')
+            lines.append('p.ratchet(b"forward-secrecy")')
+            lines.append('output_after_ratchet = p.derive(b"output", 32)')
             lines.append("```")
         elif vid == "16.6":
             # Fork with comment
-            lines.append("```")
-            lines.append(f'Init("{init_label}")')
-            lines.append(f'Mix("key", "test-key-material")')
-            lines.append('Fork("role", "prover", "verifier")       # base = ordinal 0, clone 1 = "prover", clone 2 = "verifier"')
-            lines.append('Derive("output", 32)                     # on each branch')
+            lines.append("```python")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('p.mix(b"key", b"test-key-material")')
+            lines.append('clones = p.fork(b"role", b"prover", b"verifier")')
+            lines.append('base_output = p.derive(b"output", 32)        # base (ordinal 0)')
+            lines.append('clone_1_output = clones[0].derive(b"output", 32)  # "prover" (ordinal 1)')
+            lines.append('clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)')
             lines.append("```")
         elif vid == "16.7":
-            # Seal + Open round-trip with comments
-            lines.append("```")
-            lines.append(f'Init("{init_label}")')
-            lines.append(f'Mix("key", "test-key-material")')
-            lines.append(f'Mix("nonce", "test-nonce-value")')
-            lines.append(f'Mix("ad", "associated data")')
-            lines.append('Seal("message", "hello, world!")         # sender')
-            lines.append('Open("message", <sealed>)               # receiver')
-            lines.append('Derive("confirm", 32)                   # both sides')
+            # Seal + Open round-trip
+            lines.append("```python")
+            lines.append("# Sender")
+            lines.append("sender = Protocol()")
+            lines.append(f'sender.init(b"{init_label}")')
+            lines.append('sender.mix(b"key", b"test-key-material")')
+            lines.append('sender.mix(b"nonce", b"test-nonce-value")')
+            lines.append('sender.mix(b"ad", b"associated data")')
+            lines.append('ct_tag = sender.seal(b"message", b"hello, world!")')
+            lines.append("")
+            lines.append("# Receiver")
+            lines.append("receiver = Protocol()")
+            lines.append(f'receiver.init(b"{init_label}")')
+            lines.append('receiver.mix(b"key", b"test-key-material")')
+            lines.append('receiver.mix(b"nonce", b"test-nonce-value")')
+            lines.append('receiver.mix(b"ad", b"associated data")')
+            lines.append("ct, tag = ct_tag[:-32], ct_tag[-32:]")
+            lines.append('pt = receiver.open(b"message", ct, tag)')
+            lines.append('confirm = receiver.derive(b"confirm", 32)')
             lines.append("```")
         elif vid == "16.8":
-            # Tampered ciphertext with comments
+            # Tampered ciphertext
+            lines.append("```python")
+            lines.append("# Sender")
+            lines.append("sender = Protocol()")
+            lines.append(f'sender.init(b"{init_label}")')
+            lines.append('sender.mix(b"key", b"test-key-material")')
+            lines.append('sender.mix(b"nonce", b"test-nonce-value")')
+            lines.append('ct_tag = sender.seal(b"message", b"hello, world!")')
+            lines.append('sender_after = sender.derive(b"after", 32)')
+            lines.append("")
+            lines.append("# Receiver — tampered[0] ^= 0xff")
+            lines.append("receiver = Protocol()")
+            lines.append(f'receiver.init(b"{init_label}")')
+            lines.append('receiver.mix(b"key", b"test-key-material")')
+            lines.append('receiver.mix(b"nonce", b"test-nonce-value")')
+            lines.append("tampered = bytearray(ct_tag)")
+            lines.append("tampered[0] ^= 0xff")
+            lines.append("ct, tag = bytes(tampered[:-32]), bytes(tampered[-32:])")
+            lines.append('pt = receiver.open(b"message", ct, tag)  # returns None')
+            lines.append('receiver_after = receiver.derive(b"after", 32)')
             lines.append("```")
-            lines.append(f'Init("{init_label}")')
-            lines.append(f'Mix("key", "test-key-material")')
-            lines.append(f'Mix("nonce", "test-nonce-value")')
-            lines.append('Seal("message", "hello, world!")         # sender')
-            lines.append('Open("message", <tampered>)             # receiver \u2014 tampered[0] ^= 0xff')
-            lines.append('Derive("after", 32)                     # both sides')
+        elif vid == "16.9":
+            # Multiple seals
+            lines.append("```python")
+            lines.append("p = Protocol()")
+            lines.append(f'p.init(b"{init_label}")')
+            lines.append('p.mix(b"key", b"test-key-material")')
+            lines.append('p.mix(b"nonce", b"test-nonce-value")')
+            lines.append('ct_tag_1 = p.seal(b"msg", b"first message")')
+            lines.append('ct_tag_2 = p.seal(b"msg", b"second message")')
+            lines.append('ct_tag_3 = p.seal(b"msg", b"third message")')
             lines.append("```")
         else:
             # Generic: render operations directly
-            lines.append("```")
+            lines.append("```python")
+            lines.append("p = Protocol()")
             for op in ops:
                 lines.append(_thyrse_op_line(op, init_label))
             lines.append("```")

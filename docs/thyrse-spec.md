@@ -133,6 +133,55 @@ and covered by its own security analysis.
 The protocol state is a byte string called the **transcript**, initially empty. Operations append TKDF frames to the
 transcript. Finalizing operations evaluate KT128 over the transcript and then reset it.
 
+<!-- begin:code:ref/thyrse.py:constants -->
+```python
+C = 32   # TreeWrap key and tag size (bytes).
+H = 64   # Chain value size (bytes).
+
+# Operation codes.
+OP_INIT    = 0x01
+OP_MIX     = 0x02
+OP_FORK    = 0x03
+OP_DERIVE  = 0x04
+OP_RATCHET = 0x05
+OP_MASK    = 0x06
+OP_SEAL    = 0x07
+OP_CHAIN   = 0x08
+
+# KT128 customization strings.
+CS_CHAIN       = 0x20
+CS_DERIVE      = 0x21
+CS_MASK_KEY    = 0x22
+CS_SEAL_KEY    = 0x23
+CS_RATCHET     = 0x24
+```
+<!-- end:code:ref/thyrse.py:constants -->
+
+<!-- begin:code:ref/thyrse.py:protocol_core -->
+```python
+class Protocol:
+    def __init__(self):
+        self.transcript = bytearray()
+
+    def _append_frame(self, op: int, label: bytes, value: bytes = b""):
+        start = len(self.transcript)
+        self.transcript += bytes([op]) + encode_string(label) + value
+        self.transcript += right_encode(start)
+
+    def _finalize(self, customization_strings: dict[int, int]) -> dict[int, bytes]:
+        T = bytes(self.transcript)
+        return {cs: kt128(T, bytes([cs]), length)
+                for cs, length in customization_strings.items()}
+
+    def _reset_chain(self, origin_op: int, *values: bytes):
+        payload = bytes([origin_op]) + left_encode(len(values))
+        for v in values:
+            payload += encode_string(v)
+        self.transcript = bytearray()
+        self._append_frame(OP_CHAIN, b"", payload)
+```
+<!-- end:code:ref/thyrse.py:protocol_core -->
+
 ## 9. Security Requirements
 
 ### 9.1 Probabilistic Transcript
@@ -171,6 +220,13 @@ identical. See §11 for transcript validity requirements.
 
 Append frame `(0x01, label, "")`.
 
+<!-- begin:code:ref/thyrse.py:init -->
+```python
+    def init(self, label: bytes):
+        self._append_frame(OP_INIT, label)
+```
+<!-- end:code:ref/thyrse.py:init -->
+
 ### 10.2 Mix
 
 Absorbs data into the protocol transcript. This is the default and preferred absorption operation for all inputs,
@@ -180,6 +236,13 @@ in advance; the TKDF position marker closes the frame when the operation complet
 **`Mix(label, data)`**
 
 Append frame `(0x02, label, data)`.
+
+<!-- begin:code:ref/thyrse.py:mix -->
+```python
+    def mix(self, label: bytes, data: bytes):
+        self._append_frame(OP_MIX, label, data)
+```
+<!-- end:code:ref/thyrse.py:mix -->
 
 ### 10.3 Fork
 
@@ -203,6 +266,24 @@ values.
 
 Example: `Fork("role", "prover", "verifier")` produces three protocol states. The base continues with ordinal `0` and an
 empty value. Clone 1 gets ordinal `1` with value `prover`. Clone 2 gets ordinal `2` with value `verifier`.
+
+<!-- begin:code:ref/thyrse.py:fork -->
+```python
+    def fork(self, label: bytes, *values: bytes) -> list["Protocol"]:
+        N = len(values)
+        snapshot = bytes(self.transcript)
+        self._append_frame(OP_FORK, label,
+            left_encode(N) + left_encode(0) + encode_string(b""))
+        clones = []
+        for i, val in enumerate(values, start=1):
+            clone = Protocol()
+            clone.transcript = bytearray(snapshot)
+            clone._append_frame(OP_FORK, label,
+                left_encode(N) + left_encode(i) + encode_string(val))
+            clones.append(clone)
+        return clones
+```
+<!-- end:code:ref/thyrse.py:fork -->
 
 ### 10.4 Derive
 
@@ -228,6 +309,17 @@ The two KT128 evaluations are independent and may execute in parallel.
 
 Return `output`.
 
+<!-- begin:code:ref/thyrse.py:derive -->
+```python
+    def derive(self, label: bytes, output_len: int) -> bytes:
+        assert output_len > 0
+        self._append_frame(OP_DERIVE, label, left_encode(output_len))
+        results = self._finalize({CS_CHAIN: H, CS_DERIVE: output_len})
+        self._reset_chain(OP_DERIVE, results[CS_CHAIN])
+        return results[CS_DERIVE]
+```
+<!-- end:code:ref/thyrse.py:derive -->
+
 ### 10.5 Ratchet
 
 Irreversibly advances the protocol state. No user-visible output is produced.
@@ -243,6 +335,15 @@ Irreversibly advances the protocol state. No user-visible output is produced.
 3. Reset the transcript to a single frame:
 
 - `(0x08, "", 0x05 ‖ left_encode(1) ‖ encode_string(chain_value))`
+
+<!-- begin:code:ref/thyrse.py:ratchet -->
+```python
+    def ratchet(self, label: bytes):
+        self._append_frame(OP_RATCHET, label)
+        results = self._finalize({CS_RATCHET: H})
+        self._reset_chain(OP_RATCHET, results[CS_RATCHET])
+```
+<!-- end:code:ref/thyrse.py:ratchet -->
 
 ### 10.6 Mask / Unmask
 
@@ -292,6 +393,24 @@ Return `plaintext`.
 *Warning:* Any application-level processing of the unmasked plaintext MUST be treated as untrusted and safely buffered
 until an external authenticating operation (such as verifying a signature over a subsequent `Derive` output) has
 succeeded.
+
+<!-- begin:code:ref/thyrse.py:mask_unmask -->
+```python
+    def mask(self, label: bytes, plaintext: bytes) -> bytes:
+        self._append_frame(OP_MASK, label)
+        results = self._finalize({CS_CHAIN: H, CS_MASK_KEY: C})
+        ct, tag = encrypt_and_mac(results[CS_MASK_KEY], plaintext)
+        self._reset_chain(OP_MASK, results[CS_CHAIN], tag)
+        return ct
+
+    def unmask(self, label: bytes, ciphertext: bytes) -> bytes:
+        self._append_frame(OP_MASK, label)
+        results = self._finalize({CS_CHAIN: H, CS_MASK_KEY: C})
+        pt, tag = decrypt_and_mac(results[CS_MASK_KEY], ciphertext)
+        self._reset_chain(OP_MASK, results[CS_CHAIN], tag)
+        return pt
+```
+<!-- end:code:ref/thyrse.py:mask_unmask -->
 
 ### 10.7 Seal / Open
 
@@ -345,6 +464,26 @@ Return `ciphertext ‖ tag`.
 
 Return `plaintext`.
 
+<!-- begin:code:ref/thyrse.py:seal_open -->
+```python
+    def seal(self, label: bytes, plaintext: bytes) -> bytes:
+        self._append_frame(OP_SEAL, label)
+        results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
+        ct, tag = encrypt_and_mac(results[CS_SEAL_KEY], plaintext)
+        self._reset_chain(OP_SEAL, results[CS_CHAIN], tag)
+        return ct + tag
+
+    def open(self, label: bytes, ciphertext: bytes, tag: bytes) -> bytes | None:
+        self._append_frame(OP_SEAL, label)
+        results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
+        pt, computed_tag = decrypt_and_mac(results[CS_SEAL_KEY], ciphertext)
+        self._reset_chain(OP_SEAL, results[CS_CHAIN], computed_tag)
+        if not _hmac.compare_digest(computed_tag, tag):
+            return None
+        return pt
+```
+<!-- end:code:ref/thyrse.py:seal_open -->
+
 ### 10.8 Utility Operations
 
 **`Clone() → copy`**
@@ -362,6 +501,20 @@ operation for benchmarking, or transferring state from sender to receiver).
 
 Overwrites the protocol state with zeros and invalidates the instance. Implementations MUST zero the sponge state, any
 buffered key material, and the stored `Init` label. After `Clear`, the instance MUST NOT be used.
+
+<!-- begin:code:ref/thyrse.py:clone_clear -->
+```python
+    def clone(self) -> "Protocol":
+        copy = Protocol()
+        copy.transcript = bytearray(self.transcript)
+        return copy
+
+    def clear(self):
+        for i in range(len(self.transcript)):
+            self.transcript[i] = 0
+        self.transcript = bytearray()
+```
+<!-- end:code:ref/thyrse.py:clone_clear -->
 
 ## 11. Recoverability
 
@@ -753,23 +906,31 @@ long-lived sessions, periodic ratcheting every few hundred operations is recomme
 
 A standard AEAD construction:
 
+<!-- begin:code:ref/thyrse.py:usage_aead -->
+```python
+def _example_aead():
+    p = Protocol()
+    p.init(b"com.example.myprotocol")
+    p.mix(b"key", key_material)
+    p.mix(b"nonce", nonce)
+    p.mix(b"ad", associated_data)
+    ciphertext_tag = p.seal(b"message", plaintext)
 ```
-Init("com.example.myprotocol")
-Mix("key", key_material)
-Mix("nonce", nonce)
-Mix("ad", associated_data)
-ciphertext ‖ tag ← Seal("message", plaintext)
-```
+<!-- end:code:ref/thyrse.py:usage_aead -->
 
 Decryption:
 
+<!-- begin:code:ref/thyrse.py:usage_aead_decrypt -->
+```python
+def _example_aead_decrypt():
+    p = Protocol()
+    p.init(b"com.example.myprotocol")
+    p.mix(b"key", key_material)
+    p.mix(b"nonce", nonce)
+    p.mix(b"ad", associated_data)
+    plaintext = p.open(b"message", ciphertext, tag)
 ```
-Init("com.example.myprotocol")
-Mix("key", key_material)
-Mix("nonce", nonce)
-Mix("ad", associated_data)
-plaintext or ⊥ ← Open("message", ciphertext, tag)
-```
+<!-- end:code:ref/thyrse.py:usage_aead_decrypt -->
 
 ## 15. References
 
@@ -798,6 +959,7 @@ plaintext or ⊥ ← Open("message", ciphertext, tag)
 
 ## 16. Test Vectors
 
+<!-- begin:vectors:docs/thyrse-test-vectors.json:thyrse -->
 All values are hex-encoded. All test vectors use `Init` label `"test.vector"`. Byte string literals are shown in hex as
 `(hex)`.
 
@@ -805,9 +967,10 @@ All values are hex-encoded. All test vectors use `Init` label `"test.vector"`. B
 
 Minimal protocol producing output.
 
-```
-Init("test.vector")
-Derive("output", 32)
+```python
+p = Protocol()
+p.init(b"test.vector")
+output = p.derive(b"output", 32)
 ```
 
 | Field         | Value                                                              |
@@ -818,11 +981,12 @@ Derive("output", 32)
 
 Multiple non-finalizing operations before `Derive`.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Mix("nonce", "test-nonce-value")
-Derive("output", 32)
+```python
+p = Protocol()
+p.init(b"test.vector")
+p.mix(b"key", b"test-key-material")
+p.mix(b"nonce", b"test-nonce-value")
+output = p.derive(b"output", 32)
 ```
 
 | Field         | Value                                                              |
@@ -835,11 +999,12 @@ Derive("output", 32)
 
 Full AEAD followed by `Derive`.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Seal("message", "hello, world!")
-Derive("output", 32)
+```python
+p = Protocol()
+p.init(b"test.vector")
+p.mix(b"key", b"test-key-material")
+ct_tag = p.seal(b"message", b"hello, world!")
+output = p.derive(b"output", 32)
 ```
 
 | Field                  | Value                                                                                        |
@@ -853,11 +1018,12 @@ Derive("output", 32)
 
 Combined unauthenticated and authenticated encryption.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Mask("unauthenticated", "mask this data")
-Seal("authenticated", "seal this data")
+```python
+p = Protocol()
+p.init(b"test.vector")
+p.mix(b"key", b"test-key-material")
+ct = p.mask(b"unauthenticated", b"mask this data")
+ct_tag = p.seal(b"authenticated", b"seal this data")
 ```
 
 | Field                  | Value                                                                                          |
@@ -872,15 +1038,19 @@ Seal("authenticated", "seal this data")
 
 Forward secrecy: output differs from `Derive` without `Ratchet`.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Derive("output", 32)                     # without Ratchet
+```python
+# Without Ratchet
+p = Protocol()
+p.init(b"test.vector")
+p.mix(b"key", b"test-key-material")
+output_no_ratchet = p.derive(b"output", 32)
 
-Init("test.vector")
-Mix("key", "test-key-material")
-Ratchet("forward-secrecy")
-Derive("output", 32)                     # with Ratchet
+# With Ratchet
+p = Protocol()
+p.init(b"test.vector")
+p.mix(b"key", b"test-key-material")
+p.ratchet(b"forward-secrecy")
+output_after_ratchet = p.derive(b"output", 32)
 ```
 
 | Field                  | Value                                                              |
@@ -893,11 +1063,14 @@ Derive("output", 32)                     # with Ratchet
 
 `Fork` with two branches, each producing `Derive`. All three outputs are independent.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Fork("role", "prover", "verifier")       # base = ordinal 0, clone 1 = "prover", clone 2 = "verifier"
-Derive("output", 32)                     # on each branch
+```python
+p = Protocol()
+p.init(b"test.vector")
+p.mix(b"key", b"test-key-material")
+clones = p.fork(b"role", b"prover", b"verifier")
+base_output = p.derive(b"output", 32)        # base (ordinal 0)
+clone_1_output = clones[0].derive(b"output", 32)  # "prover" (ordinal 1)
+clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)
 ```
 
 | Branch                       | Derive output                                                      |
@@ -910,14 +1083,24 @@ Derive("output", 32)                     # on each branch
 
 Successful authenticated encryption and decryption. Post-operation `Derive` outputs match.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Mix("nonce", "test-nonce-value")
-Mix("ad", "associated data")
-Seal("message", "hello, world!")         # sender
-Open("message", <sealed>)               # receiver
-Derive("confirm", 32)                   # both sides
+```python
+# Sender
+sender = Protocol()
+sender.init(b"test.vector")
+sender.mix(b"key", b"test-key-material")
+sender.mix(b"nonce", b"test-nonce-value")
+sender.mix(b"ad", b"associated data")
+ct_tag = sender.seal(b"message", b"hello, world!")
+
+# Receiver
+receiver = Protocol()
+receiver.init(b"test.vector")
+receiver.mix(b"key", b"test-key-material")
+receiver.mix(b"nonce", b"test-nonce-value")
+receiver.mix(b"ad", b"associated data")
+ct, tag = ct_tag[:-32], ct_tag[-32:]
+pt = receiver.open(b"message", ct, tag)
+confirm = receiver.derive(b"confirm", 32)
 ```
 
 | Field                          | Value                                                                                        |
@@ -932,13 +1115,25 @@ Derive("confirm", 32)                   # both sides
 
 `Open` returns ⊥. Transcripts desynchronize: subsequent `Derive` outputs diverge.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Mix("nonce", "test-nonce-value")
-Seal("message", "hello, world!")         # sender
-Open("message", <tampered>)             # receiver — tampered[0] ^= 0xff
-Derive("after", 32)                     # both sides
+```python
+# Sender
+sender = Protocol()
+sender.init(b"test.vector")
+sender.mix(b"key", b"test-key-material")
+sender.mix(b"nonce", b"test-nonce-value")
+ct_tag = sender.seal(b"message", b"hello, world!")
+sender_after = sender.derive(b"after", 32)
+
+# Receiver — tampered[0] ^= 0xff
+receiver = Protocol()
+receiver.init(b"test.vector")
+receiver.mix(b"key", b"test-key-material")
+receiver.mix(b"nonce", b"test-nonce-value")
+tampered = bytearray(ct_tag)
+tampered[0] ^= 0xff
+ct, tag = bytes(tampered[:-32]), bytes(tampered[-32:])
+pt = receiver.open(b"message", ct, tag)  # returns None
+receiver_after = receiver.derive(b"after", 32)
 ```
 
 | Field                                | Value                                                                                        |
@@ -951,13 +1146,14 @@ Derive("after", 32)                     # both sides
 
 Each `Seal` derives a different key because the transcript advances via tag absorption.
 
-```
-Init("test.vector")
-Mix("key", "test-key-material")
-Mix("nonce", "test-nonce-value")
-Seal("msg", "first message")
-Seal("msg", "second message")
-Seal("msg", "third message")
+```python
+p = Protocol()
+p.init(b"test.vector")
+p.mix(b"key", b"test-key-material")
+p.mix(b"nonce", b"test-nonce-value")
+ct_tag_1 = p.seal(b"msg", b"first message")
+ct_tag_2 = p.seal(b"msg", b"second message")
+ct_tag_3 = p.seal(b"msg", b"third message")
 ```
 
 | Seal | Plaintext (hex)                | Output (ct ‖ tag)                                                                              |
@@ -965,3 +1161,4 @@ Seal("msg", "third message")
 | 1    | `6669727374206d657373616765`   | `f58f5895735ec5679a75651160f0e2b29ea495e5a13e482d22c5bd1f58c75a345a9dacbf4205022b27f809fcc2`   |
 | 2    | `7365636f6e64206d657373616765` | `2b6b64822aa4ac6716aaf6226e20d4d9f1c6ac6bafbe00761b03663b3e574d91be5fa8918945fa311214cfa83e1b` |
 | 3    | `7468697264206d657373616765`   | `86de20dad1084ed184d23aa56a3c3001a468b67c6687b2ab93e5b640008b6c912f88b6a3a88cd4283a7719c273`   |
+<!-- end:vectors:docs/thyrse-test-vectors.json:thyrse -->

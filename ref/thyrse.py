@@ -5,6 +5,7 @@ from .encodings import left_encode, right_encode, encode_string
 from .kt128 import kt128
 from .treewrap import encrypt_and_mac, decrypt_and_mac
 
+# region: constants
 C = 32   # TreeWrap key and tag size (bytes).
 H = 64   # Chain value size (bytes).
 
@@ -24,8 +25,10 @@ CS_DERIVE      = 0x21
 CS_MASK_KEY    = 0x22
 CS_SEAL_KEY    = 0x23
 CS_RATCHET     = 0x24
+# endregion
 
 
+# region: protocol_core
 class Protocol:
     def __init__(self):
         self.transcript = bytearray()
@@ -46,25 +49,35 @@ class Protocol:
             payload += encode_string(v)
         self.transcript = bytearray()
         self._append_frame(OP_CHAIN, b"", payload)
+    # endregion
 
+    # region: init
     def init(self, label: bytes):
         self._append_frame(OP_INIT, label)
+    # endregion
 
+    # region: mix
     def mix(self, label: bytes, data: bytes):
         self._append_frame(OP_MIX, label, data)
+    # endregion
 
+    # region: derive
     def derive(self, label: bytes, output_len: int) -> bytes:
         assert output_len > 0
         self._append_frame(OP_DERIVE, label, left_encode(output_len))
         results = self._finalize({CS_CHAIN: H, CS_DERIVE: output_len})
         self._reset_chain(OP_DERIVE, results[CS_CHAIN])
         return results[CS_DERIVE]
+    # endregion
 
+    # region: ratchet
     def ratchet(self, label: bytes):
         self._append_frame(OP_RATCHET, label)
         results = self._finalize({CS_RATCHET: H})
         self._reset_chain(OP_RATCHET, results[CS_RATCHET])
+    # endregion
 
+    # region: mask_unmask
     def mask(self, label: bytes, plaintext: bytes) -> bytes:
         self._append_frame(OP_MASK, label)
         results = self._finalize({CS_CHAIN: H, CS_MASK_KEY: C})
@@ -78,7 +91,9 @@ class Protocol:
         pt, tag = decrypt_and_mac(results[CS_MASK_KEY], ciphertext)
         self._reset_chain(OP_MASK, results[CS_CHAIN], tag)
         return pt
+    # endregion
 
+    # region: seal_open
     def seal(self, label: bytes, plaintext: bytes) -> bytes:
         self._append_frame(OP_SEAL, label)
         results = self._finalize({CS_CHAIN: H, CS_SEAL_KEY: C})
@@ -94,7 +109,9 @@ class Protocol:
         if not _hmac.compare_digest(computed_tag, tag):
             return None
         return pt
+    # endregion
 
+    # region: fork
     def fork(self, label: bytes, *values: bytes) -> list["Protocol"]:
         N = len(values)
         snapshot = bytes(self.transcript)
@@ -108,7 +125,9 @@ class Protocol:
                 left_encode(N) + left_encode(i) + encode_string(val))
             clones.append(clone)
         return clones
+    # endregion
 
+    # region: clone_clear
     def clone(self) -> "Protocol":
         copy = Protocol()
         copy.transcript = bytearray(self.transcript)
@@ -118,3 +137,26 @@ class Protocol:
         for i in range(len(self.transcript)):
             self.transcript[i] = 0
         self.transcript = bytearray()
+    # endregion
+
+
+# region: usage_aead
+def _example_aead():
+    p = Protocol()
+    p.init(b"com.example.myprotocol")
+    p.mix(b"key", key_material)
+    p.mix(b"nonce", nonce)
+    p.mix(b"ad", associated_data)
+    ciphertext_tag = p.seal(b"message", plaintext)
+# endregion
+
+
+# region: usage_aead_decrypt
+def _example_aead_decrypt():
+    p = Protocol()
+    p.init(b"com.example.myprotocol")
+    p.mix(b"key", key_material)
+    p.mix(b"nonce", nonce)
+    p.mix(b"ad", associated_data)
+    plaintext = p.open(b"message", ciphertext, tag)
+# endregion
