@@ -20,8 +20,8 @@ import (
 // TagSize is the tag size appended by Seal.
 const TagSize = treewrap.TagSize
 
-// ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. The protocol instance is permanently
-// desynchronized and must be discarded.
+// ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. After a failed Open, the
+// protocol's transcript has diverged from the sender's because the CHAIN frame absorbed a different tag.
 var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 
 // Protocol is a transcript-based cryptographic protocol instance.
@@ -264,8 +264,8 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 // Open decrypts and authenticates sealed data produced by Seal. The sealed input must be ciphertext with the tag
 // appended (as returned by Seal).
 //
-// On success, returns the plaintext. On failure, returns ErrInvalidCiphertext, and the protocol instance is permanently
-// desynchronized and must be discarded.
+// On success, returns the plaintext. On failure, returns ErrInvalidCiphertext. The protocol's transcript diverges
+// from the sender's because the CHAIN frame absorbs a different computed tag.
 func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	if len(sealed) < TagSize {
 		return nil, ErrInvalidCiphertext

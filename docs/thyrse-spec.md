@@ -24,8 +24,8 @@ The framework provides the following operations:
 - **`Ratchet`**: Irreversibly advance the protocol state for forward secrecy.
 - **`Mask`** / **`Unmask`**: Encrypt or decrypt without authentication. The caller is responsible for authenticating the
   ciphertext through external mechanisms.
-- **`Seal`** / **`Open`**: Encrypt or decrypt with authentication. `Open` rejects tampered ciphertext; the protocol
-  state diverges naturally, permanently desynchronizing the instance.
+- **`Seal`** / **`Open`**: Encrypt or decrypt with authentication. A failed `Open` causes the protocol state to
+  diverge from the sender's.
 - **`Fork`**: Clone the protocol state into independent branches with distinct identities.
 
 All operations accept a label for domain separation. The full transcript is encoded with the TKDF recoverable encoding
@@ -433,8 +433,8 @@ succeeded.
 ### 10.7 Seal / Open
 
 Encrypts (`Seal`) or decrypts (`Open`) with authentication. Use `Seal` when the ciphertext must be verified on receipt.
-A failed `Open` indicates tampering; the protocol state diverges naturally because the receiver absorbs a different
-computed tag than the sender, permanently desynchronizing the instance.
+A failed `Open` causes the receiver's protocol state to diverge from the sender's, because the CHAIN frame absorbs
+the receiver's computed tag rather than the sender's.
 
 **`Seal(label, plaintext) → ciphertext ‖ tag`**
 
@@ -477,8 +477,7 @@ Return `ciphertext ‖ tag`.
 5. Verify:
 
 - If `computed_tag ≠ tag` (constant-time comparison), discard `plaintext` and return ⊥. The protocol state has
-  diverged from the sender's state (because the CHAIN frame absorbed `computed_tag`, not the sender's `tag`) and
-  subsequent operations will produce different results. The instance SHOULD be discarded.
+  diverged from the sender's because the CHAIN frame absorbed `computed_tag`, not the sender's `tag`.
 
 Return `plaintext`.
 
@@ -805,9 +804,8 @@ IND-CPA + INT-CTXT implies IND-CCA2. CMT-4 committing security follows from Tree
 (§13.1).
 
 `Open` advances the transcript unconditionally with the computed tag. On verification failure, the
-receiver's computed tag differs from the sender's, and the `CHAIN` frame absorbs a different value. This
-permanently desynchronizes the protocol state: all subsequent operations produce different results. After
-a failed `Open`, the protocol instance SHOULD be discarded.
+receiver's computed tag differs from the sender's, and the `CHAIN` frame absorbs a different value. All
+subsequent operations will produce different results from the sender's.
 
 **Fork.** `Fork` does not finalize. All `N+1` branches share identical transcript up to the fork point
 and diverge via their ordinals and (for clones) branch-specific values. The ordinal alone ensures the base
@@ -1125,7 +1123,7 @@ confirm = receiver.derive(b"confirm", 32)
 
 ### 16.8 Seal + Open with Tampered Ciphertext
 
-`Open` returns ⊥. Transcripts desynchronize: subsequent `Derive` outputs diverge.
+`Open` returns ⊥ and subsequent `Derive` outputs diverge from the sender.
 
 ```python
 # Sender

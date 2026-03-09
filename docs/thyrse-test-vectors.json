@@ -79,7 +79,7 @@
     {
       "id": "16.8",
       "title": "Seal + Open with Tampered Ciphertext",
-      "description": "Open returns \u22a5. Transcripts desynchronize: subsequent Derive outputs diverge.",
+      "description": "Open returns \u22a5 and subsequent Derive outputs diverge from the sender.",
       "init_label": "test.vector",
       "expected": {
         "seal": "6e73c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a"
