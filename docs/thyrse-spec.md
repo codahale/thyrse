@@ -342,9 +342,8 @@ empty value. Clone 1 gets ordinal `1` with value `prover`. Clone 2 gets ordinal 
 Produces pseudorandom output that is a deterministic function of the full transcript. Finalizes the current transcript
 and begins a new one.
 
-The output is pseudorandom only if the transcript contains at least one unpredictable input (§8.5). For deterministic
-key derivation from known inputs, the output is a deterministic function of the transcript and is not pseudorandom — it
-is a PRF output, which may still be sufficient depending on the application's security requirements.
+Derive output is collision-resistant and preimage-resistant. When the transcript contains at least one unpredictable
+input, the output is additionally pseudorandom (§8.5).
 
 **`Derive(label, output_len) → output`**
 
@@ -383,6 +382,9 @@ Return `output`.
 
 Irreversibly advances the protocol state. No user-visible output is produced.
 
+Ratchet provides forward secrecy: an adversary who compromises the post-ratchet state cannot recover the pre-ratchet
+state, provided the implementation securely erases pre-finalization state (§8.8).
+
 **`Ratchet(label)`**
 
 1. Append frame `(0x05, label, "")`.
@@ -416,6 +418,8 @@ before any `Mask` operation. If two protocol runs reach the same transcript stat
 they derive the same TreeWrap key. This is catastrophic: TreeWrap with a repeated key leaks plaintext XOR differences,
 fully compromising confidentiality. This requirement is analogous to the nonce requirement of conventional AEAD schemes;
 it is the caller's responsibility and is not enforced by the framework.
+
+When the transcript contains at least one unpredictable input, Mask provides IND-CPA confidentiality (§8.6).
 
 **`Mask(label, plaintext) → ciphertext`**
 
@@ -497,6 +501,9 @@ the receiver's computed tag rather than the sender's.
 
 Callers MUST ensure that a fresh, unpredictable value has been absorbed via `Mix` before any `Seal` operation. The same
 catastrophic key reuse applies as for `Mask` (§7.6).
+
+When the transcript contains at least one unpredictable input, Seal provides IND-CPA confidentiality, INT-CTXT
+authenticity, and CMT-4 committing security (§8.6).
 
 **`Seal(label, plaintext) → ciphertext ‖ tag`**
 
@@ -886,7 +893,7 @@ pseudorandomness claims require that the transcript contains at least one unpred
 | Ratchet     | Forward secrecy         | Prior transcript state erased     |
 | Mask/Unmask | IND-CPA confidentiality | Unpredictable input in transcript |
 | Seal/Open   | IND-CCA2 + CMT-4       | Unpredictable input in transcript |
-| Fork        | Branch independence     | Distinct clone values             |
+| Fork        | Branch independence     | Always (ordinals ensure distinctness) |
 
 **Derive.** The output is produced by KT128 with customization string `0x21` on the current transcript. Collision
 resistance and preimage resistance follow directly from KT128 (§8.1), regardless of whether the transcript contains
@@ -927,9 +934,8 @@ tag differs from the sender's, and the chain frame absorbs a different value. Al
 different results from the sender's.
 
 **Fork.** `Fork` does not finalize. All $`N + 1`$ branches share identical transcript up to the fork point and diverge
-via their ordinals and (for clones) branch-specific values. The ordinal alone ensures the base is distinct from all
-clones. Since the encoding is injective (§8.3), distinct ordinals or values produce distinct transcripts, guaranteeing
-independent outputs at any subsequent finalization. Callers MUST ensure clone values are distinct from each other.
+via their ordinals. Since each branch receives a distinct ordinal and the encoding is injective (§8.3), all N+1 branches
+produce distinct transcripts, guaranteeing independent outputs at any subsequent finalization.
 
 ### 8.7 Concrete Security Bound
 
