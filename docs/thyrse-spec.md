@@ -594,8 +594,7 @@ sender to receiver where the two sides perform different operations).
 
 **`Clear()`**
 
-Overwrites the protocol state with zeros and invalidates the instance. Implementations SHOULD zero the sponge state, any
-buffered key material, and the stored `Init` label. After `Clear`, the instance SHOULD NOT be used.
+Overwrites the protocol state with zeros and invalidates the instance. After `Clear`, the instance MUST NOT be used.
 
 <!-- begin:code:ref/thyrse.py:clone_clear -->
 ```python
