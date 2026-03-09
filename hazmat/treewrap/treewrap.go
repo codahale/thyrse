@@ -100,7 +100,8 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 	}
 
 	// Chaining hop suffix: length_encode(nLeaves) || 0xFF || 0xFF
-	suffix := append(enc.LengthEncode(uint64(c.nLeaves)), 0xFF, 0xFF)
+	var leBuf [9 + 2]byte
+	suffix := append(enc.LengthEncode(leBuf[:0], uint64(c.nLeaves)), 0xFF, 0xFF)
 	c.final.Absorb(suffix)
 
 	// Tag: pad_permute(0x06)

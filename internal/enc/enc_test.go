@@ -19,7 +19,8 @@ func TestLengthEncode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%d", tt.x), func(t *testing.T) {
-			if got, want := LengthEncode(tt.x), tt.want; !bytes.Equal(got, want) {
+			var buf [9]byte
+			if got, want := LengthEncode(buf[:0], tt.x), tt.want; !bytes.Equal(got, want) {
 				t.Errorf("LengthEncode(%d) = %x, want %x", tt.x, got, want)
 			}
 		})

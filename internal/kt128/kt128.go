@@ -278,12 +278,8 @@ func (h *Hasher) Equal(other *Hasher) int {
 
 // customSuffix appends C || right_encode(|C|) to dst and returns the result.
 func customSuffix(dst []byte, c []byte) []byte {
-	if len(c) == 0 {
-		return append(dst, 0x00)
-	}
 	dst = append(dst, c...)
-	dst = append(dst, enc.LengthEncode(uint64(len(c)))...)
-	return dst
+	return enc.LengthEncode(dst, uint64(len(c)))
 }
 
 // finalize appends the customization suffix and absorbs the complete message.
@@ -330,7 +326,8 @@ func (h *Hasher) absorbMessage() {
 	}
 
 	// Terminator: LengthEncode(leafCount) || 0xFF || 0xFF.
-	h.ts.Absorb(enc.LengthEncode(h.leafCount))
+	var leBuf [9]byte
+	h.ts.Absorb(enc.LengthEncode(leBuf[:0], h.leafCount))
 	h.ts.Absorb([]byte{0xFF, 0xFF})
 }
 

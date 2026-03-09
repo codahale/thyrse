@@ -1,25 +1,22 @@
 // Package enc implements encodings used by KangarooTwelve.
 package enc
 
+import "math/bits"
+
 // LengthEncode encodes x as in KangarooTwelve (RFC 9861 Section 2.3.1):
 // big-endian with no leading zeros, followed by a byte giving the length
-// of the encoding.
-func LengthEncode(x uint64) []byte {
-	if x == 0 {
-		return []byte{0x00}
+// of the encoding. The result is appended to buf and returned as a slice.
+func LengthEncode(b []byte, value uint64) []byte {
+	if value == 0 {
+		return append(b, 0x00)
 	}
 
-	n := 0
-	for v := x; v > 0; v >>= 8 {
-		n++
+	n := 8 - (bits.LeadingZeros64(value|1) / 8)
+	value <<= (8 - n) * 8
+	for range n {
+		b = append(b, byte(value>>56))
+		value <<= 8
 	}
-
-	buf := make([]byte, n+1)
-	for i := n - 1; i >= 0; i-- {
-		buf[i] = byte(x)
-		x >>= 8
-	}
-	buf[n] = byte(n)
-
-	return buf
+	b = append(b, byte(n))
+	return b
 }
