@@ -994,7 +994,8 @@ $`L' = \mathrm{KDF}(K', N', AD')`$.
   $`L'`$ is therefore uniform over $`\{0,1\}^{8\tau}`$ and independent of $`T^\star`$, so each candidate
   $`(ct^\star, T^\star)`$ matches with probability $`1/2^{8\tau}`$. However, the adversary can use its $`t`$
   offline $`\pi`$-queries and $`\sigma_v`$ verification $`\pi`$-calls to evaluate both tag functions on multiple
-  candidate ciphertexts. By a union bound over at most $`t + \sigma_v`$ candidates, the match probability is
+  candidate ciphertexts. Each complete tag evaluation costs at least one $`\pi`$-call, so the adversary can
+  check at most $`t + \sigma_v`$ candidates. By a union bound, the match probability is
   at most $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed
   by the $`(t + \sigma_v)^2 / 2^{c+1}`$ term — both are birthday-on-capacity bounds of the same order.
 
