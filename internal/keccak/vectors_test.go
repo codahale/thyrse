@@ -166,9 +166,9 @@ func TestPermuteVectorsState2(t *testing.T) {
 		ins := stateNFromHex(t, tc.In, 2)
 		wants := stateNFromHex(t, tc.Out, 2)
 		var s State2
-		stateNSetBytes(ins, 2, func(inst, lane int, v uint64) { s.a[lane][inst] = v })
+		stateNSetBytes(ins, 2, func(inst, lane int, v uint64) { *s.lane2(lane, inst) = v })
 		s.Permute12()
-		for inst, got := range stateNBytes(2, func(i, lane int) uint64 { return s.a[lane][i] }) {
+		for inst, got := range stateNBytes(2, func(i, lane int) uint64 { return s.lane2val(lane, i) }) {
 			if string(got) != string(wants[inst]) {
 				t.Fatalf("permute2[%d] lane %d mismatch", i, inst)
 			}

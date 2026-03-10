@@ -140,10 +140,10 @@ func BenchmarkAbsorbCVx8(b *testing.B) {
 	b.Run("x2", func(b *testing.B) {
 		var s2 State2
 		for inst := range 2 {
-			s2.a[0][inst] = s8.a[0][inst]
-			s2.a[1][inst] = s8.a[1][inst]
-			s2.a[2][inst] = s8.a[2][inst]
-			s2.a[3][inst] = s8.a[3][inst]
+			*s2.lane2(0, inst) = s8.a[0][inst]
+			*s2.lane2(1, inst) = s8.a[1][inst]
+			*s2.lane2(2, inst) = s8.a[2][inst]
+			*s2.lane2(3, inst) = s8.a[3][inst]
 		}
 		var d Duplex
 		b.SetBytes(2 * 32)

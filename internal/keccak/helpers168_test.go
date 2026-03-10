@@ -58,8 +58,8 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 				off := (i*2 + j) * 8
 				v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
 					uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
-				sEnc.a[i][j] = v
-				sDec.a[i][j] = v
+				*sEnc.lane2(i, j) = v
+				*sDec.lane2(i, j) = v
 			}
 		}
 
@@ -254,7 +254,7 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 				off := i * 8
 				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
 					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
-				sAsm.a[i][j] = v
+				*sAsm.lane2(i, j) = v
 			}
 		}
 		ctAsm := make([]byte, 2*stride)
@@ -270,8 +270,8 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 		}
 		for i := range 25 {
 			for j := range 2 {
-				if sAsm.a[i][j] != sGen[j].a[i] {
-					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.a[i][j])
+				if sAsm.lane2val(i, j) != sGen[j].a[i] {
+					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.lane2val(i, j))
 				}
 			}
 		}
@@ -427,7 +427,7 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 				off := i * 8
 				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
 					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
-				sAsm.a[i][j] = v
+				*sAsm.lane2(i, j) = v
 			}
 		}
 		ptAsm := make([]byte, 2*stride)
@@ -443,8 +443,8 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 		}
 		for i := range 25 {
 			for j := range 2 {
-				if sAsm.a[i][j] != sGen[j].a[i] {
-					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.a[i][j])
+				if sAsm.lane2val(i, j) != sGen[j].a[i] {
+					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.lane2val(i, j))
 				}
 			}
 		}

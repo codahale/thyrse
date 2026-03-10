@@ -84,7 +84,7 @@ func (d *Duplex) AbsorbCVx2(s *State2) {
 		panic("keccak: AbsorbCV on non-lane-aligned state")
 	}
 	for inst := range 2 {
-		d.absorbCVLanes(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+		d.absorbCVLanes(s.lane2val(0, inst), s.lane2val(1, inst), s.lane2val(2, inst), s.lane2val(3, inst))
 	}
 }
 
@@ -222,17 +222,18 @@ func (d *Duplex) PadPermute(ds byte) {
 func (a *Duplex) Chain(b *Duplex, dsA, dsB byte) {
 	var s2 State2
 	for i := range Lanes {
-		s2.a[i] = [2]uint64{a.s.a[i], a.s.a[i]}
+		*s2.lane2(i, 0) = a.s.a[i]
+		*s2.lane2(i, 1) = a.s.a[i]
 	}
-	xorByteInWord(&s2.a[a.pos>>3][0], a.pos, dsA)
-	xorByteInWord(&s2.a[a.pos>>3][1], a.pos, dsB)
+	xorByteInWord(s2.lane2(a.pos>>3, 0), a.pos, dsA)
+	xorByteInWord(s2.lane2(a.pos>>3, 1), a.pos, dsB)
 	endLane := (Rate - 1) >> 3
-	xorByteInWord(&s2.a[endLane][0], Rate-1, 0x80)
-	xorByteInWord(&s2.a[endLane][1], Rate-1, 0x80)
+	xorByteInWord(s2.lane2(endLane, 0), Rate-1, 0x80)
+	xorByteInWord(s2.lane2(endLane, 1), Rate-1, 0x80)
 	s2.Permute12()
 	for i := range Lanes {
-		a.s.a[i] = s2.a[i][0]
-		b.s.a[i] = s2.a[i][1]
+		a.s.a[i] = s2.lane2val(i, 0)
+		b.s.a[i] = s2.lane2val(i, 1)
 	}
 	a.pos = 0
 	b.pos = 0
@@ -247,17 +248,18 @@ func (a *Duplex) PadPermute2(b *Duplex, ds byte) {
 	}
 	var s2 State2
 	for i := range Lanes {
-		s2.a[i] = [2]uint64{a.s.a[i], b.s.a[i]}
+		*s2.lane2(i, 0) = a.s.a[i]
+		*s2.lane2(i, 1) = b.s.a[i]
 	}
-	xorByteInWord(&s2.a[a.pos>>3][0], a.pos, ds)
-	xorByteInWord(&s2.a[a.pos>>3][1], a.pos, ds)
+	xorByteInWord(s2.lane2(a.pos>>3, 0), a.pos, ds)
+	xorByteInWord(s2.lane2(a.pos>>3, 1), a.pos, ds)
 	endLane := (Rate - 1) >> 3
-	xorByteInWord(&s2.a[endLane][0], Rate-1, 0x80)
-	xorByteInWord(&s2.a[endLane][1], Rate-1, 0x80)
+	xorByteInWord(s2.lane2(endLane, 0), Rate-1, 0x80)
+	xorByteInWord(s2.lane2(endLane, 1), Rate-1, 0x80)
 	s2.Permute12()
 	for i := range Lanes {
-		a.s.a[i] = s2.a[i][0]
-		b.s.a[i] = s2.a[i][1]
+		a.s.a[i] = s2.lane2val(i, 0)
+		b.s.a[i] = s2.lane2val(i, 1)
 	}
 	a.pos = 0
 	b.pos = 0
