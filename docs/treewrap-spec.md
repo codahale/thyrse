@@ -458,12 +458,22 @@ low-order portion of the 1600-bit Keccak-p state.
 
 **Exact uniformity under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$.** In the ideal-permutation model, conditioned on
 $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, every $`\pi`$-call on a fresh (never-before-seen) 1600-bit input produces a truly
-uniform 1600-bit output — not merely computationally pseudorandom. Since $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ ensures all
-capacity outputs are pairwise distinct, and the Domain Separation Lemma (Section 6.3) ensures rate contents are distinct
-across roles, each construction $`\pi`$-call has a fresh input. Outputs are therefore exactly uniform. This principle is
-the engine for the bare-bound analyses in Sections 6.7–6.9: once $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ is conditioned
-away (at cost $`\varepsilon_{\mathrm{cap}}`$), the remaining advantage reduces to structural collision and forgery
-probabilities over truly uniform values.
+uniform 1600-bit output — not merely computationally pseudorandom. Freshness has two components:
+
+1. **Among construction calls.** $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ ensures pairwise distinct capacity outputs, and the
+   Domain Separation Lemma (Section 6.3) ensures distinct rate contents across roles. Together these guarantee no two
+   construction $`\pi`$-calls share a full 1600-bit input.
+2. **With respect to adversary offline queries.** An adversary $`\pi/\pi^{-1}`$ query may coincide with a construction
+   call's input. For init calls (zero capacity, secret key in rate), each adversary query matches with probability
+   $`\le 1/2^k`$; for intermediate calls (known rate, secret capacity inherited from a prior $`\pi`$-output), probability
+   $`\le 1/2^c`$. The total freshness-failure probability is at most $`\mu_{\mathrm{duplex}}\, t / 2^{\min(k,c)}`$, where
+   $`\mu_{\mathrm{duplex}}`$ is the total duplexing calls across all leaf and final-node evaluations. This cost is charged
+   as part of the online-vs-offline term in the decomposition (Section 6.5).
+
+Conditioned on both $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and adversary-query freshness, all construction $`\pi`$-outputs
+are exactly uniform. This principle is the engine for the bare-bound analyses in Sections 6.7–6.9: once both conditions
+are accounted for, the remaining advantage reduces to structural collision and forgery probabilities over truly uniform
+values.
 
 Unless stated otherwise, these symbols are scoped to one fixed master key (one key epoch / one experiment instance).
 Section 6.10 (CMT-4) is an exception: the adversary controls the keys in that game.
@@ -726,14 +736,17 @@ $`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$. The costs of t
 and do not recur. (CMT-4, Section 6.10, is a multi-key notion with a standalone bound.)
 
 Define the **bare advantage** $`\mathrm{Adv}_{\Pi}^{\mathrm{bare}}`$ as the adversary's advantage against the internal
-functions under independent uniformly random per-context keys, conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Each
-AEAD property's total advantage decomposes as:
+functions under independent uniformly random per-context keys, conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and
+adversary-query freshness (Section 6.1). Each AEAD property's total advantage decomposes as:
 
 ```math
-\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
+\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
 ```
-Under the exact uniformity principle (Section 6.1), all bare-bound analyses reduce to structural collision and forgery
-probabilities over truly uniform values.
+where $`\mu = \mu_{\mathrm{kdf}} + \mu_{\mathrm{duplex}}`$ is the total absorbed blocks across all keyed construction
+evaluations. The KDF contribution $`\mu_{\mathrm{kdf}}\, t / 2^k`$ is from the bridge theorem (Section 6.4); the duplex
+contribution $`\mu_{\mathrm{duplex}}\, t / 2^k`$ is the online-vs-offline freshness cost for leaf and final-node
+$`\pi`$-calls (Section 6.1). Under the exact uniformity principle, all bare-bound analyses reduce to structural collision
+and forgery probabilities over truly uniform values.
 
 ### 6.6 Leaf Security Lemmas
 
@@ -1000,13 +1013,13 @@ Each property's total advantage combines the bridge-hop cost (Section 6.4) with 
 (Sections 6.7–6.9):
 
 ```math
-\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
+\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
 ```
 | Property | $`\mathrm{Adv}^{\mathrm{bare}}`$ | Total |
 |----------|-------------------------------|-------|
-| IND-CPA  | $`0`$ | $`\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}}`$ |
-| INT-CTXT | $`S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}`$ |
-| IND-CCA2 | $`2S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu_{\mathrm{kdf}}\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}`$ |
+| IND-CPA  | $`0`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}}`$ |
+| INT-CTXT | $`S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}`$ |
+| IND-CCA2 | $`2S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}`$ |
 
 CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the bridge decomposition:
 
@@ -1014,7 +1027,7 @@ CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the brid
 \mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{t + \sigma_v}{2^{8\tau}}.
 ```
 Where $`\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}`$,
-$`\mu_{\mathrm{kdf}}\, t / 2^k`$ is the non-redundant online-vs-offline key-recovery term from the MRV15 PRF bound (Section 6.2; capacity terms subsumed by $`\varepsilon_{\mathrm{cap}}`$), and
+$`\mu\, t / 2^k`$ is the combined online-vs-offline term: $`\mu_{\mathrm{kdf}}\, t / 2^k`$ from the KDF (Section 6.4) plus $`\mu_{\mathrm{duplex}}\, t / 2^k`$ from leaf and final-node freshness (Section 6.1); MRV15 capacity terms are subsumed by $`\varepsilon_{\mathrm{cap}}`$. and
 $`\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}`$ is the PRF-RF switching cost.
 Parameters are defined in Section 6.1.
 
@@ -1096,7 +1109,7 @@ The remaining per-key terms (online-vs-offline key recovery, context collisions,
 are independent across keys and summed via union bound. The total multi-user advantage is:
 
 ```math
-\mathrm{Adv}_{\mathrm{multi}} \le \varepsilon_{\mathrm{cap}}(\sigma_{\mathrm{global}}, t) + U \cdot \left(\frac{\mu_{\mathrm{kdf}}\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\right).
+\mathrm{Adv}_{\mathrm{multi}} \le \varepsilon_{\mathrm{cap}}(\sigma_{\mathrm{global}}, t) + U \cdot \left(\frac{\mu\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\right).
 ```
 Non-normative sensitivity profiles for reviewers:
 
