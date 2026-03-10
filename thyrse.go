@@ -12,9 +12,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/codahale/thyrse/internal/treewrap"
 	"github.com/codahale/thyrse/internal/k12"
 	"github.com/codahale/thyrse/internal/mem"
+	"github.com/codahale/thyrse/internal/treewrap"
 )
 
 // TagSize is the tag size appended by Seal.

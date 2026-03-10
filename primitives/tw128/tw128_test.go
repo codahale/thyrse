@@ -50,20 +50,20 @@ type aeadVector struct {
 	} `json:"alt_message"`
 	AltADHex string `json:"alt_ad_hex"`
 	Checks   struct {
-		BadNonce           bool `json:"bad_nonce"`
-		BadAD              bool `json:"bad_ad"`
-		BadTag             bool `json:"bad_tag"`
-		NonceReuseXORLeak  bool `json:"nonce_reuse_xor_leak"`
-		SwapNonceAD        bool `json:"swap_nonce_ad"`
-		ADEmptyVsZeroByte  bool `json:"ad_empty_vs_zero_byte"`
+		BadNonce          bool `json:"bad_nonce"`
+		BadAD             bool `json:"bad_ad"`
+		BadTag            bool `json:"bad_tag"`
+		NonceReuseXORLeak bool `json:"nonce_reuse_xor_leak"`
+		SwapNonceAD       bool `json:"swap_nonce_ad"`
+		ADEmptyVsZeroByte bool `json:"ad_empty_vs_zero_byte"`
 	} `json:"checks"`
 	Expected struct {
-		CtTagHex           string `json:"ct_tag_hex"`
-		CtPrefix32Hex      string `json:"ct_prefix32_hex"`
-		TagHex             string `json:"tag_hex"`
-		ReuseCtTagHex      string `json:"reuse_ct_tag_hex"`
+		CtTagHex            string `json:"ct_tag_hex"`
+		CtPrefix32Hex       string `json:"ct_prefix32_hex"`
+		TagHex              string `json:"tag_hex"`
+		ReuseCtTagHex       string `json:"reuse_ct_tag_hex"`
 		SwapNonceADCtTagHex string `json:"swap_nonce_ad_ct_tag_hex"`
-		AltADCtTagHex      string `json:"alt_ad_ct_tag_hex"`
+		AltADCtTagHex       string `json:"alt_ad_ct_tag_hex"`
 	} `json:"expected"`
 }
 
