@@ -542,7 +542,7 @@ func BenchmarkAESGCM(b *testing.B) {
 	for _, size := range testdata.Sizes {
 		nonce := make([]byte, 12)
 		pt := make([]byte, size.N)
-		output := make([]byte, size.N)
+		output := make([]byte, size.N+16)
 		b.Run(size.Name, func(b *testing.B) {
 			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
