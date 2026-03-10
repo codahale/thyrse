@@ -314,7 +314,7 @@ func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	if outputDS == dsRatchet {
 		_, _ = p.h.ReadCustom([]byte{dsRatchet}, cv[:])
 	} else {
-		p.h.Chain([]byte{dsChain}, cv[:], []byte{outputDS}, dst)
+		p.h.Chain(dsChain, cv[:], outputDS, dst)
 	}
 	return cv
 }

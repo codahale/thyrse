@@ -187,20 +187,19 @@ func (h *Hasher) ReadCustom(custom []byte, p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Chain finalizes the Hasher with two different customization strings and
+// Chain finalizes the Hasher with two single-byte customization values and
 // squeezes independent output into dstA and dstB. The Hasher is consumed and
 // must not be used after Chain (call Reset to reuse).
 //
-// When both customization strings have the same length, the final PadPermute is
-// performed in parallel using the 2x permutation.
-func (h *Hasher) Chain(customA []byte, dstA []byte, customB []byte, dstB []byte) {
+// The final PadPermute is performed in parallel using the 2x permutation.
+func (h *Hasher) Chain(customA uint8, dstA []byte, customB uint8, dstB []byte) {
 	if h.state == stateFinalized {
 		return
 	}
 
-	// Append the full customization suffix for A to the shared buffer.
+	// Append the customization suffix for A: [custom, 0x01, 0x01].
 	bufLen := len(h.buf)
-	h.buf = customSuffix(h.buf, customA)
+	h.buf = append(h.buf, customA, 0x01, 0x01)
 
 	// Value-copy the hasher; both copies share h.buf's underlying array.
 	a := *h
@@ -209,25 +208,14 @@ func (h *Hasher) Chain(customA []byte, dstA []byte, customB []byte, dstB []byte)
 	// Absorb the message (including suffix A) into a's duplex.
 	a.absorbMessage()
 
-	// Overwrite the custom string bytes in the shared buffer for B.
-	if len(customA) == len(customB) {
-		copy(h.buf[bufLen:], customB)
-	} else {
-		h.buf = h.buf[:bufLen]
-		h.buf = customSuffix(h.buf, customB)
-		b.buf = h.buf
-	}
+	// Overwrite the custom byte in the shared buffer for B.
+	h.buf[bufLen] = customB
 
 	// Absorb the message (including suffix B) into b's duplex.
 	b.absorbMessage()
 
-	// Parallel permute when positions match, sequential otherwise.
-	if a.ds == b.ds && a.ts.Pos() == b.ts.Pos() {
-		a.ts.PadPermute2(&b.ts, a.ds)
-	} else {
-		a.ts.PadPermute(a.ds)
-		b.ts.PadPermute(b.ds)
-	}
+	// Both suffixes are the same length, so positions always match.
+	a.ts.PadPermute2(&b.ts, a.ds)
 
 	a.ts.Squeeze(dstA)
 	b.ts.Squeeze(dstB)

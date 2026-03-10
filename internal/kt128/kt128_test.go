@@ -348,33 +348,33 @@ func TestChain(t *testing.T) {
 
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
-		h.Chain([]byte("A"), dstA, []byte("B"), dstB)
+		h.Chain(0x01, dstA, 0x02, dstB)
 
 		if bytes.Equal(dstA, dstB) {
-			t.Error("Chain with different customization strings produced identical outputs")
+			t.Error("Chain with different customization values produced identical outputs")
 		}
 	})
 
 	t.Run("swapped customizations swap outputs", func(t *testing.T) {
-		// Chain with (A, B).
+		// Chain with (1, 2).
 		h1 := New()
 		_, _ = h1.Write(ptn(100))
 		ab1 := make([]byte, 32)
 		ab2 := make([]byte, 32)
-		h1.Chain([]byte("A"), ab1, []byte("B"), ab2)
+		h1.Chain(0x01, ab1, 0x02, ab2)
 
-		// Chain with (B, A).
+		// Chain with (2, 1).
 		h2 := New()
 		_, _ = h2.Write(ptn(100))
 		ba1 := make([]byte, 32)
 		ba2 := make([]byte, 32)
-		h2.Chain([]byte("B"), ba1, []byte("A"), ba2)
+		h2.Chain(0x02, ba1, 0x01, ba2)
 
 		if !bytes.Equal(ab1, ba2) {
-			t.Error("swapped customizations: A output from (A,B) != B output from (B,A)")
+			t.Error("swapped customizations: A output from (1,2) != B output from (2,1)")
 		}
 		if !bytes.Equal(ab2, ba1) {
-			t.Error("swapped customizations: B output from (A,B) != A output from (B,A)")
+			t.Error("swapped customizations: B output from (1,2) != A output from (2,1)")
 		}
 	})
 
@@ -386,18 +386,18 @@ func TestChain(t *testing.T) {
 		_, _ = h.Write(msg)
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
-		h.Chain([]byte("X"), dstA, []byte("Y"), dstB)
+		h.Chain(0x20, dstA, 0x21, dstB)
 
 		// Compare with sequential readCustom.
 		hA := New()
 		_, _ = hA.Write(msg)
 		wantA := make([]byte, 32)
-		readCustom(hA, []byte("X"), wantA)
+		readCustom(hA, []byte{0x20}, wantA)
 
 		hB := New()
 		_, _ = hB.Write(msg)
 		wantB := make([]byte, 32)
-		readCustom(hB, []byte("Y"), wantB)
+		readCustom(hB, []byte{0x21}, wantB)
 
 		if !bytes.Equal(dstA, wantA) {
 			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
@@ -415,47 +415,24 @@ func TestChain(t *testing.T) {
 		_, _ = h.Write(msg)
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
-		h.Chain([]byte("X"), dstA, []byte("Y"), dstB)
+		h.Chain(0x20, dstA, 0x21, dstB)
 
 		// Compare with sequential readCustom.
 		hA := New()
 		_, _ = hA.Write(msg)
 		wantA := make([]byte, 32)
-		readCustom(hA, []byte("X"), wantA)
+		readCustom(hA, []byte{0x20}, wantA)
 
 		hB := New()
 		_, _ = hB.Write(msg)
 		wantB := make([]byte, 32)
-		readCustom(hB, []byte("Y"), wantB)
+		readCustom(hB, []byte{0x21}, wantB)
 
 		if !bytes.Equal(dstA, wantA) {
 			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
 		}
 		if !bytes.Equal(dstB, wantB) {
 			t.Errorf("Chain dstB mismatch with sequential\ngot  %x\nwant %x", dstB, wantB)
-		}
-	})
-
-	t.Run("empty customization via Chain matches Read", func(t *testing.T) {
-		msg := ptn(4913)
-
-		h := New()
-		_, _ = h.Write(msg)
-		dstA := make([]byte, 32)
-		dstB := make([]byte, 32)
-		h.Chain(nil, dstA, nil, dstB)
-
-		// Both should match Read() with empty customization.
-		hRef := New()
-		_, _ = hRef.Write(msg)
-		want := make([]byte, 32)
-		_, _ = hRef.Read(want)
-
-		if !bytes.Equal(dstA, want) {
-			t.Errorf("Chain(nil) dstA != Read()\ngot  %x\nwant %x", dstA, want)
-		}
-		if !bytes.Equal(dstB, want) {
-			t.Errorf("Chain(nil) dstB != Read()\ngot  %x\nwant %x", dstB, want)
 		}
 	})
 
@@ -467,48 +444,20 @@ func TestChain(t *testing.T) {
 		_, _ = h.Write(msg)
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
-		h.Chain([]byte("alpha"), dstA, []byte("beta"), dstB)
+		h.Chain(0x30, dstA, 0x31, dstB)
 
 		if bytes.Equal(dstA, dstB) {
-			t.Error("Chain with different customization strings produced identical outputs for large message")
+			t.Error("Chain with different customization values produced identical outputs for large message")
 		}
 
 		// Verify against sequential.
 		hA := New()
 		_, _ = hA.Write(msg)
 		wantA := make([]byte, 32)
-		readCustom(hA, []byte("alpha"), wantA)
+		readCustom(hA, []byte{0x30}, wantA)
 
 		if !bytes.Equal(dstA, wantA) {
 			t.Errorf("Chain dstA mismatch with sequential for large message\ngot  %x\nwant %x", dstA, wantA)
-		}
-	})
-
-	t.Run("different length customizations (sequential fallback)", func(t *testing.T) {
-		msg := ptn(100)
-
-		h := New()
-		_, _ = h.Write(msg)
-		dstA := make([]byte, 32)
-		dstB := make([]byte, 32)
-		h.Chain([]byte("X"), dstA, []byte("long custom string"), dstB)
-
-		// Compare with sequential readCustom.
-		hA := New()
-		_, _ = hA.Write(msg)
-		wantA := make([]byte, 32)
-		readCustom(hA, []byte("X"), wantA)
-
-		hB := New()
-		_, _ = hB.Write(msg)
-		wantB := make([]byte, 32)
-		readCustom(hB, []byte("long custom string"), wantB)
-
-		if !bytes.Equal(dstA, wantA) {
-			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
-		}
-		if !bytes.Equal(dstB, wantB) {
-			t.Errorf("Chain dstB mismatch with sequential\ngot  %x\nwant %x", dstB, wantB)
 		}
 	})
 
@@ -520,12 +469,12 @@ func TestChain(t *testing.T) {
 		c1 := h.Clone()
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
-		c1.Chain([]byte("A"), dstA, []byte("B"), dstB)
+		c1.Chain(0x01, dstA, 0x02, dstB)
 
 		c2 := h.Clone()
 		dstA2 := make([]byte, 32)
 		dstB2 := make([]byte, 32)
-		c2.Chain([]byte("A"), dstA2, []byte("B"), dstB2)
+		c2.Chain(0x01, dstA2, 0x02, dstB2)
 
 		if !bytes.Equal(dstA, dstA2) || !bytes.Equal(dstB, dstB2) {
 			t.Error("Chain on two clones of the same hasher produced different results")
