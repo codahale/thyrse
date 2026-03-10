@@ -31,13 +31,12 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 type Protocol struct {
 	h          *kt128.Hasher
 	frameStart uint64
-	initLabel  string
 }
 
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	p := &Protocol{h: kt128.New(), initLabel: label}
+	p := &Protocol{h: kt128.New()}
 	p.beginFrame(opInit, label)
 	p.endFrame()
 	return p
@@ -45,12 +44,11 @@ func New(label string) *Protocol {
 
 // Equal compares the two Protocol instances in constant time, returning 1 if they are equal, 0 if not.
 func (p *Protocol) Equal(other *Protocol) int {
-	return subtle.ConstantTimeCompare([]byte(p.initLabel), []byte(other.initLabel)) &
-		p.h.Equal(other.h)
+	return p.h.Equal(other.h)
 }
 
 func (p *Protocol) String() string {
-	return fmt.Sprintf("Protocol(%s)", p.initLabel)
+	return fmt.Sprintf("Protocol(%x)", p.Clone().Derive("test", nil, 8))
 }
 
 // Mix absorbs data into the protocol transcript. Use for key material, nonces, associated data, and any protocol input
@@ -295,7 +293,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 
 // Clone returns an independent copy of the protocol state. The original and clone evolve independently.
 func (p *Protocol) Clone() *Protocol {
-	return &Protocol{h: p.h.Clone(), frameStart: p.frameStart, initLabel: p.initLabel}
+	return &Protocol{h: p.h.Clone(), frameStart: p.frameStart}
 }
 
 // Clear overwrites the protocol state with zeros and invalidates the instance. After Clear, the instance must not be
@@ -303,7 +301,6 @@ func (p *Protocol) Clone() *Protocol {
 func (p *Protocol) Clear() {
 	p.h.Reset()
 	p.h = nil
-	p.initLabel = ""
 }
 
 // finalize performs KT128 finalization.
