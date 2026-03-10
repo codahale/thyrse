@@ -5,14 +5,14 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'docs/treewrap-spec.md'
+      - 'docs/tw128-spec.md'
       - 'docs/treewrap-test-vectors.json'
       - 'ref/**'
       - 'tools/embed.py'
   pull_request:
     branches: [ "main" ]
     paths:
-      - 'docs/treewrap-spec.md'
+      - 'docs/tw128-spec.md'
       - 'docs/treewrap-test-vectors.json'
       - 'ref/**'
       - 'tools/embed.py'
@@ -50,5 +50,5 @@ jobs:
 
     - name: Embed and check for changes
       run: |
-        python3 tools/embed.py docs/treewrap-spec.md
-        git diff --exit-code docs/treewrap-spec.md
+        python3 tools/embed.py docs/tw128-spec.md
+        git diff --exit-code docs/tw128-spec.md

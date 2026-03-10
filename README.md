@@ -64,7 +64,7 @@ ARM64, saturating available vector units automatically.
 
 Build with `-tags purego` to disable assembly on any platform.
 
-[TreeWrap]: docs/treewrap-spec.md
+[TreeWrap]: docs/tw128-spec.md
 
 ## The Protocol API
 
