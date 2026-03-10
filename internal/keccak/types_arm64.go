@@ -9,4 +9,4 @@ type State2 struct {
 }
 
 func (s *State2) lane2(lane, inst int) *uint64   { return &s.a[lane][inst] }
-func (s *State2) lane2val(lane, inst int) uint64  { return s.a[lane][inst] }
+func (s *State2) lane2val(lane, inst int) uint64 { return s.a[lane][inst] }
