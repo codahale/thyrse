@@ -1,4 +1,4 @@
-package hazmat
+package kt128
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codahale/thyrse/internal/kt128"
+	"github.com/codahale/thyrse/internal/k12"
 	"github.com/codahale/thyrse/internal/testdata"
 )
 
@@ -298,7 +298,7 @@ func TestIncremental(t *testing.T) {
 }
 
 var sizes = slices.Concat(testdata.Sizes, []testdata.Size{
-	{Name: "8KiB+1B", N: kt128.BlockSize + 1},
+	{Name: "8KiB+1B", N: k12.BlockSize + 1},
 })
 
 func BenchmarkWrite(b *testing.B) {
@@ -320,7 +320,7 @@ func BenchmarkWrite(b *testing.B) {
 
 func BenchmarkWriteStreaming(b *testing.B) {
 	for _, size := range sizes {
-		if size.N < 2*kt128.BlockSize {
+		if size.N < 2*k12.BlockSize {
 			continue
 		}
 		b.Run(size.Name, func(b *testing.B) {
@@ -331,8 +331,8 @@ func BenchmarkWriteStreaming(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				h := NewKT128()
-				for i := 0; i < len(msg); i += kt128.BlockSize {
-					end := min(i+kt128.BlockSize, len(msg))
+				for i := 0; i < len(msg); i += k12.BlockSize {
+					end := min(i+k12.BlockSize, len(msg))
 					_, _ = h.Write(msg[i:end])
 				}
 				_, _ = h.Read(out)
@@ -350,7 +350,7 @@ func BenchmarkRead(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				h := NewKT128()
-				_, _ = h.Write(ptn(kt128.BlockSize + 1))
+				_, _ = h.Write(ptn(k12.BlockSize + 1))
 				_, _ = io.ReadFull(h, out)
 			}
 		})

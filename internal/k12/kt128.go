@@ -1,9 +1,9 @@
-// Package kt128 implements KT128 (KangarooTwelve) as specified in RFC 9861.
+// Package k12 implements KT128 (KangarooTwelve) as specified in RFC 9861.
 //
 // KT128 is a tree-hash eXtendable-Output Function (XOF) built on TurboSHAKE128.
 // For messages larger than 8192 bytes, it splits input into chunks and computes
 // leaf chain values in parallel using SIMD-accelerated Keccak permutations.
-package kt128
+package k12
 
 import (
 	"crypto/subtle"
@@ -19,34 +19,34 @@ const (
 
 	leafDS = 0x0B
 
-	// Hasher lifecycle states.
+	// KT128 lifecycle states.
 	stateSingle    uint8 = 0 // absorbing, single-node (< 1 chunk seen)
 	stateTree      uint8 = 1 // absorbing, tree mode (S_0 flushed)
 	stateFinalized uint8 = 2 // finalized and squeezable
 )
 
-// Hasher is an incremental KT128 instance.
-type Hasher struct {
+// KT128 is an incremental KT128 instance.
+type KT128 struct {
 	buf       []byte        // buffered message/leaf data
 	ts        keccak.Duplex // final-node sponge state
 	pos       uint64        // total bytes written via Write
 	leafCount uint64        // total leaf CVs written to ts so far
-	state     uint8         // lifecycle: stateSingle → stateTree → stateFinalized
+	state     uint8         // lifecycle: stateSingle -> stateTree -> stateFinalized
 	ds        byte          // KT128 customization byte for finalization (0x07 single-node, 0x06 tree-mode)
 }
 
-// New returns a new Hasher with empty customization.
-func New() *Hasher {
-	return &Hasher{}
+// New returns a new KT128 with empty customization.
+func New() *KT128 {
+	return &KT128{}
 }
 
 // Pos returns the total number of bytes written via Write.
-func (h *Hasher) Pos() uint64 {
+func (h *KT128) Pos() uint64 {
 	return h.pos
 }
 
 // Write absorbs message bytes. It must not be called after Read or Sum.
-func (h *Hasher) Write(p []byte) (int, error) {
+func (h *KT128) Write(p []byte) (int, error) {
 	n := len(p)
 	h.pos += uint64(n)
 
@@ -125,7 +125,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 }
 
 // processLeafBatch computes leaf CVs for nLeaves complete chunks using x8 SIMD with padding for remainders.
-func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
+func (h *KT128) processLeafBatch(data []byte, nLeaves int) {
 	var s8 keccak.State8
 	idx := 0
 
@@ -163,7 +163,7 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 
 // Read squeezes output from the XOF. On the first call, it finalizes absorption
 // with empty customization.
-func (h *Hasher) Read(p []byte) (int, error) {
+func (h *KT128) Read(p []byte) (int, error) {
 	h.finalize(nil)
 	if h.state != stateFinalized {
 		h.ts.PadPermute(h.ds)
@@ -175,7 +175,7 @@ func (h *Hasher) Read(p []byte) (int, error) {
 
 // ReadCustom squeezes output from the XOF with the given customization string.
 // On the first call, it finalizes absorption with the customization suffix.
-func (h *Hasher) ReadCustom(custom []byte, p []byte) (int, error) {
+func (h *KT128) ReadCustom(custom []byte, p []byte) (int, error) {
 	h.finalize(custom)
 	if h.state != stateFinalized {
 		h.ts.PadPermute(h.ds)
@@ -185,12 +185,12 @@ func (h *Hasher) ReadCustom(custom []byte, p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Chain finalizes the Hasher with two single-byte customization values and
-// squeezes independent output into dstA and dstB. The Hasher is consumed and
+// Chain finalizes the KT128 with two single-byte customization values and
+// squeezes independent output into dstA and dstB. The KT128 is consumed and
 // must not be used after Chain (call Reset to reuse).
 //
 // The final PadPermute is performed in parallel using the 2x permutation.
-func (h *Hasher) Chain(customA uint8, dstA []byte, customB uint8, dstB []byte) {
+func (h *KT128) Chain(customA uint8, dstA []byte, customB uint8, dstB []byte) {
 	if h.state == stateFinalized {
 		return
 	}
@@ -219,9 +219,9 @@ func (h *Hasher) Chain(customA uint8, dstA []byte, customB uint8, dstB []byte) {
 	b.ts.Squeeze(dstB)
 }
 
-// clone returns an independent copy of the Hasher.
-func (h *Hasher) clone() *Hasher {
-	return &Hasher{
+// clone returns an independent copy of the KT128.
+func (h *KT128) clone() *KT128 {
+	return &KT128{
 		buf:       slices.Clone(h.buf),
 		ts:        h.ts,
 		pos:       h.pos,
@@ -231,13 +231,13 @@ func (h *Hasher) clone() *Hasher {
 	}
 }
 
-// Clone returns an independent copy of the Hasher. The original and clone evolve independently.
-func (h *Hasher) Clone() *Hasher {
+// Clone returns an independent copy of the KT128. The original and clone evolve independently.
+func (h *KT128) Clone() *KT128 {
 	return h.clone()
 }
 
-// Reset resets the Hasher to its initial state.
-func (h *Hasher) Reset() {
+// Reset resets the KT128 to its initial state.
+func (h *KT128) Reset() {
 	clear(h.buf)
 	h.buf = h.buf[:0]
 	h.ts.Reset()
@@ -250,7 +250,7 @@ func (h *Hasher) Reset() {
 // Equal returns 1 if h and other represent identical states, 0 otherwise.
 // The comparison is constant-time with respect to buffered data and the
 // underlying sponge state.
-func (h *Hasher) Equal(other *Hasher) int {
+func (h *KT128) Equal(other *KT128) int {
 	eq := h.ts.Equal(&other.ts)
 	eq &= subtle.ConstantTimeCompare(h.buf, other.buf)
 	eq &= subtle.ConstantTimeEq(int32(h.pos>>32), int32(other.pos>>32))
@@ -269,7 +269,7 @@ func customSuffix(dst []byte, c []byte) []byte {
 }
 
 // finalize appends the customization suffix and absorbs the complete message.
-func (h *Hasher) finalize(custom []byte) {
+func (h *KT128) finalize(custom []byte) {
 	if h.state == stateFinalized {
 		return
 	}
@@ -278,7 +278,7 @@ func (h *Hasher) finalize(custom []byte) {
 }
 
 // absorbMessage absorbs h.buf into h.ts, setting h.ds. It does not modify h.buf.
-func (h *Hasher) absorbMessage() {
+func (h *KT128) absorbMessage() {
 	buf := h.buf
 
 	if h.state == stateSingle {
