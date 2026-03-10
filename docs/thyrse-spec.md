@@ -204,14 +204,11 @@ CS_SEAL_KEY    = 0x23
 CS_RATCHET     = 0x24
 
 
-def _interleaved_frame(start: int, op: int, label: bytes, value: bytes = b"") -> bytes:
-    """Encode a frame and its position marker for appending to a transcript.
+def _encode_frame(start: int, op: int, label: bytes, value: bytes = b"") -> bytes:
+    """Encode a TKDF frame: op ‖ encode_string(label) ‖ value ‖ right_encode(start).
 
-    Returns encode_frame(op, label, value) ‖ right_encode(start), combining
-    the frame encoding (§4.1) and position marker (§4.2) into one call for
-    convenience.  The frame bytes are op ‖ encode_string(label) ‖ value;
-    the position marker right_encode(start) records where the frame began
-    in the transcript.
+    Each frame records its own start position via right_encode, making the
+    transcript recoverable (§5).
     """
     return bytes([op]) + encode_string(label) + value + right_encode(start)
 
@@ -228,7 +225,7 @@ def _encode_chain(origin_op: int, *values: bytes) -> bytearray:
     payload = bytes([origin_op]) + left_encode(len(values))
     for v in values:
         payload += encode_string(v)
-    return bytearray(_interleaved_frame(0, OP_CHAIN, b"", payload))
+    return bytearray(_encode_frame(0, OP_CHAIN, b"", payload))
 ```
 <!-- end:code:ref/thyrse.py:constants -->
 
@@ -275,7 +272,7 @@ Append frame `(0x01, label, "")`.
 <!-- begin:code:ref/thyrse.py:init -->
 ```python
     def init(self, label: bytes):
-        self.transcript += _interleaved_frame(len(self.transcript), OP_INIT, label)
+        self.transcript += _encode_frame(len(self.transcript), OP_INIT, label)
 ```
 <!-- end:code:ref/thyrse.py:init -->
 
@@ -292,7 +289,7 @@ Append frame `(0x02, label, data)`.
 <!-- begin:code:ref/thyrse.py:mix -->
 ```python
     def mix(self, label: bytes, data: bytes):
-        self.transcript += _interleaved_frame(len(self.transcript), OP_MIX, label, data)
+        self.transcript += _encode_frame(len(self.transcript), OP_MIX, label, data)
 ```
 <!-- end:code:ref/thyrse.py:mix -->
 
@@ -324,13 +321,13 @@ empty value. Clone 1 gets ordinal `1` with value `prover`. Clone 2 gets ordinal 
     def fork(self, label: bytes, *values: bytes) -> list["Protocol"]:
         N = len(values)
         snapshot = bytes(self.transcript)
-        self.transcript += _interleaved_frame(len(self.transcript), OP_FORK, label,
+        self.transcript += _encode_frame(len(self.transcript), OP_FORK, label,
             left_encode(N) + left_encode(0) + encode_string(b""))
         clones = []
         for i, val in enumerate(values, start=1):
             clone = Protocol()
             clone.transcript = bytearray(snapshot)
-            clone.transcript += _interleaved_frame(len(clone.transcript), OP_FORK,
+            clone.transcript += _encode_frame(len(clone.transcript), OP_FORK,
                 label, left_encode(N) + left_encode(i) + encode_string(val))
             clones.append(clone)
         return clones
@@ -368,7 +365,7 @@ Return `output`.
 ```python
     def derive(self, label: bytes, output_len: int) -> bytes:
         assert output_len > 0
-        self.transcript += _interleaved_frame(
+        self.transcript += _encode_frame(
             len(self.transcript), OP_DERIVE, label, left_encode(output_len))
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
@@ -400,7 +397,7 @@ state, provided the implementation securely erases pre-finalization state (§8.8
 <!-- begin:code:ref/thyrse.py:ratchet -->
 ```python
     def ratchet(self, label: bytes):
-        self.transcript += _interleaved_frame(
+        self.transcript += _encode_frame(
             len(self.transcript), OP_RATCHET, label)
         T = bytes(self.transcript)
         ratchet_value = kt128(T, bytes([CS_RATCHET]), H)
@@ -472,7 +469,7 @@ there is no error signal — the divergence is detectable only through a later a
 <!-- begin:code:ref/thyrse.py:mask_unmask -->
 ```python
     def mask(self, label: bytes, plaintext: bytes) -> bytes:
-        self.transcript += _interleaved_frame(
+        self.transcript += _encode_frame(
             len(self.transcript), OP_MASK, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
@@ -482,7 +479,7 @@ there is no error signal — the divergence is detectable only through a later a
         return ct
 
     def unmask(self, label: bytes, ciphertext: bytes) -> bytes:
-        self.transcript += _interleaved_frame(
+        self.transcript += _encode_frame(
             len(self.transcript), OP_MASK, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
@@ -557,7 +554,7 @@ Return `plaintext`.
 <!-- begin:code:ref/thyrse.py:seal_open -->
 ```python
     def seal(self, label: bytes, plaintext: bytes) -> bytes:
-        self.transcript += _interleaved_frame(
+        self.transcript += _encode_frame(
             len(self.transcript), OP_SEAL, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
@@ -567,14 +564,14 @@ Return `plaintext`.
         return ct + tag
 
     def open(self, label: bytes, ciphertext: bytes, tag: bytes) -> bytes | None:
-        self.transcript += _interleaved_frame(
+        self.transcript += _encode_frame(
             len(self.transcript), OP_SEAL, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
         pt, computed_tag = decrypt_and_mac(seal_key, ciphertext)
         self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
-        if not _hmac.compare_digest(computed_tag, tag):
+        if not hmac.compare_digest(computed_tag, tag):
             return None
         return pt
 ```
@@ -1250,7 +1247,7 @@ def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag)
 All values are hex-encoded. All test vectors use `Init` label `"test.vector"`. Byte string literals are shown in hex as
 `(hex)`.
 
-### 12.1 Init + Derive
+### 16.1 Init + Derive
 
 Minimal protocol producing output.
 
@@ -1264,7 +1261,7 @@ output = p.derive(b"output", 32)
 |-------|-------|
 | Derive output | `25feba088971a4b573101369ea1c8d83e6f102c2dc46e5cceb81a0b97fca514c` |
 
-### 12.2 Init + Mix + Mix + Derive
+### 16.2 Init + Mix + Mix + Derive
 
 Multiple non-finalizing operations before `Derive`.
 
@@ -1280,7 +1277,7 @@ output = p.derive(b"output", 32)
 |-------|-------|
 | Derive output | `0db4090efec2ba935dac63a18d88df04859d1dedf4a60f428393674520b67e39` |
 
-### 12.3 Init + Mix + Seal + Derive
+### 16.3 Init + Mix + Seal + Derive
 
 Full AEAD followed by `Derive`.
 
@@ -1297,7 +1294,7 @@ output = p.derive(b"output", 32)
 | Seal output (ct ‖ tag) | `dde795eebaaa663b55e904c1e4da1c6c6f1c770b9c90fd17b8add38741dd5e4c821ad0e5aeb4bbfbc18d89ebe4` |
 | Derive output | `e6a99cd5ac77af8370dd09e5f1ea020b1ded0a7415a9dadcbe6133e917dd2498` |
 
-### 12.4 Init + Mix + Mask + Seal
+### 16.4 Init + Mix + Mask + Seal
 
 Combined unauthenticated and authenticated encryption.
 
@@ -1314,9 +1311,9 @@ ct_tag = p.seal(b"authenticated", b"seal this data")
 | Mask output (ct) | `21fc87f3008b3cff62fb2584c970` |
 | Seal output (ct ‖ tag) | `f078ea89c7dea34a821c8470544ec5a70061c75aa9de8a1d49e4a9e816455ca54f78e50a2a1981d1c0a47cfe4d20` |
 
-### 12.5 Ratchet + Derive
+### 16.5 Ratchet + Derive
 
-Baseline `Derive` output without `Ratchet`, for comparison with the ratcheted case below. `Derive` output changes after `Ratchet`, demonstrating forward secrecy.
+Baseline `Derive` output without `Ratchet`, for comparison with §16.5.2. `Derive` output changes after `Ratchet`, demonstrating forward secrecy.
 
 ```python
 # Without Ratchet
@@ -1338,7 +1335,7 @@ output_after_ratchet = p.derive(b"output", 32)
 | Derive (no Ratchet) | `b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf` |
 | Derive (after Ratchet) | `23be92e694890a8b3d6fb5b4885b3b5a63539ad8da6fc5e8e20cf34728dbeb91` |
 
-### 12.6 Fork + Derive
+### 16.6 Fork + Derive
 
 `Fork` with two branches, each producing `Derive`. All three outputs are independent.
 
@@ -1358,7 +1355,7 @@ clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)
 | Clone 1 / "prover" (ordinal 1) | `329696ce84ae7aef8577db9841d82956b60f9f7ce38449d8b83092f3a46a89ad` |
 | Clone 2 / "verifier" (ordinal 2) | `19644cc5d0a5bc8f52eb647a581b85ba868ce0cb3561f8d2a58f1bf6ed1a3e82` |
 
-### 12.7 Seal + Open Round-Trip
+### 16.7 Seal + Open Round-Trip
 
 Successful authenticated encryption and decryption. Post-operation `Derive` outputs match.
 
@@ -1386,7 +1383,7 @@ confirm = receiver.derive(b"confirm", 32)
 |-------|-------|
 | Seal output (ct ‖ tag) | `1383ffe1d63304655b9b94ae27f2a50ea1734e2df148381c2080d70ad86bac40e84d08e43b48b0b9f4a106156a` |
 
-### 12.8 Seal + Open with Tampered Ciphertext
+### 16.8 Seal + Open with Tampered Ciphertext
 
 `Open` returns ⊥ and subsequent `Derive` outputs diverge from the sender.
 
@@ -1416,7 +1413,7 @@ receiver_after = receiver.derive(b"after", 32)
 | Seal output (ct ‖ tag) | `6e73c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a` |
 | Open result | ⊥ (authentication failed) |
 
-### 12.9 Multiple Seals in Sequence
+### 16.9 Multiple Seals in Sequence
 
 First of three sequential Seals. Each derives a different key because the transcript advances via tag absorption.
 

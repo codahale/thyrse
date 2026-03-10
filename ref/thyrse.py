@@ -1,6 +1,6 @@
 """Thyrse Protocol — core transcript machinery with init, mix, and derive."""
 
-import hmac as _hmac
+import hmac
 from .encodings import left_encode, right_encode, encode_string
 from .kt128 import kt128
 from .treewrap import encrypt_and_mac, decrypt_and_mac
@@ -130,7 +130,7 @@ class Protocol:
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
         pt, computed_tag = decrypt_and_mac(seal_key, ciphertext)
         self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
-        if not _hmac.compare_digest(computed_tag, tag):
+        if not hmac.compare_digest(computed_tag, tag):
             return None
         return pt
     # endregion
