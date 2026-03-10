@@ -12,7 +12,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/codahale/thyrse/hazmat/treewrap"
+	"github.com/codahale/thyrse/internal/treewrap"
 	"github.com/codahale/thyrse/internal/k12"
 	"github.com/codahale/thyrse/internal/mem"
 )

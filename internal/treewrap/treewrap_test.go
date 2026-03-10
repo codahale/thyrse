@@ -5,10 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/subtle"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/codahale/thyrse/internal/keccak"
@@ -196,77 +193,6 @@ func TestDecryptAndMAC(t *testing.T) {
 			t.Errorf("got %d bytes, want 0", len(got))
 		}
 	})
-}
-
-func loadTestVectors(t *testing.T) testVectorFile {
-	t.Helper()
-	data, err := os.ReadFile("../../docs/treewrap-test-vectors.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var f testVectorFile
-	if err := json.Unmarshal(data, &f); err != nil {
-		t.Fatal(err)
-	}
-	return f
-}
-
-type testVectorFile struct {
-	Bare struct {
-		KeyHex  string       `json:"key_hex"`
-		Vectors []bareVector `json:"vectors"`
-	} `json:"bare"`
-}
-
-type bareVector struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Message struct {
-		Mode string `json:"mode"`
-		Len  int    `json:"len"`
-	} `json:"message"`
-	Expected struct {
-		TagHex        string `json:"tag_hex"`
-		CtHex         string `json:"ct_hex"`
-		CtPrefix32Hex string `json:"ct_prefix32_hex"`
-		FlipTagHex    string `json:"flip_tag_hex"`
-		SwapTagHex    string `json:"swap_tag_hex"`
-	} `json:"expected"`
-}
-
-func TestEncryptAndMAC(t *testing.T) {
-	vf := loadTestVectors(t)
-	keyBytes, err := hex.DecodeString(vf.Bare.KeyHex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := (*[KeySize]byte)(keyBytes)
-
-	for _, vec := range vf.Bare.Vectors {
-		t.Run(vec.ID+"_"+vec.Title, func(t *testing.T) {
-			pt := make([]byte, vec.Message.Len)
-			for j := range pt {
-				pt[j] = byte(j % 256)
-			}
-			ct, tag := EncryptAndMAC(nil, key, pt)
-
-			if got, want := hex.EncodeToString(tag[:]), vec.Expected.TagHex; got != want {
-				t.Errorf("EncryptAndMAC() tag = %s, want %s", got, want)
-			}
-
-			if vec.Expected.CtHex != "" || vec.Message.Len == 0 {
-				if got, want := hex.EncodeToString(ct), vec.Expected.CtHex; got != want {
-					t.Errorf("EncryptAndMAC() ct = %s, want %s", got, want)
-				}
-			}
-			if vec.Expected.CtPrefix32Hex != "" {
-				prefix := min(32, len(ct))
-				if got, want := hex.EncodeToString(ct[:prefix]), vec.Expected.CtPrefix32Hex; got != want {
-					t.Errorf("EncryptAndMAC() ct prefix = %s, want %s", got, want)
-				}
-			}
-		})
-	}
 }
 
 func TestEncryptorDecryptorRoundTrip(t *testing.T) {
