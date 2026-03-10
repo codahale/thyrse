@@ -136,8 +136,11 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 		idx += 8
 	}
 
-	// Remainder: pad to 8 and use x8.
-	if rem := nLeaves - idx; rem >= 2 {
+	// Remainder: pad to 8 and use x8 when utilization is high enough to
+	// offset the cost of absorbing+permuting unused padding lanes. Below
+	// the threshold, individual x1 calls are cheaper (no 64 KiB stack
+	// copy, no wasted permutations).
+	if rem := nLeaves - idx; rem >= 5 {
 		off := idx * BlockSize
 		var padData [8 * BlockSize]byte
 		copy(padData[:rem*BlockSize], data[off:off+rem*BlockSize])
@@ -146,12 +149,13 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 		idx += rem
 	}
 
-	// Single remainder via x1.
-	if idx < nLeaves {
+	// Small remainder via x1.
+	for idx < nLeaves {
 		var s1 keccak.State1
 		off := idx * BlockSize
 		leafStateX1(data[off:off+BlockSize], &s1)
 		h.ts.AbsorbCV(&s1)
+		idx++
 	}
 
 	h.leafCount += uint64(nLeaves)

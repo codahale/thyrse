@@ -192,8 +192,9 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		idx += 8
 	}
 
-	// Remainder: pad to 8 and use x8.
-	if rem := nFlush - idx; rem >= 2 {
+	// Remainder: pad to 8 and use x8 when utilization is high enough to
+	// offset the cost of absorbing+permuting unused padding lanes.
+	if rem := nFlush - idx; rem >= 5 {
 		off := idx * ChunkSize
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
@@ -205,13 +206,14 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		idx += rem
 	}
 
-	// Single remainder via x1.
-	if idx < nFlush {
+	// Small remainder via x1.
+	for idx < nFlush {
 		off := idx * ChunkSize
 		var s1 keccak.State1
 		encryptX1(&e.key, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
 		e.final.AbsorbCV(&s1)
 		e.nLeaves++
+		idx++
 	}
 }
 
@@ -303,8 +305,9 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		idx += 8
 	}
 
-	// Remainder: pad to 8 and use x8.
-	if rem := nFlush - idx; rem >= 2 {
+	// Remainder: pad to 8 and use x8 when utilization is high enough to
+	// offset the cost of absorbing+permuting unused padding lanes.
+	if rem := nFlush - idx; rem >= 5 {
 		off := idx * ChunkSize
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
@@ -316,13 +319,14 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		idx += rem
 	}
 
-	// Single remainder via x1.
-	if idx < nFlush {
+	// Small remainder via x1.
+	for idx < nFlush {
 		off := idx * ChunkSize
 		var s1 keccak.State1
 		decryptX1(&d.key, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
 		d.final.AbsorbCV(&s1)
 		d.nLeaves++
+		idx++
 	}
 }
 

@@ -12,11 +12,6 @@ type State1 struct {
 	a [Lanes]uint64
 }
 
-// State4 is four lane-major Keccak-p[1600] states.
-type State4 struct {
-	a [Lanes][4]uint64
-}
-
 // State8 is eight lane-major Keccak-p[1600] states.
 type State8 struct {
 	a [Lanes][8]uint64

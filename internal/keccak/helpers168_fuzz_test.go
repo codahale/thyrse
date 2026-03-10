@@ -9,7 +9,7 @@ import (
 )
 
 // fuzzEncryptN cross-validates xN assembly encrypt against x1 generic reference.
-// nInst is 2, 4, or 8. nBlocks is the number of Rate-sized blocks per instance.
+// nInst is 2 or 8. nBlocks is the number of Rate-sized blocks per instance.
 func fuzzEncryptN(t *testing.T, nInst, nBlocks int, seed string) {
 	t.Helper()
 	n := nBlocks * Rate
@@ -44,15 +44,6 @@ func fuzzEncryptN(t *testing.T, nInst, nBlocks int, seed string) {
 		}
 		s.FastLoopEncrypt168(pt, ctAsm, stride)
 		checkState2(t, &s, sGen[:])
-	case 4:
-		var s State4
-		for i := range 25 {
-			for j := range 4 {
-				seedLane(&s.a[i][j], seeds[j], i)
-			}
-		}
-		s.FastLoopEncrypt168(pt, ctAsm, stride)
-		checkState4(t, &s, sGen[:])
 	case 8:
 		var s State8
 		for i := range 25 {
@@ -106,15 +97,6 @@ func fuzzDecryptN(t *testing.T, nInst, nBlocks int, seed string) {
 		}
 		s.FastLoopDecrypt168(ct, ptAsm, stride)
 		checkState2(t, &s, sGen[:])
-	case 4:
-		var s State4
-		for i := range 25 {
-			for j := range 4 {
-				seedLane(&s.a[i][j], seeds[j], i)
-			}
-		}
-		s.FastLoopDecrypt168(ct, ptAsm, stride)
-		checkState4(t, &s, sGen[:])
 	case 8:
 		var s State8
 		for i := range 25 {
@@ -153,17 +135,6 @@ func checkState2(t *testing.T, s *State2, sGen []State1) {
 	}
 }
 
-func checkState4(t *testing.T, s *State4, sGen []State1) {
-	t.Helper()
-	for i := range 25 {
-		for j := range 4 {
-			if s.a[i][j] != sGen[j].a[i] {
-				t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], s.a[i][j])
-			}
-		}
-	}
-}
-
 func checkState8(t *testing.T, s *State8, sGen []State1) {
 	t.Helper()
 	for i := range 25 {
@@ -183,7 +154,7 @@ func FuzzFastLoopEncrypt168(f *testing.F) {
 		if nBlocks < 1 || nBlocks > 200 {
 			t.Skip()
 		}
-		for _, nInst := range []int{2, 4, 8} {
+		for _, nInst := range []int{2, 8} {
 			t.Run(fmt.Sprintf("x%d", nInst), func(t *testing.T) {
 				fuzzEncryptN(t, nInst, nBlocks, seed)
 			})
@@ -199,7 +170,7 @@ func FuzzFastLoopDecrypt168(f *testing.F) {
 		if nBlocks < 1 || nBlocks > 200 {
 			t.Skip()
 		}
-		for _, nInst := range []int{2, 4, 8} {
+		for _, nInst := range []int{2, 8} {
 			t.Run(fmt.Sprintf("x%d", nInst), func(t *testing.T) {
 				fuzzDecryptN(t, nInst, nBlocks, seed)
 			})

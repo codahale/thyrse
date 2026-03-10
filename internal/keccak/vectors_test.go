@@ -176,22 +176,6 @@ func TestPermuteVectorsState2(t *testing.T) {
 	}
 }
 
-func TestPermuteVectorsState4(t *testing.T) {
-	vectors := loadVectors(t)
-	for i, tc := range vectors.Permute4 {
-		ins := stateNFromHex(t, tc.In, 4)
-		wants := stateNFromHex(t, tc.Out, 4)
-		var s State4
-		stateNSetBytes(ins, 4, func(inst, lane int, v uint64) { s.a[lane][inst] = v })
-		s.Permute12()
-		for inst, got := range stateNBytes(4, func(i, lane int) uint64 { return s.a[lane][i] }) {
-			if string(got) != string(wants[inst]) {
-				t.Fatalf("permute4[%d] lane %d mismatch", i, inst)
-			}
-		}
-	}
-}
-
 func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
 	for _, size := range []int{0, 1, 7, 8, 100, 167, 168, 169, 336, 1000} {
 		pt := make([]byte, size)

@@ -19,14 +19,6 @@ func BenchmarkPermute12Selected(b *testing.B) {
 		}
 	})
 
-	b.Run("x4", func(b *testing.B) {
-		var s State4
-		b.SetBytes(4 * StateBytes)
-		for b.Loop() {
-			s.Permute12()
-		}
-	})
-
 	b.Run("x8", func(b *testing.B) {
 		var s State8
 		b.SetBytes(8 * StateBytes)
@@ -50,14 +42,6 @@ func BenchmarkPermute12Generic(b *testing.B) {
 		b.SetBytes(2 * StateBytes)
 		for b.Loop() {
 			permute12x2Generic(&s)
-		}
-	})
-
-	b.Run("x4", func(b *testing.B) {
-		var s State4
-		b.SetBytes(4 * StateBytes)
-		for b.Loop() {
-			permute12x4Generic(&s)
 		}
 	})
 

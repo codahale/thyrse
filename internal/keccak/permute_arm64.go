@@ -9,9 +9,6 @@ func p1600(a *State1)
 func p1600x2Lane(a *State2)
 
 //go:noescape
-func p1600x4Lane(a *State4)
-
-//go:noescape
 func p1600x8Lane(a *State8)
 
 func permute12x1Arch(s *State1) bool {
@@ -24,14 +21,9 @@ func permute12x2Arch(s *State2) bool {
 	return true
 }
 
-func permute12x4Arch(s *State4) bool {
-	p1600x4Lane(s)
-	return true
-}
-
 func permute12x8Arch(s *State8) bool {
 	p1600x8Lane(s)
 	return true
 }
 
-const AvailableLanes = 4
+const AvailableLanes = 8

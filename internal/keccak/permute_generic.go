@@ -95,19 +95,6 @@ func permute12x2Generic(s *State2) {
 	}
 }
 
-func permute12x4Generic(s *State4) {
-	var t State1
-	for inst := range 4 {
-		for lane := range Lanes {
-			t.a[lane] = s.a[lane][inst]
-		}
-		keccakP1600x12(&t.a)
-		for lane := range Lanes {
-			s.a[lane][inst] = t.a[lane]
-		}
-	}
-}
-
 func permute12x8Generic(s *State8) {
 	var t State1
 	for inst := range 8 {

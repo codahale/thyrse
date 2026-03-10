@@ -44,16 +44,6 @@ func BenchmarkFastLoopAbsorb168(b *testing.B) {
 			}
 		})
 
-		in4 := makeInput(4 * size.n)
-		b.Run("x4/"+size.name, func(b *testing.B) {
-			var s State4
-			b.SetBytes(int64(4 * size.n))
-			for b.Loop() {
-				s.Reset()
-				s.FastLoopAbsorb168(in4, size.n)
-			}
-		})
-
 		in8 := makeInput(8 * size.n)
 		b.Run("x8/"+size.name, func(b *testing.B) {
 			var s State8
@@ -86,14 +76,6 @@ func BenchmarkAbsorbFinal(b *testing.B) {
 		}
 	})
 
-	b.Run("x4", func(b *testing.B) {
-		var s State4
-		for b.Loop() {
-			s.Reset()
-			s.AbsorbFinal(tail, tail, tail, tail, 0x0B)
-		}
-	})
-
 	b.Run("x8", func(b *testing.B) {
 		var s State8
 		for b.Loop() {
@@ -118,22 +100,6 @@ func BenchmarkAbsorbCVx8(b *testing.B) {
 		for b.Loop() {
 			d.Reset()
 			d.AbsorbCVx8(&s8)
-		}
-	})
-
-	b.Run("x4", func(b *testing.B) {
-		var s4 State4
-		for inst := range 4 {
-			s4.a[0][inst] = s8.a[0][inst]
-			s4.a[1][inst] = s8.a[1][inst]
-			s4.a[2][inst] = s8.a[2][inst]
-			s4.a[3][inst] = s8.a[3][inst]
-		}
-		var d Duplex
-		b.SetBytes(4 * 32)
-		for b.Loop() {
-			d.Reset()
-			d.AbsorbCVx4(&s4)
 		}
 	})
 
