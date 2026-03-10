@@ -1,22 +1,19 @@
-# TreeWrap: Tree-Parallel Authenticated Encryption
+# TW128: Tree-Parallel Authenticated Encryption
 
 <table>
   <tr><th>Status</th><td>Draft</td></tr>
   <tr><th>Version</th><td>0.10</td></tr>
   <tr><th>Date</th><td>2026-03-05</td></tr>
   <tr><th>Security Target</th><td>128-bit</td></tr>
-  <tr><th>Primary Instantiation</th><td>TW128 (128-bit security)</td></tr>
 </table>
 
 ## 1. Introduction
 
-TreeWrap is a parameterized authenticated-encryption scheme with associated data (AEAD) built on a duplex-based
-Sakura flat-tree topology. It takes a permutation, capacity, tag size, minimum key size, chunk size, and KDF as
-parameters, and enables SIMD acceleration (NEON, AVX-512) on large inputs. The final node encrypts the first chunk
-directly, then absorbs chain values from parallel leaves that process subsequent chunks, producing a single MAC tag.
-
-TW128 is the primary instantiation of TreeWrap, fixing the permutation to Keccak-p[1600,12], the KDF to
-TurboSHAKE128, and targeting 128-bit security. It uses a TurboSHAKE128-based key derivation to produce a
+TW128 is an authenticated-encryption scheme with associated data (AEAD) built on a duplex-based Sakura flat-tree
+topology, using Keccak-p[1600,12] as the underlying permutation and TurboSHAKE128 for key derivation, targeting
+128-bit security. It is a member of the TreeWrap design family. The construction enables SIMD acceleration (NEON,
+AVX-512) on large inputs: the final node encrypts the first chunk directly, then absorbs chain values from parallel
+leaves that process subsequent chunks, producing a single MAC tag. A TurboSHAKE128-based key derivation produces a
 per-invocation key from the master key, nonce, and associated data.
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED",
@@ -25,31 +22,13 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ## 2. Parameters
 
-### 2.1 TreeWrap Parameters
-
-| Symbol | Description                                           | Constraints                            |
-|--------|-------------------------------------------------------|----------------------------------------|
-| f      | Underlying permutation                                | Fixed-width, keyed-sponge compatible   |
-| C      | Capacity (bytes); key and chain value size            | $`C + 8 \leq R - 1`$                  |
-| $`\tau`$ | Tag size (bytes)                                    | $`\max(\tau, C) < R`$                 |
-| $`K_{\min}`$ | Minimum master-key size (bytes)                | $`K_{\min} \geq C`$                   |
-| B      | Chunk size (bytes)                                    | $`B \geq 1`$                          |
-| KDF    | Key derivation function                               | Collision-resistant, domain-separated  |
-
-**Derived parameter.** $`R = \mathrm{width}(f)/8 - C`$ (sponge rate in bytes).
-
-**Parameter constraints.** $`C + 8 \leq R - 1`$ (init material `key || LEU64(index)` = $`C + 8`$ bytes fits in a
-single rate block). $`\max(\tau, C) < R`$ (tag and chain value outputs fit in a single squeeze block).
-
-### 2.2 TW128 Instantiation
-
 | Symbol | Value             | Description                                           |
 |--------|-------------------|-------------------------------------------------------|
 | f      | Keccak-p[1600,12] | 1600-bit state, 12 rounds                             |
 | R      | 168               | Sponge rate (bytes); $`1600/8 - 32 = 168`$            |
 | C      | 32                | Capacity (bytes); key and chain value size             |
 | $`\tau`$ | 32              | Tag size (bytes); equal to C for this instantiation    |
-| $`K_{\min}`$ | 16          | Minimum master-key size (bytes)                        |
+| $`K_L`$ | 32               | Key length (bytes)                                    |
 | B      | 8192              | Chunk size (bytes), matching KangarooTwelve            |
 | KDF    | TurboSHAKE128     | RFC 9861                                               |
 
@@ -57,8 +36,7 @@ single rate block). $`\max(\tau, C) < R`$ (tag and chain value outputs fit in a 
 
 ## 3. Dependencies
 
-TreeWrap requires a KDF to derive per-invocation keys from the master key, nonce, and associated data. TW128 uses
-TurboSHAKE128.
+TW128 uses TurboSHAKE128 as its KDF to derive per-invocation keys from the master key, nonce, and associated data.
 
 **`Keccak-p[1600,12]`:** The 12-round Keccak permutation on a 1600-bit state, as defined in RFC 9861. This is the
 underlying permutation for both the TurboSHAKE128 KDF and the TW128 duplex.
@@ -70,7 +48,7 @@ and an output length `l` in bytes.
 
 The duplex operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
 TurboSHAKE128. The `domain_byte` parameter to `_duplex_pad_permute` is supplied by the caller; Section 5 defines
-the five domain separation bytes used by TreeWrap.
+the five domain separation bytes used by TW128.
 
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
 into the rate rather than XORing plaintext into it. This is the Overwrite-mode style analyzed in Bertoni et al.
@@ -85,8 +63,8 @@ blocks, a write-only state update is also faster than read-XOR-write on most arc
 > via raw `keccak_p1600` when `pos` reaches R. Terminal operations (chain value finalization and the tag `_duplex_pad_permute`) call
 > `pad_permute` at whatever `pos` the final partial block leaves, accommodating both full and partial final blocks.
 
-The duplex is defined by the following reference implementation, which uses TW128 parameter values. `keccak_p1600`
-and `turboshake128` are defined in Appendix B.
+The duplex is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
+Appendix B.
 
 <!-- begin:code:ref/duplex.py:duplex_all -->
 ```python
@@ -157,7 +135,7 @@ def _duplex_absorb(D: _DuplexState, data: bytes) -> _DuplexState:
 > permuting via raw `keccak_p1600` when the rate is full. Chain value finalization calls `_duplex_pad_permute` to mix
 > all data before squeezing; the output fits in a single squeeze block since $`C = 32 \ll R = 168`$.
 
-## 5. TreeWrap
+## 5. Construction
 
 ### Notation
 
@@ -169,7 +147,7 @@ The encodings used here (`left_encode`, `encode_string`, `length_encode`) are de
 
 ### Tree Topology
 
-TreeWrap uses the Sakura final-node-growing topology with kangaroo hopping, following KangarooTwelve (ePrint
+TW128 uses the Sakura final-node-growing topology with kangaroo hopping, following KangarooTwelve (ePrint
 2016/770, Sections 1 and 3.3). The final node (index 0) is a duplex that encrypts chunk 0 directly (the "message
 hop"). Chunks 1 through $`n-1`$ are processed by independent leaf Duplexes that produce chain values (the "chaining hop").
 
@@ -186,7 +164,7 @@ For $`n > 1`$, the final node is a duplex that:
 6. Calls `pad_permute(0x06)` and squeezes the $`\tau`$-byte tag.
 
 The transition from overwrite-mode encryption (step 2) to XOR-mode absorption (step 3) does not require a permutation:
-the overwrite-mode equivalence (Lemma 2 in Section 6) ensures that the sponge state after encrypting chunk 0 is
+the overwrite-mode equivalence (Lemma 2 in Section 6) ensures that the duplex state after encrypting chunk 0 is
 identical to the state that would result from XOR-absorbing the same ciphertext. Both modes resume from the same
 `pos` offset.
 
@@ -209,7 +187,7 @@ the last suffix bit: `1` for final, `0` for inner.
 
 The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (Section 5.1).
 
-The following table summarizes the five domain separation bytes used by TreeWrap:
+The following table summarizes the five domain separation bytes used by TW128:
 
 | Byte   | Usage                           | Sakura suffix | Node type |
 |--------|---------------------------------|---------------|-----------|
@@ -219,7 +197,7 @@ The following table summarizes the five domain separation bytes used by TreeWrap
 | `0x08` | Init (key/index absorption)     | `000`         | inner     |
 | `0x09` | AEAD key derivation             | `100`         | inner     |
 
-**Domain separation.** The key is in the sponge state via `init` (domain byte `0x08`), not prepended to an input
+**Domain separation.** The key is in the duplex state via `init` (domain byte `0x08`), not prepended to an input
 string. Both the final node and every leaf call `init(key, index)` with distinct indices: the final node uses index 0,
 while leaves use indices $`1, \ldots, n-1`$. The final node's tag domain byte (`0x06` or `0x07`) is distinct from all
 leaf domain bytes (`0x08`, `0x0B`), providing an additional layer of separation.
@@ -232,7 +210,7 @@ $`n-1`$, the chain values are parsed as $`n-1`$ consecutive $`C`$-byte blocks fo
 ### 5.1 Internal Functions: EncryptAndMAC / DecryptAndMAC
 
 The internal encrypt-and-MAC functions take a per-invocation key and plaintext (or ciphertext), and return the processed
-data and a MAC tag. These functions are not intended to be called directly; TreeWrap (Section 5.2) wraps them with key
+data and a MAC tag. These functions are not intended to be called directly; TW128 (Section 5.2) wraps them with key
 derivation and tag verification.
 
 **`EncryptAndMAC(key, plaintext) -> (ciphertext, tag)`**\
@@ -251,8 +229,6 @@ derivation and tag verification.
 - `tag`: A $`\tau`$-byte MAC tag.
 
 *Procedure:*
-
-> The reference implementation below uses TW128 parameter values.
 
 <!-- begin:code:ref/treewrap.py:internal_functions -->
 ```python
@@ -317,22 +293,21 @@ def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
 
 The final node (index 0) always encrypts chunk 0. Leaf operations for chunks 1 through $`n-1`$ are independent and may
 execute in parallel. Tag computation begins as soon as all chain values are available. `decrypt_and_mac` produces the
-same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write ciphertext into the sponge rate (Section 4).
+same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write ciphertext into the duplex rate (Section 4).
 
 > [!CAUTION]
 > For production implementations, avoid repeated byte-string concatenation (`final_input += ...`) when building the
 > final node input; prefer preallocation or list/join style buffer construction.
 
-### 5.2 TreeWrap Encrypt / Decrypt
+### 5.2 Encrypt / Decrypt
 
-TreeWrap derives a per-invocation key from `(K, N, AD)` using the KDF, then delegates to
+TW128 derives a per-invocation key from `(K, N, AD)` using the KDF, then delegates to
 `EncryptAndMAC`/`DecryptAndMAC`.
 
-**`TreeWrap.Encrypt(K, N, AD, M) -> ct || tag`**\
-**`TreeWrap.Decrypt(K, N, AD, ct || tag) -> M | None`**
+**`TW128.Encrypt(K, N, AD, M) -> ct || tag`**\
+**`TW128.Decrypt(K, N, AD, ct || tag) -> M | None`**
 
-**Master-key requirement.** `K` MUST be a uniformly random key of at least $`K_{\min}`$ bytes. TW128 requires
-exactly 32 bytes (256 bits).
+**Master-key requirement.** `K` MUST be a uniformly random key of exactly 32 bytes (256 bits).
 
 **Key derivation:**
 
@@ -340,12 +315,10 @@ exactly 32 bytes (256 bits).
 tw_key <- KDF(encode_string(K) || encode_string(N) || encode_string(AD), 0x09, C)
 ```
 
-TW128 uses `KDF = TurboSHAKE128`. The `encode_string` encoding (NIST SP 800-185) makes the concatenation injective:
+The `encode_string` encoding (NIST SP 800-185) makes the concatenation injective:
 each field is prefixed with its `left_encode`d bit-length (`left_encode(8*len(x))`), so no `(K, N, AD)` triple can
-produce the same KDF input as a different triple. Domain byte `0x09` separates key derivation from all other TreeWrap
+produce the same KDF input as a different triple. Domain byte `0x09` separates key derivation from all other TW128
 domain bytes (`0x08`, `0x0B`, `0x07`, `0x06`).
-
-> The reference implementation below implements TW128.
 
 <!-- begin:code:ref/treewrap.py:aead_functions -->
 ```python
@@ -370,7 +343,7 @@ def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes |
 
 ## 6. Security Properties
 
-This section gives a complete reduction from TreeWrap AEAD security to the ideal-permutation assumption on
+This section gives a complete reduction from TW128 AEAD security to the ideal-permutation assumption on
 Keccak-p[1600,12]. The argument has two layers:
 
 - **Layer A (Section 6.4).** A single game hop replaces the TurboSHAKE128 KDF with a lazy random function, using the
@@ -379,8 +352,8 @@ Keccak-p[1600,12]. The argument has two layers:
   into keyed-duplex PRF properties of the leaf ciphers (FKD, Section 6.2): pseudorandomness of rate outputs,
   structural state equivalence, and fixed-key bijection.
 
-All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $`c = 256`$ bits and $`\tau = 32`$ tag
-bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
+All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $`c = 256`$ bits and $`\tau = 32`$
+tag bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
 adversary. Related-key security is also out of scope: all claims assume the master key $`K`$ is uniformly random and
 independent of any other keys in the system.
 
@@ -390,7 +363,7 @@ independent of any other keys in the system.
 > enables full plaintext recovery given one known plaintext. Nonce uniqueness per $`(K, AD)`$ pair is a
 > hard security requirement (Section 7.4), not a quality-of-implementation concern.
 
-**Length leakage.** TreeWrap ciphertexts reveal the exact plaintext length: `|ct| = |M|` (plus the
+**Length leakage.** TW128 ciphertexts reveal the exact plaintext length: `|ct| = |M|` (plus the
 fixed $`\tau`$-byte tag). This is inherent to any stream-cipher-based AEAD and is not mitigated by this
 construction. Applications requiring length hiding must pad plaintexts before encryption.
 
@@ -408,19 +381,19 @@ permutation at the claimed workloads. This is a modeling assumption, not a proof
 > setting and require state access or control that the keyed sponge/duplex denies.
 > (See the Keccak Team third-party table and reduced-round references in Section 9.)
 >
-> These results do not directly invalidate the TreeWrap security analysis because TreeWrap uses a
+> These results do not directly invalidate the TW128 security analysis because TW128 uses a
 > keyed sponge/duplex setting with 256-bit capacity, strict domain separation, and workload limits;
 > nevertheless, future cryptanalysis could change the practical margin, so deployments should treat the
 > concrete bounds as conditional.
 
 ### 6.1 Model and Notation
 
-Concrete numerical evaluations in this section use TW128 parameters unless stated otherwise.
+Concrete numerical evaluations in this section use TW128 parameters.
 
 Let:
 
 - $`\sigma`$: total online Keccak-p calls performed by the construction across all oracle queries
-  (including KDF, leaf-sponge, and chaining-hop tag permutation calls).
+  (including KDF, leaf-duplex, and chaining-hop tag permutation calls).
 - $`t`$: adversary offline Keccak-p calls (an analysis parameter representing direct access to the ideal
   permutation $`\pi`$ in the ideal-permutation model, not a deployment-controlled quantity; Section 7.4 provides
   operational guidance on choosing $`t`$ for bound evaluation).
@@ -480,7 +453,7 @@ Section 6.10 (CMT-4) is an exception: the adversary controls the keys in that ga
 
 ### 6.2 Keyed-Duplex PRF Framework (MRV15)
 
-TreeWrap leaf ciphers are keyed duplexes: after initialization, each leaf
+TW128 leaf ciphers are keyed duplexes: after initialization, each leaf
 interleaves absorb and squeeze operations (absorb plaintext block → permute →
 squeeze keystream/tag). This matches MRV15's Full Keyed Duplex (FKD) model
 rather than the single-evaluation Full Keyed Sponge (FKS). The two theorems
@@ -517,7 +490,7 @@ The structural difference is in the capacity term: FKD has $`(q\ell)^2 / 2^c`$
 $`q^2\ell`$). FKS thus provides a tighter capacity bound per query when $`\ell`$ is
 large.
 
-For TW128 the parameters are $`b = 1600`$, $`c = 256`$, $`k = c = 256`$. Each
+The parameters are $`b = 1600`$, $`c = 256`$, $`k = c = 256`$. Each
 leaf is a single duplex evaluation ($`q = 1`$), so at the per-leaf level the FKD
 bound simplifies to $`\ell^2/2^b + \ell^2/2^c + \mu N/2^k`$, and
 $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$ captures the advantage for leaf $`i`$
@@ -526,13 +499,13 @@ coincide up to a factor of 2 ($`\ell^2/2^c`$ vs.\ $`2\ell/2^c`$; for $`\ell \geq
 FKD is actually looser). The KDF sponge (Section 6.4) is a single-evaluation
 keyed sponge covered by MRV15 Theorem 1 (FKS).
 
-**Term analysis for TW128.** The FKD bound has three terms:
+**Term analysis.** The FKD bound has three terms:
 
 1. **Full-state birthday** $`\frac{(q\ell)^2}{2^{1600}}`$: negligible at
    $`b = 1600`$. Even for $`q\ell = 2^{128}`$ this term is below $`2^{-1344}`$.
 
 2. **Online-vs-online capacity term** $`\frac{(q\ell)^2}{2^{256}}`$: scales with
-   $`q^2\ell^2`$. For TW128 *leaves* with $`q = 1`$, this simplifies to
+   $`q^2\ell^2`$. For *leaves* with $`q = 1`$, this simplifies to
    $`\ell^2/2^{256}`$. With $`\ell \approx 49`$ blocks per full 8192-byte chunk
    ($`\lfloor 8192/168 \rfloor + 1`$), the per-leaf capacity term is
    $`49^2 / 2^{256} \approx 2^{-244.8}`$, which is negligible. For the *KDF*
@@ -547,7 +520,7 @@ keyed sponge covered by MRV15 Theorem 1 (FKS).
    count $`\mu`$ rather than quadratic. It is identical in FKS and FKD.
 
 **Key-loading: outer-keyed sponge.** MRV15's FKD initialises with the key placed
-in the capacity portion of the state: $`S \gets 0^{b-k} \| K`$. TreeWrap
+in the capacity portion of the state: $`S \gets 0^{b-k} \| K`$. TW128
 instead absorbs the key into the rate via standard sponge absorption: the
 byte-string $`K \| \mathrm{LEU64}(\mathit{index})`$ is XOR'd into rate positions,
 followed by pad-and-permute with domain byte $`\mathtt{0x08}`$. This is the
@@ -568,7 +541,7 @@ terms — $`M^2/2^c`$ (online-vs-online) and $`2\mu N/2^c`$ (online-vs-offline) 
 the same form as MRV15's capacity and online-vs-offline terms, differing only
 by a factor of 2 on the $`\mu N`$ term. The additional key-derivation terms
 ($`\lambda(N)`$ and $`2(k/r)N/2^b`$) arise from the root-key derivation step in the
-outer-keyed construction and are negligible at TW128's parameters
+outer-keyed construction and are negligible at the chosen parameters
 ($`k/r < 1`$, $`b = 1600`$). After the init permutation call, the full state is
 $`\pi(K \| \mathit{index} \| \mathtt{0x08}\text{-pad} \| 0^c)`$; since $`K`$ is
 secret and uniform, this $`\pi`$-input is unique with overwhelming probability,
@@ -577,7 +550,7 @@ subsequent duplex operation proceeds from this uniform state, which is exactly
 the precondition for MRV15's internal proof. The init call is accounted for in
 $`\mu`$ (total absorbed blocks).
 
-**Overwrite-mode coverage.** MRV15 structurally assumes XOR-absorb. TreeWrap's
+**Overwrite-mode coverage.** MRV15 structurally assumes XOR-absorb. TW128's
 encrypt operation produces identical state evolution:
 $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ followed by
 $`S[\mathit{pos}] \gets \mathit{ct}[j]`$ yields the same state byte as
@@ -590,7 +563,7 @@ observable duplex output; no additional leakage occurs. BDPVA11 (Algorithm 5,
 Theorem 2) provides independent confirmation of overwrite-mode security.
 
 **Squeeze-phase coverage.** MRV15's FKD includes explicit squeeze output at each
-duplexing call. TreeWrap's tags ($`\tau = 32`$ bytes) and chain values
+duplexing call. TW128's tags ($`\tau = 32`$ bytes) and chain values
 ($`C = 32`$ bytes) are single-block squeezes well within one rate block
 ($`R = 168`$ bytes). These outputs are directly covered by Theorem 2.
 
@@ -598,7 +571,7 @@ duplexing call. TreeWrap's tags ($`\tau = 32`$ bytes) and chain values
 > The BDPVA07 flat sponge claim gives a generic
 > $`N^2 / 2^{c+1}`$ bound (where $`N`$ is total permutation calls) for the unkeyed sponge setting, which
 > yields $`(\sigma + t)^2 / 2^{c+1}`$ in the online/offline decomposition used here. MRV15 provides
-> tighter bounds for the keyed setting that TreeWrap exclusively uses.
+> tighter bounds for the keyed setting that TW128 exclusively uses.
 > BDPVA07 remains valid as a fallback analysis but is superseded here. For the
 > KDF (FKS, Theorem 1), the principal improvement is that the online-vs-online
 > term scales with $`q^2\ell`$ rather than $`q^2\ell^2`$, eliminating a factor of
@@ -825,7 +798,7 @@ Game IND-CPA_b(A):
 
 Oracle Enc_b(N, AD, M0, M1):
   require |M0| = |M1|
-  return TreeWrap.Encrypt(K, N, AD, M_b)
+  return TW128.Encrypt(K, N, AD, M_b)
 ```
 
 By the bridge theorem (Section 6.4), it suffices to bound
@@ -843,7 +816,7 @@ distance, absorbed by $`\varepsilon_{\mathrm{cap}}`$ per the Section 6.1 convent
 - Distinct contexts map to independent uniformly random keys in $`\mathsf{G}_1`$.
 - Under a truly random key $`K_{tw}`$ (from the lazy RF in $`\mathsf{G}_1`$) and the ideal permutation conditioned on
   $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the ciphertext distribution is independent of the adversary's plaintext choice.
-  The argument proceeds by induction over rate blocks (using the keyed-sponge pseudorandomness from Section 6.2 and
+  The argument proceeds by induction over rate blocks (using the keyed-duplex pseudorandomness from Section 6.2 and
   Lemma 1, Section 6.6), showing that each ciphertext block is uniformly distributed regardless of the plaintext:
   - *Block 0:* The `init` step absorbed the truly random key $`K_{tw}`$ and applied $`\pi`$ via `pad_permute` (one
     permutation call); the resulting state is uniformly random (see Lemma 1, Section 6.6). The first rate block of
@@ -859,7 +832,7 @@ distance, absorbed by $`\varepsilon_{\mathrm{cap}}`$ per the Section 6.1 convent
     $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, this capacity has not appeared in any other permutation call, so the full
     permutation input (rate || capacity) is fresh. The ideal permutation on a fresh input produces a uniformly random
     output. Therefore $`\mathit{ct}[j]`$ is again uniform, and the same overwrite argument applies.
-  - By induction, all ciphertext bytes are uniform. Since only ciphertext bytes (not plaintext bytes) enter the sponge
+  - By induction, all ciphertext bytes are uniform. Since only ciphertext bytes (not plaintext bytes) enter the duplex
     state via the overwrite rule, the state evolution is determined by the uniform ciphertext sequence, not by the
     adversary's plaintext choice. Two different plaintexts produce different ciphertext values but with identical
     (uniform) distributions.
@@ -884,13 +857,13 @@ Game INT-CTXT(A):
   return win
 
 Oracle Enc(N, AD, M):
-  C <- TreeWrap.Encrypt(K, N, AD, M)
+  C <- TW128.Encrypt(K, N, AD, M)
   S <- S union {(N, AD, C)}
   return C
 
 Oracle Forge(N, AD, C):
   if (N, AD, C) in S: return bot
-  return TreeWrap.Decrypt(K, N, AD, C) != None
+  return TW128.Decrypt(K, N, AD, C) != None
 ```
 
 **Claim.** $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.`$
@@ -944,12 +917,12 @@ $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}`$. T
 ```
 **Step 3: Total bound.** The total bound follows from the decomposition in Section 6.5.
 
-> *Note on construction type.* TreeWrap is structurally an encrypt-and-MAC scheme (the tag is derived from the
-> same sponge state as the ciphertext), not an Encrypt-then-MAC scheme with independent keys. The BN00 composition
+> *Note on construction type.* TW128 is structurally an encrypt-and-MAC scheme (the tag is derived from the
+> same duplex state as the ciphertext), not an Encrypt-then-MAC scheme with independent keys. The BN00 composition
 > theorem (Theorem 3.2) is a general result: it states that *any* symmetric encryption scheme satisfying both IND-CPA
 > and INT-CTXT also satisfies IND-CCA2. The theorem's only preconditions are these two properties of the composed
 > scheme, not any requirement on its internal structure (e.g., independent keys or separate MAC). Sections 6.7 and 6.8
-> establish IND-CPA and INT-CTXT for TreeWrap directly, so the theorem applies. The overwrite-mode sponge ensures
+> establish IND-CPA and INT-CTXT for TW128 directly, so the theorem applies. The overwrite-mode duplex ensures
 > that the tag depends on the ciphertext (ciphertext bytes are written into the rate before the tag squeeze), which is
 > why INT-CTXT holds despite the shared state.
 
@@ -968,8 +941,8 @@ Game CMT-4(A):
   (C*, (K, N, AD, M), (K', N', AD', M')) <- A^{pi, pi^{-1}}
   require (K, N, AD, M) != (K', N', AD', M')
   require |M| = |M'|
-  return TreeWrap.Encrypt(K, N, AD, M) = C*
-     and TreeWrap.Encrypt(K', N', AD', M') = C*
+  return TW128.Encrypt(K, N, AD, M) = C*
+     and TW128.Encrypt(K', N', AD', M') = C*
 ```
 
 The adversary has direct access to the ideal permutation $`\pi`$ and its inverse (no encryption oracle is needed since the
@@ -1041,7 +1014,7 @@ The internal `EncryptAndMAC`/`DecryptAndMAC` functions (Section 5.1) may be used
 per-invocation key uniqueness and tag verification externally. This is an advanced interface.
 
 > [!WARNING]
-> Bare usage bypasses the TreeWrap key derivation and tag verification. The following caller obligations are
+> Bare usage bypasses the TW128 key derivation and tag verification. The following caller obligations are
 > **mandatory** for security; failure to enforce any of them voids the security properties of Section 6.
 
 | Property target              | Caller obligation                                                                             |
@@ -1128,7 +1101,7 @@ Appendix C remains non-normative operational guidance for instrumentation and bu
 
 ### 7.5 Implementation Design Callouts (Non-Normative)
 
-TreeWrap's tree topology exists to exploit data-level parallelism: independent leaf chunks can be encrypted or
+TW128's tree topology exists to exploit data-level parallelism: independent leaf chunks can be encrypted or
 decrypted simultaneously using SIMD permutation kernels. A scalar implementation that processes leaves one at a time
 will be bottlenecked by permutation latency; a vectorized implementation that processes 4–8 leaves per kernel
 invocation can achieve roughly 20× higher throughput on contemporary hardware. The guidance below describes the
@@ -1146,7 +1119,7 @@ techniques that make this possible, progressing from data layout through schedul
 - **Keep domain bytes and index mapping exact.** The constants `0x08`, `0x0B`, `0x09`, `0x07`, `0x06` and the
   `key ‖ LEU64(index)` binding (index 0 for the final node, 1 through $`n`$ for leaves) are structural for
   interoperability and security analysis.
-- **No misuse resistance (MRAE).** TreeWrap is not SIV-style: nonce reuse leaks plaintext XOR (Section 6.7).
+- **No misuse resistance (MRAE).** TW128 is not SIV-style: nonce reuse leaks plaintext XOR (Section 6.7).
   Applications requiring nonce-misuse resistance should use a dedicated MRAE construction.
 
 **PlSnP lane-major state layout.** The key data structure for parallel Keccak is an N-way interleaved state, following
@@ -1203,19 +1176,19 @@ as they dominate latency-sensitive workloads.
 
 ## 8. Comparison with Traditional AEAD
 
-TreeWrap differs from traditional AEAD in several respects.
+TW128 differs from traditional AEAD in several respects.
 
 **Nonce-free internal primitive.** The internal encrypt-and-MAC functions take only a key and data. Nonces are consumed
 by the TurboSHAKE128-based KDF to derive a unique internal key, not passed to the encrypt/MAC layer itself.
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs -- they prove authenticity but are not
-necessarily pseudorandom. TreeWrap's tag is a full PRF: under a random key, the tag is indistinguishable from a random
+necessarily pseudorandom. TW128's tag is a full PRF: under a random key, the tag is indistinguishable from a random
 string (Section 6.1). This stronger property is useful for protocols that derive further keying material from the tag.
 
 ### 8.1 Operational Safety Limits
 
 Operational planning assumptions used in this section: $`p = 2^{-50}`$, 1500-byte messages, TW128 cost
-$`\approx 11`$ Keccak-p calls/message (1 KDF + 10 leaf calls), $`\ell \approx 49`$ max input blocks per keyed-sponge
+$`\approx 11`$ Keccak-p calls/message (1 KDF + 10 leaf calls), $`\ell \approx 49`$ max input blocks per keyed-duplex
 evaluation, and per-key accounting (single key / key epoch). Figures are conditional on the Section 6 model assumptions
 for Keccak-p[1600,12] and the selected offline-work profile.
 
@@ -1238,7 +1211,7 @@ $`q_{\mathrm{nonce}} \lesssim 2^{39.5}`$ encryptions per key (birthday approxima
 ```math
 \text{nonce-collision-limited volume} \approx 2^{39.5} \cdot 1500\ \text{bytes} \approx 2^{20.1}\ \text{GiB}.
 ```
-TreeWrap supports longer nonces (e.g., 192 or 256 bits) with the same construction; this increases the random-nonce
+TW128 supports longer nonces (e.g., 192 or 256 bits) with the same construction; this increases the random-nonce
 collision budget in the usual birthday way.
 
 Example planning table (collision target $`p = 2^{-50}`$, record size = 1500 bytes):
@@ -1259,7 +1232,7 @@ proof-bound figure alone.
 
 - **[ADMV15]** Andreeva, E., Daemen, J., Mennink, B., and Van Assche, G. "Security of Keyed Sponge Constructions Using
   a Modular Proof Approach." FSE 2015. Proves PRF security of both inner-keyed and outer-keyed sponge variants. The
-  outer-keyed result covers TreeWrap's rate-absorbed key initialization (Section 6.2).
+  outer-keyed result covers TW128's rate-absorbed key initialization (Section 6.2).
 - **[AM09]** Aumasson, J.-P. and Meier, W. "Zero-sum distinguishers for reduced Keccak-f and for the core functions of
   Luffa and Hamsi." 2009. https://www.aumasson.jp/data/papers/AM09.pdf. Presents zero-sum distinguishers up to 16 rounds.
 - **[BDPVA07]** Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sponge functions." ECRYPT Hash Workshop, 2007.
@@ -1272,7 +1245,7 @@ proof-bound figure alone.
   is as secure as Sponge); establishes that all intermediate rate outputs -- not just terminal squeezes -- are covered by
   the duplex security bound.
 - **[BDPVA13]** Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Sakura: a flexible coding for tree hashing."
-  IACR ePrint 2013/231. Defines the tree hash coding framework used by KangarooTwelve and TreeWrap.
+  IACR ePrint 2013/231. Defines the tree hash coding framework used by KangarooTwelve and TW128.
 - **[BDPVAVK16]** Bertoni, G., Daemen, J., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B.
   "KangarooTwelve: fast hashing based on Keccak-p." IACR ePrint 2016/770. Security and design context for the
   Sakura-based tree structure.
@@ -1295,7 +1268,7 @@ proof-bound figure alone.
   theorem framework used for random-oracle replacement arguments.
 - **[MRV15]** Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex:
   Applications to Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Primary security framework for
-  TreeWrap. Proves beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state
+  TW128. Proves beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state
   keyed duplex (Theorem 2, FKD) in the ideal-permutation model. Theorem 2 (FKD) is used for leaf ciphers; Theorem 1
   (FKS) is used for the KDF sponge. Used throughout Section 6.
 - **[RFC 9861]** KangarooTwelve and TurboSHAKE.
@@ -1564,7 +1537,7 @@ More precisely:
 
 ## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
 
-This appendix provides a reference Python implementation of the cryptographic primitives used by TreeWrap. It
+This appendix provides a reference Python implementation of the cryptographic primitives used by TW128. It
 is intended for specification clarity and test-vector generation; production implementations should use
 platform-optimized Keccak libraries.
 
@@ -1650,7 +1623,7 @@ def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
 ### Integer and String Encodings
 
 `left_encode` and `encode_string` follow NIST SP 800-185. `length_encode` follows RFC 9861: for $`x = 0`$ it returns a
-single `0x00` byte rather than `0x00 0x01`. TreeWrap only calls `length_encode` with $`n \geq 2`$, so the difference is
+single `0x00` byte rather than `0x00 0x01`. TW128 only calls `length_encode` with $`n \geq 2`$, so the difference is
 unreachable in practice.
 
 <!-- begin:code:ref/encodings.py:encodings_all -->
