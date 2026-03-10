@@ -60,6 +60,9 @@ single rate block). $`\max(\tau, C) < R`$ (tag and chain value outputs fit in a 
 TreeWrap requires a KDF to derive per-invocation keys from the master key, nonce, and associated data. TW128 uses
 TurboSHAKE128.
 
+**`Keccak-p[1600,12]`:** The 12-round Keccak permutation on a 1600-bit state, as defined in RFC 9861. This is the
+underlying permutation for both the TurboSHAKE128 KDF and the TW128 duplex.
+
 **`TurboSHAKE128(M, D, l)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D` (0x01 - 0x7F),
 and an output length `l` in bytes.
 
