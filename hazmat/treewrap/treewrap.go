@@ -179,7 +179,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	}
 }
 
-// encryptComplete processes nFlush complete leaf chunks via the SIMD cascade.
+// encryptComplete processes nFlush complete leaf chunks via x8 SIMD with padding for remainders.
 func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
@@ -192,31 +192,26 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		idx += 8
 	}
 
-	var s4 keccak.State4
-	for idx+4 <= nFlush {
+	// Remainder: pad to 8 and use x8.
+	if rem := nFlush - idx; rem >= 2 {
 		off := idx * ChunkSize
-		encryptX4(&e.key, uint64(e.nLeaves+1), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], &s4)
-		e.final.AbsorbCVx4(&s4)
-		e.nLeaves += 4
-		idx += 4
+		realBytes := rem * ChunkSize
+		var padSrc, padDst [8 * ChunkSize]byte
+		copy(padSrc[:realBytes], src[off:off+realBytes])
+		encryptX8(&e.key, uint64(e.nLeaves+1), padSrc[:], padDst[:], &s8)
+		copy(dst[off:off+realBytes], padDst[:realBytes])
+		e.final.AbsorbCVx8N(&s8, rem)
+		e.nLeaves += rem
+		idx += rem
 	}
 
-	var s2 keccak.State2
-	for idx+2 <= nFlush {
+	// Single remainder via x1.
+	if idx < nFlush {
 		off := idx * ChunkSize
-		encryptX2(&e.key, uint64(e.nLeaves+1), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], &s2)
-		e.final.AbsorbCVx2(&s2)
-		e.nLeaves += 2
-		idx += 2
-	}
-
-	var s1 keccak.State1
-	for idx < nFlush {
-		off := idx * ChunkSize
+		var s1 keccak.State1
 		encryptX1(&e.key, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
 		e.final.AbsorbCV(&s1)
 		e.nLeaves++
-		idx++
 	}
 }
 
@@ -295,7 +290,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	}
 }
 
-// decryptComplete processes nFlush complete leaf chunks via the SIMD cascade.
+// decryptComplete processes nFlush complete leaf chunks via x8 SIMD with padding for remainders.
 func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
@@ -308,31 +303,26 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		idx += 8
 	}
 
-	var s4 keccak.State4
-	for idx+4 <= nFlush {
+	// Remainder: pad to 8 and use x8.
+	if rem := nFlush - idx; rem >= 2 {
 		off := idx * ChunkSize
-		decryptX4(&d.key, uint64(d.nLeaves+1), src[off:off+4*ChunkSize], dst[off:off+4*ChunkSize], &s4)
-		d.final.AbsorbCVx4(&s4)
-		d.nLeaves += 4
-		idx += 4
+		realBytes := rem * ChunkSize
+		var padSrc, padDst [8 * ChunkSize]byte
+		copy(padSrc[:realBytes], src[off:off+realBytes])
+		decryptX8(&d.key, uint64(d.nLeaves+1), padSrc[:], padDst[:], &s8)
+		copy(dst[off:off+realBytes], padDst[:realBytes])
+		d.final.AbsorbCVx8N(&s8, rem)
+		d.nLeaves += rem
+		idx += rem
 	}
 
-	var s2 keccak.State2
-	for idx+2 <= nFlush {
+	// Single remainder via x1.
+	if idx < nFlush {
 		off := idx * ChunkSize
-		decryptX2(&d.key, uint64(d.nLeaves+1), src[off:off+2*ChunkSize], dst[off:off+2*ChunkSize], &s2)
-		d.final.AbsorbCVx2(&s2)
-		d.nLeaves += 2
-		idx += 2
-	}
-
-	var s1 keccak.State1
-	for idx < nFlush {
-		off := idx * ChunkSize
+		var s1 keccak.State1
 		decryptX1(&d.key, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
 		d.final.AbsorbCV(&s1)
 		d.nLeaves++
-		idx++
 	}
 }
 
@@ -392,37 +382,6 @@ func encryptX1(key *[KeySize]byte, index uint64, pt, ct []byte, s *keccak.State1
 	s.PadPermute(finalPos(len(pt)), chainValueDS)
 }
 
-func encryptX2(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, s *keccak.State2) {
-	s.Reset()
-	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
-	s.AbsorbFinal(b0[:], b1[:], initDS)
-	s.Permute12()
-
-	done := s.FastLoopEncrypt168(pt, ct, ChunkSize)
-	tail := ChunkSize - done
-	s.EncryptBytes(0, pt[done:done+tail], ct[done:done+tail])
-	s.EncryptBytes(1, pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail])
-
-	s.PadPermute(finalPos(ChunkSize), chainValueDS)
-}
-
-func encryptX4(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, s *keccak.State4) {
-	s.Reset()
-	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
-	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
-	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], initDS)
-	s.Permute12()
-
-	done := s.FastLoopEncrypt168(pt, ct, ChunkSize)
-	tail := ChunkSize - done
-	s.EncryptBytes(0, pt[done:done+tail], ct[done:done+tail])
-	s.EncryptBytes(1, pt[ChunkSize+done:ChunkSize+done+tail], ct[ChunkSize+done:ChunkSize+done+tail])
-	s.EncryptBytes(2, pt[2*ChunkSize+done:2*ChunkSize+done+tail], ct[2*ChunkSize+done:2*ChunkSize+done+tail])
-	s.EncryptBytes(3, pt[3*ChunkSize+done:3*ChunkSize+done+tail], ct[3*ChunkSize+done:3*ChunkSize+done+tail])
-
-	s.PadPermute(finalPos(ChunkSize), chainValueDS)
-}
-
 func encryptX8(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, s *keccak.State8) {
 	s.Reset()
 	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
@@ -451,37 +410,6 @@ func decryptX1(key *[KeySize]byte, index uint64, ct, pt []byte, s *keccak.State1
 	s.DecryptBytesAt(0, ct[done:], pt[done:])
 
 	s.PadPermute(finalPos(len(ct)), chainValueDS)
-}
-
-func decryptX2(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, s *keccak.State2) {
-	s.Reset()
-	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
-	s.AbsorbFinal(b0[:], b1[:], initDS)
-	s.Permute12()
-
-	done := s.FastLoopDecrypt168(ct, pt, ChunkSize)
-	tail := ChunkSize - done
-	s.DecryptBytes(0, ct[done:done+tail], pt[done:done+tail])
-	s.DecryptBytes(1, ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail])
-
-	s.PadPermute(finalPos(ChunkSize), chainValueDS)
-}
-
-func decryptX4(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, s *keccak.State4) {
-	s.Reset()
-	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
-	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
-	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], initDS)
-	s.Permute12()
-
-	done := s.FastLoopDecrypt168(ct, pt, ChunkSize)
-	tail := ChunkSize - done
-	s.DecryptBytes(0, ct[done:done+tail], pt[done:done+tail])
-	s.DecryptBytes(1, ct[ChunkSize+done:ChunkSize+done+tail], pt[ChunkSize+done:ChunkSize+done+tail])
-	s.DecryptBytes(2, ct[2*ChunkSize+done:2*ChunkSize+done+tail], pt[2*ChunkSize+done:2*ChunkSize+done+tail])
-	s.DecryptBytes(3, ct[3*ChunkSize+done:3*ChunkSize+done+tail], pt[3*ChunkSize+done:3*ChunkSize+done+tail])
-
-	s.PadPermute(finalPos(ChunkSize), chainValueDS)
 }
 
 func decryptX8(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, s *keccak.State8) {

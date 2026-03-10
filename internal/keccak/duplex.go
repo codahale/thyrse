@@ -108,6 +108,16 @@ func (d *Duplex) AbsorbCVx8(s *State8) {
 	}
 }
 
+// AbsorbCVx8N absorbs the first n chain values (32 bytes each) from s in instance order.
+func (d *Duplex) AbsorbCVx8N(s *State8, n int) {
+	if d.pos&7 != 0 {
+		panic("keccak: AbsorbCV on non-lane-aligned state")
+	}
+	for inst := range n {
+		d.absorbCVLanes(s.a[0][inst], s.a[1][inst], s.a[2][inst], s.a[3][inst])
+	}
+}
+
 // absorbCVLanes absorbs a 4-lane (32-byte) chain value. The caller must ensure
 // d.pos is lane-aligned.
 func (d *Duplex) absorbCVLanes(w0, w1, w2, w3 uint64) {

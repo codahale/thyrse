@@ -6,12 +6,6 @@ package keccak
 func p1600(a *State1)
 
 //go:noescape
-func p1600x2Lane(a *State2)
-
-//go:noescape
-func p1600x4Lane(a *State4)
-
-//go:noescape
 func p1600x8Lane(a *State8)
 
 //go:noescape
@@ -23,12 +17,36 @@ func permute12x1Arch(s *State1) bool {
 }
 
 func permute12x2Arch(s *State2) bool {
-	p1600x2Lane(s)
+	// Back x2 permutation with x8: pad State2 into State8, permute, extract.
+	var s8 State8
+	for i := range Lanes {
+		s8.a[i][0] = s.a[i][0]
+		s8.a[i][1] = s.a[i][1]
+	}
+	permute12x8Arch(&s8)
+	for i := range Lanes {
+		s.a[i][0] = s8.a[i][0]
+		s.a[i][1] = s8.a[i][1]
+	}
 	return true
 }
 
 func permute12x4Arch(s *State4) bool {
-	p1600x4Lane(s)
+	// Back x4 permutation with x8: pad State4 into State8, permute, extract.
+	var s8 State8
+	for i := range Lanes {
+		s8.a[i][0] = s.a[i][0]
+		s8.a[i][1] = s.a[i][1]
+		s8.a[i][2] = s.a[i][2]
+		s8.a[i][3] = s.a[i][3]
+	}
+	permute12x8Arch(&s8)
+	for i := range Lanes {
+		s.a[i][0] = s8.a[i][0]
+		s.a[i][1] = s8.a[i][1]
+		s.a[i][2] = s8.a[i][2]
+		s.a[i][3] = s8.a[i][3]
+	}
 	return true
 }
 

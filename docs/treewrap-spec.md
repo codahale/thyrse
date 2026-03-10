@@ -11,7 +11,7 @@
 
 TreeWrap128 is an authenticated-encryption scheme with associated data (AEAD) built on Keccak-p[1600,12]. It uses a
 TurboSHAKE128-based key derivation to produce a per-invocation key, then encrypts via a Sakura flat-tree topology that
-enables SIMD acceleration (NEON, AVX2, AVX-512) on large inputs. The final node encrypts the first chunk directly, then
+enables SIMD acceleration (NEON, AVX-512) on large inputs. The final node encrypts the first chunk directly, then
 absorbs chain values from parallel leaves that process subsequent chunks, producing a single MAC tag.
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED",
@@ -1110,7 +1110,7 @@ State4 layout (N = 4, 25 lanes × 32 bytes):
   lane 24: [ y₀  y₁  y₂  y₃ ]
 ```
 
-Each row is one SIMD register wide (32 bytes for 4×64-bit on AVX2, 64 bytes for 8×64-bit on AVX-512). This layout has
+Each row is one SIMD register wide (e.g. 64 bytes for 8×64-bit on AVX-512). This layout has
 two critical properties:
 
 1. **Absorb is a single vector XOR per lane.** To absorb a rate block across all N instances, load the corresponding
@@ -1119,28 +1119,25 @@ two critical properties:
    applied to 25 registers, processing N permutations for the cost of one.
 
 The N input streams are typically laid out at a fixed stride (the chunk size, 8192 bytes), so absorbing lane `i` across
-all instances is a gather from `input + instance × stride + i × 8`. On platforms where explicit gather is expensive
-(AVX2 `VPGATHERQQ` at width 4 is slower than discrete loads), loading each instance's lane individually and packing
-into a vector with insert or shuffle instructions is faster.
+all instances is a gather from `input + instance × stride + i × 8`. On AVX-512, `VPGATHERQQ` performs well at width 8;
+on platforms without hardware gather, loading each instance's lane individually and packing into a vector with insert
+or shuffle instructions is used instead.
 
-**Cascade scheduling.** Given a batch of complete chunks, process them widest-first using the largest available kernel,
-then fall back to narrower kernels for the remainder. For example, 11 chunks would be scheduled as one x8 batch
-followed by one x2 batch and one x1. Each batch initializes an N-way PlSnP state by absorbing
-`key ‖ LEU64(leaf_index)` into each instance, runs the fused absorb-permute loop over the chunk data, then extracts N
-chain values. Chain values are absorbed into the final node incrementally — there is no need to buffer them all before
-finalizing.
+**Batch scheduling.** Given a batch of complete chunks, process them in groups of the platform's lane width, padding
+the final group if needed. For example, on x86-64 (8-wide), 11 chunks would be scheduled as one full x8 batch, one
+padded x8 batch processing 3 chunks (with 5 unused lanes), yielding the same result as processing 8 + 3. Each batch
+initializes an N-way PlSnP state by absorbing `key ‖ LEU64(leaf_index)` into each instance, runs the fused
+absorb-permute loop over the chunk data, then extracts N chain values. Chain values are absorbed into the final node
+incrementally — there is no need to buffer them all before finalizing.
 
-The maximum useful kernel width is platform-dependent:
+The kernel width is platform-dependent:
 
-| Platform | Native ceiling | x8 strategy |
-|----------|---------------|-------------|
+| Platform | Kernel width | Implementation |
+|----------|-------------|----------------|
 | amd64 + AVX-512 | x8 (ZMM, state-resident in Z0–Z24) | Native |
-| amd64 + AVX2 | x4 (YMM) | 2 × x4 cascade |
-| arm64 + NEON | x2 (ASIMD 2×uint64) | 4 × x2 cascade |
+| amd64 + AVX2 | x8 (YMM, lane-major, 2 × x4 rounds) | Native |
+| arm64 + NEON | x4 (ASIMD, 2 × x2 rounds) | Native |
 | Scalar fallback | x1 | Serial |
-
-An x8 kernel implemented as two sequential x4 invocations still outperforms four sequential x2 invocations because the
-PlSnP state stays hot in registers across the two halves.
 
 **Fused absorb-permute loops.** The inner loop of each leaf processes a full rate block (168 bytes = 21 lanes) per
 iteration. A fused implementation absorbs the block and immediately permutes without storing and reloading the PlSnP

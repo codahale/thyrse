@@ -124,12 +124,9 @@ func (h *Hasher) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// processLeafBatch computes leaf CVs for nLeaves complete chunks using X8→X4→X2→X1 cascade.
+// processLeafBatch computes leaf CVs for nLeaves complete chunks using x8 SIMD with padding for remainders.
 func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 	var s8 keccak.State8
-	var s4 keccak.State4
-	var s2 keccak.State2
-	var s1 keccak.State1
 	idx := 0
 
 	for idx+8 <= nLeaves {
@@ -139,21 +136,19 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 		idx += 8
 	}
 
-	for idx+4 <= nLeaves {
+	// Remainder: pad to 8 and use x8.
+	if rem := nLeaves - idx; rem >= 2 {
 		off := idx * BlockSize
-		leafStateX4(data[off:off+4*BlockSize], &s4)
-		h.ts.AbsorbCVx4(&s4)
-		idx += 4
+		var padData [8 * BlockSize]byte
+		copy(padData[:rem*BlockSize], data[off:off+rem*BlockSize])
+		leafStateX8(padData[:], &s8)
+		h.ts.AbsorbCVx8N(&s8, rem)
+		idx += rem
 	}
 
-	for idx+2 <= nLeaves {
-		off := idx * BlockSize
-		leafStateX2(data[off:off+2*BlockSize], &s2)
-		h.ts.AbsorbCVx2(&s2)
-		idx += 2
-	}
-
-	for idx < nLeaves {
+	// Single remainder via x1.
+	if idx < nLeaves {
+		var s1 keccak.State1
 		off := idx * BlockSize
 		leafStateX1(data[off:off+BlockSize], &s1)
 		h.ts.AbsorbCV(&s1)
@@ -327,28 +322,6 @@ func leafStateX1(data []byte, s *keccak.State1) {
 	s.Reset()
 	off := s.FastLoopAbsorb168(data)
 	s.AbsorbFinal(data[off:], leafDS)
-	s.Permute12()
-}
-
-// leafStateX2 computes 2 leaf states in parallel.
-func leafStateX2(data []byte, s *keccak.State2) {
-	s.Reset()
-	off := s.FastLoopAbsorb168(data, BlockSize)
-	s.AbsorbFinal(data[off:BlockSize], data[BlockSize+off:2*BlockSize], leafDS)
-	s.Permute12()
-}
-
-// leafStateX4 computes 4 leaf states in parallel.
-func leafStateX4(data []byte, s *keccak.State4) {
-	s.Reset()
-	off := s.FastLoopAbsorb168(data, BlockSize)
-	s.AbsorbFinal(
-		data[off:BlockSize],
-		data[BlockSize+off:2*BlockSize],
-		data[2*BlockSize+off:3*BlockSize],
-		data[3*BlockSize+off:4*BlockSize],
-		leafDS,
-	)
 	s.Permute12()
 }
 

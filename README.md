@@ -9,7 +9,7 @@
 Thyrse is a transcript-based cryptographic protocol framework built on the $\text{Keccak-}f[1600, 12]$ permutation.
 Inspired by [STROBE], [Noise Protocol], and [Xoodyak], it replaces the usual grab-bag of hash functions, MACs, stream
 ciphers, and KDFs with a single permutation — then builds everything from basic AEAD to threshold signatures on top of
-it. Optimized for modern CPUs (AVX-512, AVX2, NEON/FEAT_SHA3), Thyrse delivers 10+ Gb/s on modern processors at
+it. Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3), Thyrse delivers 10+ Gb/s on modern processors at
 a 128-bit security level while remaining fast enough in software for embedded devices.
 
 The security of every scheme reduces to the properties of the underlying sponge (indifferentiability from a random
@@ -53,14 +53,12 @@ All schemes are in `schemes/basic/` and `schemes/complex/` respectively.
 ## Performance
 
 Under the hood, Thyrse accelerates large messages with [TreeWrap] — a tree-parallel authenticated encryption layer
-using Sakura flat-tree encoding with kangaroo hopping. TreeWrap cascades across SIMD widths (x1 → x2 → x4 → x8),
-saturating available vector units automatically.
+using Sakura flat-tree encoding with kangaroo hopping. TreeWrap processes leaf chunks 8-wide on x86-64 and 4-wide on
+ARM64, saturating available vector units automatically.
 
 | Platform | SIMD | Parallel lanes |
 |----------|------|----------------|
-| x86-64   | AVX-512 | up to 8-wide |
-| x86-64   | AVX2 | up to 4-wide |
-| x86-64   | SSE2 | up to 2-wide (fallback) |
+| x86-64   | AVX-512 / AVX2 | 8-wide |
 | ARM64    | NEON / FEAT_SHA3 | up to 4-wide |
 | Any      | Pure Go | all widths (portable) |
 
