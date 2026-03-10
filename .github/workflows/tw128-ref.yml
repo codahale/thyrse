@@ -1,4 +1,4 @@
-name: TreeWrap Spec Validation
+name: TW128 Spec Validation
 
 on:
   workflow_dispatch:
