@@ -1675,3 +1675,39 @@ dec_done_avx512:
 	VMOVDQU64	Z24, 24*64(AX)
 	VZEROUPPER
 	RET
+
+// fastLoopAbsorb168x1AVX512 absorbs full 168-byte blocks into State1 using
+// AVX-512. State is kept in ZMM registers across absorb+permute iterations.
+//
+// func fastLoopAbsorb168x1AVX512(s *State1, in *byte, n int)
+TEXT ·fastLoopAbsorb168x1AVX512(SB), NOSPLIT, $0-24
+	MOVQ	s+0(FP), DI
+	MOVQ	in+8(FP), SI
+	MOVQ	n+16(FP), CX
+
+	X1_SETUP_MASKS
+	LEAQ	avx512_x1_consts(SB), R8
+	X1_LOAD_CONSTS
+	X1_LOAD_STATE
+
+absorb_loop_x1_avx512:
+	CMPQ	CX, $168
+	JB	done_x1_avx512
+
+	X1_ABSORB_168
+
+	LEAQ	avx512_x1_iotas+96(SB), R10
+	MOVL	$6, AX
+
+round_loop_x1_avx512:
+	X1_EVEN_ROUND
+	X1_ODD_ROUND
+	DECL	AX
+	JNZ	round_loop_x1_avx512
+
+	JMP	absorb_loop_x1_avx512
+
+done_x1_avx512:
+	X1_STORE_STATE
+	VZEROUPPER
+	RET

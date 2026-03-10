@@ -8,13 +8,20 @@ import "unsafe"
 func fastLoopAbsorb168x1(s *State1, in *byte, n int)
 
 //go:noescape
+func fastLoopAbsorb168x1AVX512(s *State1, in *byte, n int)
+
+//go:noescape
 func fastLoopAbsorb168x8AVX2(s *State8, in *byte, stride, n int)
 
 //go:noescape
 func fastLoopAbsorb168x8AVX512(s *State8, in *byte, stride, n int)
 
 func fastLoopAbsorb168x1Arch(s *State1, in []byte) bool {
-	fastLoopAbsorb168x1(s, unsafe.SliceData(in), len(in))
+	if hasAVX512 {
+		fastLoopAbsorb168x1AVX512(s, unsafe.SliceData(in), len(in))
+	} else {
+		fastLoopAbsorb168x1(s, unsafe.SliceData(in), len(in))
+	}
 	return true
 }
 

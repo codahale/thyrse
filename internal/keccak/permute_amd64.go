@@ -6,13 +6,20 @@ package keccak
 func p1600(a *State1)
 
 //go:noescape
+func p1600AVX512(a *State1)
+
+//go:noescape
 func p1600x8Lane(a *State8)
 
 //go:noescape
 func p1600x8AVX512State(a *State8)
 
 func permute12x1Arch(s *State1) bool {
-	p1600(s)
+	if hasAVX512 {
+		p1600AVX512(s)
+	} else {
+		p1600(s)
+	}
 	return true
 }
 

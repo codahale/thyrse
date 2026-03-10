@@ -131,3 +131,229 @@
 	X8_TRPC_MAP_AVX512(Z10, Z11, Z12, Z13, Z14, 18, 1, 6, 25, 8, Z26, Z27, Z28, Z29, Z25); \
 	X8_TRPC_MAP_AVX512(Z15, Z16, Z17, Z18, Z19, 36, 10, 15, 56, 27, Z29, Z25, Z26, Z27, Z28); \
 	X8_TRPC_MAP_AVX512(Z20, Z21, Z22, Z23, Z24, 41, 2, 62, 55, 39, Z27, Z28, Z29, Z25, Z26)
+
+// ─── AVX-512 x1 Keccak-p[1600,12] permutation macros ───
+//
+// Based on Andy Polyakov's CRYPTOGAMS keccak1600-avx512.pl (OpenSSL/XKCP).
+// Ported to Go Plan 9 assembly.
+//
+// State layout: one row of the 5×5 state per ZMM register (5 qwords used,
+// 3 wasted). Even and odd rounds alternate between two layouts; the
+// "harmonize" step converts between them.
+//
+// Register allocation:
+//   Z0-Z4:   State (A00-A40, one row per register)
+//   Z5-Z12:  Temporaries
+//   Z13-Z16: Theta permutation indices (Theta[1]-Theta[4]; Theta[0]=identity)
+//   Z17-Z21: Pi0 permutation indices
+//   Z22-Z26: Rhotate0 rotation amounts (even rounds)
+//   Z27-Z31: Rhotate1 rotation amounts (odd rounds)
+//   K1: 0x01    K2: 0x02    K3: 0x04    K4: 0x08    K5: 0x10    K6: 0x1F
+//   R10: round constant pointer
+//   AX: round loop counter
+//
+// Data layout in avx512_x1_consts (1280 bytes, 20 × 64):
+//   Offset    Content          Register
+//     0       theta_perm[0]    (identity, not loaded)
+//    64       theta_perm[1]    Z13
+//   128       theta_perm[2]    Z14
+//   192       theta_perm[3]    Z15
+//   256       theta_perm[4]    Z16
+//   320       rhotates1[0]     Z27
+//   384       rhotates1[1]     Z28
+//   448       rhotates1[2]     Z29
+//   512       rhotates1[3]     Z30
+//   576       rhotates1[4]     Z31
+//   640       rhotates0[0]     Z22
+//   704       rhotates0[1]     Z23
+//   768       rhotates0[2]     Z24
+//   832       rhotates0[3]     Z25
+//   896       rhotates0[4]     Z26
+//   960       pi0_perm[0]      Z17
+//  1024       pi0_perm[1]      Z18
+//  1088       pi0_perm[2]      Z19
+//  1152       pi0_perm[3]      Z20
+//  1216       pi0_perm[4]      Z21
+
+// X1_SETUP_MASKS initializes K1-K6 mask registers.
+#define X1_SETUP_MASKS \
+	KXNORW K6, K6, K6; \
+	KSHIFTRW $15, K6, K1; \
+	KSHIFTRW $11, K6, K6; \
+	KSHIFTLW $1, K1, K2; \
+	KSHIFTLW $2, K1, K3; \
+	KSHIFTLW $3, K1, K4; \
+	KSHIFTLW $4, K1, K5
+
+// X1_LOAD_CONSTS loads all 19 constant vectors from R8 into Z13-Z31.
+// R8 must point to avx512_x1_consts.
+#define X1_LOAD_CONSTS \
+	VMOVDQU64 64(R8), Z13; \
+	VMOVDQU64 128(R8), Z14; \
+	VMOVDQU64 192(R8), Z15; \
+	VMOVDQU64 256(R8), Z16; \
+	VMOVDQU64 320(R8), Z27; \
+	VMOVDQU64 384(R8), Z28; \
+	VMOVDQU64 448(R8), Z29; \
+	VMOVDQU64 512(R8), Z30; \
+	VMOVDQU64 576(R8), Z31; \
+	VMOVDQU64 640(R8), Z22; \
+	VMOVDQU64 704(R8), Z23; \
+	VMOVDQU64 768(R8), Z24; \
+	VMOVDQU64 832(R8), Z25; \
+	VMOVDQU64 896(R8), Z26; \
+	VMOVDQU64 960(R8), Z17; \
+	VMOVDQU64 1024(R8), Z18; \
+	VMOVDQU64 1088(R8), Z19; \
+	VMOVDQU64 1152(R8), Z20; \
+	VMOVDQU64 1216(R8), Z21
+
+// X1_LOAD_STATE loads State1 from (DI) into Z0-Z4.
+// Pre-zeroes registers so masked loads leave elements 5-7 as zero.
+#define X1_LOAD_STATE \
+	VPXORQ Z0, Z0, Z0; \
+	VPXORQ Z1, Z1, Z1; \
+	VPXORQ Z2, Z2, Z2; \
+	VPXORQ Z3, Z3, Z3; \
+	VPXORQ Z4, Z4, Z4; \
+	VMOVDQU64 0(DI), K6, Z0; \
+	VMOVDQU64 40(DI), K6, Z1; \
+	VMOVDQU64 80(DI), K6, Z2; \
+	VMOVDQU64 120(DI), K6, Z3; \
+	VMOVDQU64 160(DI), K6, Z4
+
+// X1_STORE_STATE stores Z0-Z4 back to State1 at (DI).
+#define X1_STORE_STATE \
+	VMOVDQU64 Z0, K6, 0(DI); \
+	VMOVDQU64 Z1, K6, 40(DI); \
+	VMOVDQU64 Z2, K6, 80(DI); \
+	VMOVDQU64 Z3, K6, 120(DI); \
+	VMOVDQU64 Z4, K6, 160(DI)
+
+// X1_ABSORB_168 XORs 168 bytes (21 lanes) from (SI) into Z0-Z4.
+// Uses Z5 as scratch. Advances SI by 168, decrements CX by 168.
+#define X1_ABSORB_168 \
+	VPXORQ Z5, Z5, Z5; \
+	VMOVDQU64 0(SI), K6, Z5; \
+	VPXORQ Z5, Z0, Z0; \
+	VMOVDQU64 40(SI), K6, Z5; \
+	VPXORQ Z5, Z1, Z1; \
+	VMOVDQU64 80(SI), K6, Z5; \
+	VPXORQ Z5, Z2, Z2; \
+	VMOVDQU64 120(SI), K6, Z5; \
+	VPXORQ Z5, Z3, Z3; \
+	VPXORQ Z5, Z5, Z5; \
+	VMOVDQU64 160(SI), K1, Z5; \
+	VPXORQ Z5, Z4, Z4; \
+	ADDQ $168, SI; \
+	SUBQ $168, CX
+
+// X1_EVEN_ROUND performs one even round of Keccak-f[1600].
+// R10 points to round constant; advanced by 16 on exit.
+#define X1_EVEN_ROUND \
+	/* Theta */ \
+	VMOVDQA64 Z0, Z5; \
+	VPTERNLOGQ $0x96, Z2, Z1, Z0; \
+	VPTERNLOGQ $0x96, Z4, Z3, Z0; \
+	VPROLQ $1, Z0, Z6; \
+	VPERMQ Z0, Z13, Z0; \
+	VPERMQ Z6, Z16, Z6; \
+	VPTERNLOGQ $0x96, Z0, Z6, Z5; \
+	VPTERNLOGQ $0x96, Z0, Z6, Z1; \
+	VPTERNLOGQ $0x96, Z0, Z6, Z2; \
+	VPTERNLOGQ $0x96, Z0, Z6, Z3; \
+	VPTERNLOGQ $0x96, Z0, Z6, Z4; \
+	/* Rho */ \
+	VPROLVQ Z22, Z5, Z0; \
+	VPROLVQ Z23, Z1, Z1; \
+	VPROLVQ Z24, Z2, Z2; \
+	VPROLVQ Z25, Z3, Z3; \
+	VPROLVQ Z26, Z4, Z4; \
+	/* Pi */ \
+	VPERMQ Z0, Z17, Z0; \
+	VPERMQ Z1, Z18, Z1; \
+	VPERMQ Z2, Z19, Z2; \
+	VPERMQ Z3, Z20, Z3; \
+	VPERMQ Z4, Z21, Z4; \
+	/* Chi */ \
+	VMOVDQA64 Z0, Z5; \
+	VMOVDQA64 Z1, Z6; \
+	VPTERNLOGQ $0xD2, Z2, Z1, Z0; \
+	VPTERNLOGQ $0xD2, Z3, Z2, Z1; \
+	VPTERNLOGQ $0xD2, Z4, Z3, Z2; \
+	VPTERNLOGQ $0xD2, Z5, Z4, Z3; \
+	VPTERNLOGQ $0xD2, Z6, Z5, Z4; \
+	/* Iota */ \
+	VPXORQ (R10), Z0, K1, Z0; \
+	ADDQ $16, R10; \
+	/* Harmonize: convert even layout to odd layout */ \
+	VPBLENDMQ Z2, Z1, K2, Z6; \
+	VPBLENDMQ Z3, Z2, K2, Z7; \
+	VPBLENDMQ Z4, Z3, K2, Z8; \
+	VPBLENDMQ Z1, Z0, K2, Z5; \
+	VPBLENDMQ Z0, Z4, K2, Z9; \
+	VPBLENDMQ Z3, Z6, K3, Z6; \
+	VPBLENDMQ Z4, Z7, K3, Z7; \
+	VPBLENDMQ Z2, Z5, K3, Z5; \
+	VPBLENDMQ Z0, Z8, K3, Z8; \
+	VPBLENDMQ Z1, Z9, K3, Z9; \
+	VPBLENDMQ Z4, Z6, K4, Z6; \
+	VPBLENDMQ Z3, Z5, K4, Z5; \
+	VPBLENDMQ Z0, Z7, K4, Z7; \
+	VPBLENDMQ Z1, Z8, K4, Z8; \
+	VPBLENDMQ Z2, Z9, K4, Z9; \
+	VPBLENDMQ Z4, Z5, K5, Z5; \
+	VPBLENDMQ Z0, Z6, K5, Z6; \
+	VPBLENDMQ Z1, Z7, K5, Z7; \
+	VPBLENDMQ Z2, Z8, K5, Z8; \
+	VPBLENDMQ Z3, Z9, K5, Z9; \
+	/* vpermq Z5, identity, Z0 — no-op, handled by odd round */ \
+	VPERMQ Z6, Z13, Z1; \
+	VPERMQ Z7, Z14, Z2; \
+	VPERMQ Z8, Z15, Z3; \
+	VPERMQ Z9, Z16, Z4
+
+// X1_ODD_ROUND performs one odd round of Keccak-f[1600].
+// R10 must point 8 bytes past the current round constant (reads at -8(R10)).
+// Z5 holds the new A00 from the harmonize step (moved to Z0 here).
+#define X1_ODD_ROUND \
+	/* Theta */ \
+	VMOVDQA64 Z5, Z0; \
+	VPTERNLOGQ $0x96, Z2, Z1, Z5; \
+	VPTERNLOGQ $0x96, Z4, Z3, Z5; \
+	VPROLQ $1, Z5, Z6; \
+	VPERMQ Z5, Z13, Z5; \
+	VPERMQ Z6, Z16, Z6; \
+	VPTERNLOGQ $0x96, Z5, Z6, Z0; \
+	VPTERNLOGQ $0x96, Z5, Z6, Z3; \
+	VPTERNLOGQ $0x96, Z5, Z6, Z1; \
+	VPTERNLOGQ $0x96, Z5, Z6, Z4; \
+	VPTERNLOGQ $0x96, Z5, Z6, Z2; \
+	/* Rho */ \
+	VPROLVQ Z27, Z0, Z0; \
+	VPROLVQ Z30, Z3, Z6; \
+	VPROLVQ Z28, Z1, Z7; \
+	VPROLVQ Z31, Z4, Z8; \
+	VPROLVQ Z29, Z2, Z9; \
+	/* Chi prep: permute A00 for chi's row needs */ \
+	VPERMQ Z0, Z16, Z10; \
+	VPERMQ Z0, Z15, Z11; \
+	/* Iota */ \
+	VPXORQ -8(R10), Z0, K1, Z0; \
+	/* Pi */ \
+	VPERMQ Z6, Z14, Z1; \
+	VPERMQ Z7, Z16, Z2; \
+	VPERMQ Z8, Z13, Z3; \
+	VPERMQ Z9, Z15, Z4; \
+	/* Chi (interleaved with permutations for odd layout) */ \
+	VPTERNLOGQ $0xD2, Z11, Z10, Z0; \
+	VPERMQ Z6, Z13, Z12; \
+	VPTERNLOGQ $0xD2, Z6, Z12, Z1; \
+	VPERMQ Z7, Z15, Z5; \
+	VPERMQ Z7, Z14, Z7; \
+	VPTERNLOGQ $0xD2, Z7, Z5, Z2; \
+	VPERMQ Z8, Z16, Z6; \
+	VPTERNLOGQ $0xD2, Z6, Z8, Z3; \
+	VPERMQ Z9, Z14, Z5; \
+	VPERMQ Z9, Z13, Z9; \
+	VPTERNLOGQ $0xD2, Z9, Z5, Z4
