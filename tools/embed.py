@@ -177,10 +177,10 @@ def render_aead_vectors(data: dict) -> str:
     aead = data["aead"]
     lines: list[str] = []
 
-    lines.append("### 10.2 TreeWrap128 Vectors")
+    lines.append("### 10.2 TW128 Vectors")
     lines.append("")
-    lines.append("These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt`, including SP 800-185")
-    lines.append("`encode_string` key derivation.")
+    lines.append("These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt` (the TW128 instantiation),")
+    lines.append("including SP 800-185 `encode_string` key derivation.")
     lines.append("")
 
     for case in aead["vectors"]:
