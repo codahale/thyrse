@@ -770,8 +770,9 @@ For fixed $`(K_{tw}, i)`$ and any plaintext-ciphertext pair of equal length, `en
 internal states because both write ciphertext bytes into the rate. This is structural (no probabilistic component): the overwrite rule `S[pos] = ct[j]` is executed
 identically in both directions. In `encrypt`, the ciphertext byte is computed as `pt[j] XOR S[pos]` and then written
 back via the overwrite; in `decrypt`, the ciphertext byte is already available and written directly. Either way, the
-state after the overwrite contains the same ciphertext byte at the same position, so subsequent permutation inputs -- and
-therefore the tag -- are identical.
+state after the overwrite contains the same ciphertext byte at the same position. The `pos` counter also evolves
+identically: both directions increment `pos` by 1 per byte and permute when `pos` reaches $`R`$, so permutation
+boundaries are the same. Subsequent permutation inputs -- and therefore the tag -- are identical.
 
 **Lemma 3 (Fixed-key bijection).**
 For fixed $`(K_{tw}, i)`$ and message length, the encrypt function is a deterministic, invertible map on the message
