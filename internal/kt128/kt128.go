@@ -152,7 +152,6 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 		off := idx * BlockSize
 		leafStateX1(data[off:off+BlockSize], &s1)
 		h.ts.AbsorbCV(&s1)
-		idx++
 	}
 
 	h.leafCount += uint64(nLeaves)
