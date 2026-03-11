@@ -803,12 +803,10 @@ value format, and each format is injective and recoverable.
 $`\mathrm{deinterleave}`$ is a left inverse of $`\mathrm{interleave}`$ (Claim 1). The frame decoder is a left inverse
 of $`\mathrm{encode\_frame}`$. The per-operation value decoder is a left inverse of each operation's value encoding. Any
 function with a left inverse is injective. By composition, the full transcript encoding is recoverable: injective, with a
-polynomial-time decoder that recovers the complete input tuple from any encoded transcript.
+polynomial-time decoder that recovers the complete input tuple from any encoded transcript. $`\square`$
 
 By Theorem 8 (§8.2), each Thyrse finalization is therefore KDF-secure: the output is indistinguishable from random given
-at least one unpredictable input in the transcript. Combined with KT128's collision resistance (§8.1), distinct
-transcript instances produce distinct chain values except with negligible probability (quantified in §8.5), preventing subsequent transcripts
-from converging. $`\square`$
+at least one unpredictable input in the transcript.
 
 ### 8.4 Chain Independence
 
