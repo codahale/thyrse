@@ -902,8 +902,8 @@ pseudorandomness claims require that the transcript contains at least one unpred
 **Derive.** The output is produced by KT128 with customization string `0x21` on the current transcript. Collision
 resistance and preimage resistance follow directly from KT128 (§8.1), regardless of whether the transcript contains
 unpredictable inputs. When the transcript does contain an unpredictable input, KDF security (§8.3) ensures the output
-is indistinguishable from random; combined with injectivity of the encoding (which guarantees distinct transcripts produce independent outputs), this
-gives PRF security.
+is indistinguishable from random, and injectivity of the encoding ensures that distinct transcripts produce
+independent outputs. Together these give PRF security.
 
 **Ratchet.** The chain value (customization string `0x24`) is the sole output. The pre-ratchet transcript is
 unrecoverable from the chain value by KT128 preimage resistance. Forward secrecy holds provided the implementation
