@@ -881,17 +881,20 @@ differs from the legitimate one. Both duplexes process identical bytes up to pos
 that point. At position $`p`$, the overwrite rule writes different ciphertext bytes into $`S[\mathit{pos}]`$, producing
 different rate content. Whether $`p`$ falls within an intermediate full-rate block or within the final partial block
 before `pad_permute`, the rate portion of the next $`\pi`$-input (either the full-rate permutation or the `pad_permute`
-call) differs in at least one byte. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the $`\pi`$-output is therefore
-independent of the legitimate computation's output at the same point. All subsequent state — including the tag — is
-therefore independent of the legitimate tag.
+call) differs in at least one byte. The capacity portion is identical (both computations share the same duplex chain up
+to position $`p`$), so the full 1600-bit $`\pi`$-input is distinct from the legitimate computation's input at the same
+point. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, this input is also distinct from all other construction calls' inputs
+(no capacity collision from a separate duplex instance), so the input is fresh and $`\pi`$ produces an independent
+output. All subsequent state — including the tag — is therefore independent of the legitimate tag.
 For $`n > 1`$: a different ciphertext in at least one chunk produces a different chain value by the same
 byte-level divergence argument within that leaf; the final node absorbs different data, producing a different capacity
 state and hence a different tag.
 
-If the forged ciphertext has a different length, the chunking or final-block `pos` differs, producing a structurally
-different tag computation. If the forgery targets a different context $`(N', AD')`$, the derived key differs, so the tag
-computation is independent (different init capacity states, no capacity collision under
-$`\neg\mathsf{Bad}_{\mathrm{perm}}`$). Across $`S`$ attempts (union bound):
+If the forged ciphertext has a different length, the final `pad_permute` call occurs at a different `pos` value,
+placing the domain byte at a different rate position; the resulting $`\pi`$-input differs from any legitimate
+computation's tag-squeeze input, so the tag is independent. If the forgery targets a different context
+$`(N', AD')`$, the derived key differs, producing a different init $`\pi`$-input and hence an independent state chain
+(no capacity collision under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$). Across $`S`$ attempts (union bound):
 
 ```math
 \mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le \frac{S}{2^{8\tau}}.
