@@ -904,8 +904,10 @@ Applying byte-level divergence to each case:
 
 - *$`n = 1`$:* The forged ciphertext diverges within the single duplex. The tag is uniform and independent of the
   legitimate tag.
-- *$`n > 1`$, chunk 0:* Chunk 0 is processed by the final-node duplex directly. Byte-level divergence applies within
-  the final node; no chain values are involved.
+- *$`n > 1`$, chunk 0:* Chunk 0 is processed by the final-node duplex directly. The first differing byte triggers
+  byte-level divergence within the final node's state chain, which cascades through all subsequent $`\pi`$-calls —
+  including HOP_FRAME absorption, chain-value absorption, and the tag squeeze. The tag is therefore uniform and
+  independent of the legitimate tag.
 - *$`n > 1`$, leaf chunk $`i \geq 1`$:* The leaf's state diverges at the first differing byte, and freshness cascades
   through to the chain-value squeeze. The forged chain value is therefore independent of the legitimate one. The final
   node XOR-absorbs this different chain value, altering the rate of a subsequent $`\pi`$-call. The capacity at that
