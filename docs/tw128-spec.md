@@ -50,9 +50,14 @@ The duplex operates on a standard Keccak sponge with the same permutation and ra
 TurboSHAKE128. The `domain_byte` parameter to `_duplex_pad_permute` is supplied by the caller; Section 5 defines
 the five domain separation bytes used by TW128.
 
-Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
-into the rate rather than XORing plaintext into it. This is the Overwrite-mode style analyzed in Bertoni et al.
-(BDPVA11 §6.2, Algorithm 5; Theorem 2) and used in Section 6. Intermediate (non-final) encrypt/decrypt blocks fill the
+TW128 is a duplex-based authenticated encryption construction (BDPVA11 §4) using overwrite-mode absorption
+(BDPVA11 §6.2, Algorithm 5; Theorem 2). Encryption and authentication share a single duplex state, with the tag
+squeezed from the same state that produced the ciphertext. This is a dedicated (non-composed) AE construction,
+distinct from the generic composition paradigms (encrypt-and-MAC, MAC-then-encrypt, encrypt-then-MAC) analyzed by
+Bellare and Namprempre (BN00).
+
+The `encrypt` and `decrypt` operations write ciphertext directly into the rate, yielding identical state evolution
+under both directions (Section 6.2). Intermediate (non-final) encrypt/decrypt blocks fill the
 full R = 168 byte rate and permute without padding; only terminal operations (initialization, chain value finalization, and the tag
 `_duplex_pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply TurboSHAKE-style padding via `pad_permute`. For full-rate
 blocks, a write-only state update is also faster than read-XOR-write on most architectures.
@@ -951,14 +956,12 @@ $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}`$. T
 ```
 **Step 3: Total bound.** The total bound follows from the decomposition in Section 6.5.
 
-> *Note on construction type.* TW128 is structurally an encrypt-and-MAC scheme (the tag is derived from the
-> same duplex state as the ciphertext), not an Encrypt-then-MAC scheme with independent keys. The BN00 composition
-> theorem (Theorem 3.2) is a general result: it states that *any* symmetric encryption scheme satisfying both IND-CPA
-> and INT-CTXT also satisfies IND-CCA2. The theorem's only preconditions are these two properties of the composed
-> scheme, not any requirement on its internal structure (e.g., independent keys or separate MAC). Sections 6.7 and 6.8
-> establish IND-CPA and INT-CTXT for TW128 directly, so the theorem applies. The overwrite-mode duplex ensures
-> that the tag depends on the ciphertext (ciphertext bytes are written into the rate before the tag squeeze), which is
-> why INT-CTXT holds despite the shared state.
+> *Note on construction type.* As noted in Section 4, TW128 is a dedicated (non-composed) AE construction that does
+> not fit any of BN00's three generic composition paradigms. The BN00 composition theorem (Theorem 3.2) does not
+> require any particular internal structure — it states that *any* symmetric encryption scheme satisfying both IND-CPA
+> and INT-CTXT also satisfies IND-CCA2. Sections 6.7 and 6.8 establish IND-CPA and INT-CTXT for TW128 directly, so
+> the theorem applies. The ciphertext dependence of the tag (overwrite mode writes ciphertext bytes into the rate
+> before the tag squeeze) is what makes INT-CTXT hold despite the shared duplex state.
 
 Nonce reuse for the same $`(K,N,AD)`$ is out of scope for this claim and breaks standard nonce-respecting
 IND-CCA2 formulations.
