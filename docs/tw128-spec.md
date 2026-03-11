@@ -185,15 +185,13 @@ The Sakura frame bits at the tag are: chaining hop `'0'` + final `'1'` = `'01'`,
   exponent both `0xFF`.
 
 Each domain byte stores a variable-length suffix bit-string LSB-first, with a delimiter `1` bit immediately after the
-last suffix bit. The last suffix bit encodes the Sakura node type: `1` for final nodes, `0` for inner/leaf nodes. The
-inner-node bytes use 3-bit suffixes (delimiter at bit 3): init (`0x08`, suffix `'000'`), chain value (`0x0B`, suffix
-`'110'`), and KDF (`0x09`, suffix `'100'`). The final-node bytes use 2-bit suffixes (delimiter at bit 2): chaining-hop
-tag (`0x06`, suffix `'01'`) and single-node tag (`0x07`, suffix `'11'`). Final-node separability follows directly from
-the last suffix bit: `1` for final, `0` for inner.
+last suffix bit. The last suffix bit encodes the Sakura node type: `1` for final nodes, `0` for inner/leaf nodes.
+Inner-node bytes use 3-bit suffixes (delimiter at bit 3); final-node bytes use 2-bit suffixes (delimiter at bit 2).
+Final-node separability follows directly from the last suffix bit.
 
 The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (Section 5.1).
 
-The following table summarizes the five domain separation bytes used by TW128:
+The following table lists the five domain separation bytes with their Sakura suffix encodings:
 
 | Byte   | Usage                           | Sakura suffix | Node type |
 |--------|---------------------------------|---------------|-----------|
