@@ -59,7 +59,7 @@ Bellare and Namprempre (BN00).
 The `encrypt` and `decrypt` operations write ciphertext directly into the rate, yielding identical state evolution
 under both directions (Section 6.2). Intermediate (non-final) encrypt/decrypt blocks fill the
 full R = 168 byte rate and permute without padding; only terminal operations (initialization, chain value finalization, and the tag
-`_duplex_pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply TurboSHAKE-style padding via `pad_permute`. For full-rate
+`_duplex_pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply multi-rate padding via `pad_permute`. For full-rate
 blocks, a write-only state update is also faster than read-XOR-write on most architectures.
 
 > **Rate distinction.** Initialization absorbs at effective rate R-1 = 167 bytes: padding (domain byte at `pos`,
