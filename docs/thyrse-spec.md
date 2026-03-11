@@ -987,9 +987,7 @@ where:
   (conjectured negligible).
 - $`2(\sigma + t)^2 / 2^{c+1} = 2(\sigma + t)^2 / 2^{257}`$ is the sponge indifferentiability term, covering all
   Keccak-p evaluations globally (Thyrse backbone and TW128 internals). The factor of 2 arises from the Sakura
-  composition: the combined indifferentiability of KT128 (tree hash on TurboSHAKE128) is bounded by
-  $`q_{\mathrm{tree}}^2 / 2^{c+1} + (\sigma + t)^2 / 2^{c+1}`$, which simplifies to $`2(\sigma + t)^2 / 2^{c+1}`$
-  since $`q_{\mathrm{tree}} \leq \sigma`$.
+  composition (§8.1).
 - $`2q \cdot \varepsilon_{\mathrm{kdf}}`$ accounts for the two-stage hybrid in §8.5: $`q`$ steps to replace chain
   values with random, plus $`q`$ steps to replace operational outputs (keys and Derive values) with random. Each
   step invokes Theorem 8 on a single oracle at cost $`\varepsilon_{\mathrm{kdf}}`$. For key material with
