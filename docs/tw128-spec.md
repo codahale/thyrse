@@ -808,9 +808,8 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}}`$ -- the IND-CPA advant
 independent uniformly random per-context keys.
 
 **Claim.** Within $`\mathsf{G}_1`$ conditioned on
-$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$, the IND-CPA advantage of the internal functions is
-negligible: $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}`$ (the PRP/PRF switching
-distance, absorbed by $`\varepsilon_{\mathrm{cap}}`$ per the Section 6.1 convention).
+$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$:
+$`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
 
 *Justification.* In $`\mathsf{G}_1`$ conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$:
 
@@ -837,10 +836,8 @@ distance, absorbed by $`\varepsilon_{\mathrm{cap}}`$ per the Section 6.1 convent
   By induction, all ciphertext bytes are uniform. Since only ciphertext bytes enter the state via the overwrite rule,
   state evolution depends on the uniform ciphertext sequence, not the adversary's plaintext choice.
 
-The adversary therefore receives approximately uniformly random ciphertexts regardless of which plaintext it submits.
-
-The bare IND-CPA advantage is therefore zero (absorbed into $`\varepsilon_{\mathrm{cap}}`$ via the PRP/PRF switching
-convention of Section 6.1). The total bound follows from the decomposition in Section 6.5.
+The adversary therefore receives exactly uniformly random ciphertexts regardless of which plaintext it submits.
+The bare IND-CPA advantage is zero. The total bound follows from the decomposition in Section 6.5.
 
 ### 6.8 INT-CTXT
 
