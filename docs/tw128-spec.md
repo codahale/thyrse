@@ -825,7 +825,7 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
     The overwrite rule $`S[\mathit{pos}] \leftarrow \mathit{ct}[j]`$ writes the ciphertext byte (uniform) into the
     state, not the plaintext byte. The adversary's plaintext choice determines *which* uniform value
     $`\mathit{ct}[j]`$ takes, but not its distribution.
-  - *Block $`j > 0`$:* The overwrite rule has written $`\mathit{ct}[0..j{-}1]`$ (uniform by induction) into the rate.
+  - *Block $`j > 0`$:* The ciphertext bytes from all preceding rate blocks (uniform by induction) have been written into the rate via the overwrite rule.
     The capacity is carried forward from the previous $`\pi`$-output. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$,
     this capacity has not appeared in any other $`\pi`$-call, so the full input (rate || capacity) is fresh and the
     output is uniformly random. The same XOR and overwrite arguments apply.
