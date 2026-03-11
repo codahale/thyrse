@@ -701,17 +701,22 @@ inputs and determine whether the query contains key material from $`\Sigma_i`$. 
 prediction oracle. This is why recoverability is required: without an efficient decoder, $`\mathcal{B}_i`$ cannot
 inspect adversarial queries.
 
-**Thyrse as an RO-KDF.** Each Thyrse finalization is a direct instance of this construction, in two steps.
+**Thyrse as an RO-KDF.** Each Thyrse finalization is a direct instance of this construction.
 
 First, KT128's domain separation (§8.1) establishes that each customization string selects an independent random oracle.
 Each finalizing operation evaluates KT128 with a fixed customization string (e.g., `0x20` for chain values, `0x21` for
 Derive output). These are independent RO-KDF instances, each with its own random oracle $`\mathrm{H_T}`$.
 
 Second, within each oracle, the construction applies directly: the transcript encoding (§4) serves as the recoverable
-encoding $`\langle \cdot \rangle`$, and each `Mix` operation corresponds to a separate source $`\Sigma_i`$, supplying
-the key material $`\sigma_i`$ (the frame's value field) and the context $`c_i`$ (the operation code, label, and frame
-structure surrounding the value) of one $`n`$-KDF input. The context components are fixed by the protocol and encoded
-deterministically. Theorem 8 applies to each oracle independently.
+encoding $`\langle \cdot \rangle`$, and each frame in the transcript — `Init`, `Mix`, `Fork`, `Chain`, or the finalizing
+operation itself — corresponds to one input position of the $`n`$-KDF, with the frame's value field as the key material
+$`\sigma_i`$ and the surrounding structure (operation code, label, position marker) as the context $`c_i`$. For `Mix`
+frames carrying secret data, the source $`\Sigma_i`$ is the caller's key material distribution. For all other frames
+(`Init` labels, `Fork` ordinals, `Chain` values from a previous finalization, the finalizing frame's own metadata), the
+source produces values that are either public or determined by earlier protocol operations; these are modeled as
+adversarially known inputs. Theorem 8's bound sums unpredictability advantages over all sources. Adversarially known
+sources contribute zero to this sum, so the per-instance bound collapses to the unpredictability of the weakest secret
+`Mix` source. Theorem 8 applies to each oracle independently.
 
 Since each customization string selects an independent oracle, each oracle's freshness requirement can be considered
 separately. The chain value (`0x20`), key derivation (`0x22`, `0x23`), and ratchet (`0x24`) oracles always produce
