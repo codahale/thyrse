@@ -589,17 +589,19 @@ duplexing call. TW128's tags ($`\tau = 32`$ bytes) and chain values
 | $`\mathcal{T}_f`$ | Chaining-hop tag | `0x06` | Padded, domain byte `0x06` |
 | $`\mathcal{U}`$ | Unpadded intermediate | — | Secret capacity from keyed init |
 
-*Proof sketch.* Three cases:
+*Proof sketch.*
 
-1. **Padded vs. padded (different domain bytes).** The domain byte occupies a fixed position in the TurboSHAKE padding frame (byte position `pos` in `pad_permute`). Two padded blocks with different domain bytes differ in that byte position, hence have different rate content and different full $`\pi`$-inputs regardless of capacity.
+**Capacity-chain separation.** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, all $`\pi`$-output capacities are pairwise distinct. Two $`\pi`$-calls whose input capacities are both inherited from prior $`\pi`$-outputs therefore have distinct input capacities. When one call inherits its capacity and the other starts from zero capacity (fresh state), the inherited capacity equals zero with probability at most $`\sigma / 2^c`$ (a single-target preimage, dominated by $`\varepsilon_{\mathrm{cap}}`$).
 
-2. **Padded vs. unpadded.** Every unpadded intermediate $`\pi`$-call (set $`\mathcal{U}`$) inherits its capacity from a prior $`\pi`$-output. Two sub-cases determine why this capacity cannot match a padded call's input capacity:
+Three cases:
 
-   - **(a) Non-init padded calls** (chain value finalization, tag squeeze) also inherit capacity from a prior $`\pi`$-output in their own duplex chain. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, all $`\pi`$-output capacities are pairwise distinct, so no unpadded call and non-init padded call share a capacity value. This is a direct consequence of the birthday-type event that $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ excludes.
+1. **Padded vs. padded (different domain bytes).** Each `pad_permute` call XORs its domain byte at the current offset `pos` in the rate. Two sub-cases:
 
-   - **(b) Init calls** start from zero capacity. An unpadded call's inherited capacity — the capacity part of the preceding $`\pi`$-output in its duplex chain — could equal zero. This is a single-target preimage event, not a pairwise collision: each of the at most $`\sigma`$ such inherited capacities equals zero with probability $`2^{-c}`$, giving a total failure probability of at most $`\sigma/2^c`$, which is dominated by $`\varepsilon_{\mathrm{cap}}`$.
+   - **(a) Same `pos`.** Both calls apply `pad_permute` at the same byte offset. The different domain bytes are XOR'd at the same rate position, so the rate content differs at that byte regardless of capacity.
 
-   In both sub-cases, the capacities differ, so the full 1600-bit $`\pi`$-inputs are distinct.
+   - **(b) Different `pos`.** By capacity-chain separation, the calls have distinct input capacities unless both start from zero capacity. The sole zero-capacity pair is init (`pos` = 40) vs. single-block KDF (`pos` = `len(X)`). The init rate contains $`K_{tw}`$ (bytes 0–31), which are read from the KDF's $`\pi`$-output. For the two rates to match, those 32 $`\pi`$-output bytes must equal a value determined by the KDF rate — a fixed-target constraint that holds with probability at most $`2^{-c}`$ over $`\pi`$, dominated by $`\varepsilon_{\mathrm{cap}}`$.
+
+2. **Padded vs. unpadded.** Every unpadded intermediate $`\pi`$-call (set $`\mathcal{U}`$) inherits its capacity from a prior $`\pi`$-output. By capacity-chain separation: non-init padded calls (chain value finalization, tag squeeze) also have inherited capacities and are therefore distinct from any unpadded call; init calls start from zero capacity and are distinct from any inherited capacity except with probability dominated by $`\varepsilon_{\mathrm{cap}}`$. In both sub-cases, the capacities differ, so the full 1600-bit $`\pi`$-inputs are distinct.
 
 3. **Within a set.** Calls within the same role are distinguished by one of two mechanisms:
 
