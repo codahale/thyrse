@@ -1,0 +1,54 @@
+name: Thyrse Spec Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'docs/thyrse-spec.md'
+      - 'docs/thyrse-test-vectors.json'
+      - 'ref/**'
+      - 'tools/embed.py'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'docs/thyrse-spec.md'
+      - 'docs/thyrse-test-vectors.json'
+      - 'ref/**'
+      - 'tools/embed.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test-vectors:
+    name: Test Reference Implementation
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.x'
+
+    - name: Run test vectors
+      run: python3 -m unittest ref.test_thyrse -v
+
+  spec-freshness:
+    name: Check Spec Freshness
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.x'
+
+    - name: Embed and check for changes
+      run: |
+        python3 tools/embed.py docs/thyrse-spec.md
+        git diff --exit-code docs/thyrse-spec.md
