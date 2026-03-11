@@ -257,7 +257,9 @@ class Protocol:
 ## 7. Operations
 
 All operations append frames as $`(\mathit{op}, \mathit{label}, \mathit{value})`$ triples, encoded per §4.1 and
-interleaved with position markers per §4.2. $`T`$ denotes the encoded transcript.
+interleaved with position markers per §4.2. $`T`$ denotes the encoded transcript. Where a finalizing operation
+evaluates KT128 twice (chain value and operational output), the two evaluations use different customization strings
+and are independent; they may execute in parallel.
 
 ### 7.1 Init
 
@@ -357,8 +359,6 @@ Precondition: `output_len` MUST be greater than zero. Use `Ratchet` for zero-out
 
 - `(0x08, "", 0x04 ‖ left_encode(1) ‖ encode_string(chain_value))`
 
-The two KT128 evaluations are independent and may execute in parallel.
-
 Return `output`.
 
 <!-- begin:code:ref/thyrse.py:derive -->
@@ -434,8 +434,6 @@ When the transcript contains at least one unpredictable input, Mask provides IND
 4. Reset the transcript to a single frame:
 
 - `(0x08, "", 0x06 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(tag))`
-
-The two KT128 evaluations are independent and may execute in parallel.
 
 Return `ciphertext`. The tag is not transmitted.
 
@@ -518,8 +516,6 @@ authenticity, and CMT-4 committing security (§8.6).
 4. Reset the transcript to a single frame:
 
 - `(0x08, "", 0x07 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(tag))`
-
-The two KT128 evaluations are independent and may execute in parallel.
 
 Return `ciphertext ‖ tag`. The ciphertext has the same length as the plaintext; the tag occupies the final $`C`$ bytes
 of the returned value.
