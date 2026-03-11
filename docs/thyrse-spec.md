@@ -884,10 +884,13 @@ transitions:
 \mathrm{Adv}^{\mathrm{chain}}(\mathcal{A}) \leq q \cdot \varepsilon_{\mathrm{kdf}}
 ```
 
-Since each hybrid step preserves an unpredictable input in the transcript (the now-random
-$`\mathit{cv}_{j-1}`$, or fresh key material for Instance 0), and each operational output is derived from an
-independent oracle on that transcript (§8.4), the operational outputs are also indistinguishable from random across
-all $`q`$ instances under the same bound.
+**Operational outputs.** In Hybrid $`q`$, every chain value is uniformly random, so each transcript $`T_j`$ contains
+an unpredictable input ($`\mathit{cv}_{j-1}`$ for $`j \geq 1`$, or fresh key material for Instance 0). Each
+operational output is derived from an independent oracle on that transcript (§8.4). Applying Theorem 8 to the
+operational oracle at each instance, the output is indistinguishable from random at cost
+$`\varepsilon_{\mathrm{kdf}}`$ per instance, for a total of $`q \cdot \varepsilon_{\mathrm{kdf}}`$ across all
+instances. Combined with the chain hybrid, the total cost of making both chain values and operational outputs
+pseudorandom is $`2q \cdot \varepsilon_{\mathrm{kdf}}`$.
 
 **Chain value collisions.** Each chain value is $`H = 64`$ bytes (512 bits), twice the minimum needed for 128-bit
 collision resistance (§8.1). The oversized output ensures the birthday bound for chain collisions —
@@ -986,7 +989,7 @@ indifferentiability budget.
 **Combined bound.**
 
 ```math
-\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma + t)^2}{2^{c+1}} + q \cdot \varepsilon_{\mathrm{kdf}} + \frac{q^2}{2^{8H+1}} + \varepsilon_{\mathrm{tw}}
+\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma + t)^2}{2^{c+1}} + 2q \cdot \varepsilon_{\mathrm{kdf}} + \frac{q^2}{2^{8H+1}} + \varepsilon_{\mathrm{tw}}
 ```
 
 where:
@@ -998,12 +1001,15 @@ where:
   composition: the combined indifferentiability of KT128 (tree hash on TurboSHAKE128) is bounded by
   $`q_{\mathrm{tree}}^2 / 2^{c+1} + (\sigma + t)^2 / 2^{c+1}`$, which simplifies to $`2(\sigma + t)^2 / 2^{c+1}`$
   since $`q_{\mathrm{tree}} \leq \sigma`$.
-- $`q \cdot \varepsilon_{\mathrm{kdf}}`$ is $`q`$ times the per-instance RO-KDF bound, which depends on the
-  unpredictability of the caller's key material. For key material with $`\kappa`$ bits of min-entropy,
+- $`2q \cdot \varepsilon_{\mathrm{kdf}}`$ accounts for the two-stage hybrid in §8.5: $`q`$ steps to replace chain
+  values with random, plus $`q`$ steps to replace operational outputs (keys and Derive values) with random. Each
+  step invokes Theorem 8 on a single oracle at cost $`\varepsilon_{\mathrm{kdf}}`$. For key material with
+  $`\kappa`$ bits of min-entropy,
   $`\varepsilon_{\mathrm{kdf}} \leq 2 \cdot t / 2^{\kappa}`$ (the factor of 2 is from BCFG25 Proposition 7;
-  $`t`$ upper-bounds the number of random oracle queries, which is at most the Keccak-p budget). In the chain setting, Theorem 8's sum over sources is
-  dominated by the caller's weakest key material: the chain value source contributes at most $`t / 2^{512}`$
-  (negligible), so the per-instance bound collapses to the weakest caller-supplied source.
+  $`t`$ upper-bounds the number of random oracle queries, which is at most the Keccak-p budget). In the chain
+  setting, Theorem 8's sum over sources is dominated by the caller's weakest key material: the chain value source
+  contributes at most $`t / 2^{512}`$ (negligible), so the per-instance bound collapses to the weakest
+  caller-supplied source.
 - $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ bounds chain value collisions (§8.5).
 - $`\varepsilon_{\mathrm{tw}}`$ is the combined advantage against TW128's IND-CPA, INT-CTXT, and CMT-4 properties.
   See the TW128 specification for the concrete bound; the dominant term is $`S / 2^{8C} = S / 2^{256}`$ for forgery
@@ -1013,7 +1019,7 @@ where:
 Keccak-p calls, $`S \leq 2^{48}`$ forgery attempts, and 256-bit key material ($`\kappa = 256`$):
 
 - Indifferentiability: $`2(2^{64})^2 / 2^{257} = 2^{-128}`$
-- RO-KDF: $`2^{48} \cdot 2 \cdot 2^{64} / 2^{256} = 2^{-143}`$
+- RO-KDF: $`2 \cdot 2^{48} \cdot 2 \cdot 2^{64} / 2^{256} = 2^{-142}`$
 - Chain collisions: $`(2^{48})^2 / 2^{513} = 2^{-417}`$
 - TW128 forgery: $`2^{48} / 2^{256} = 2^{-208}`$
 
