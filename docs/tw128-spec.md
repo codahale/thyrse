@@ -566,9 +566,10 @@ $`S[\mathit{pos}] \gets \mathit{ct}[j]`$ yields the same state byte as
 $`S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]`$, since
 $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ in both paths.
 Overwrite mode is therefore algebraically identical to XOR-absorb for state
-evolution. The ciphertext bytes the adversary observes are precisely the rate
-outputs (post-overwrite state bytes), which is the information MRV15 models as
-observable duplex output; no additional leakage occurs. BDPVA11 (Algorithm 5,
+evolution. Each ciphertext byte $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is derived from a
+rate byte of the prior $`\pi`$-output. In the FKD model, the observable output at each duplexing call is the
+post-permutation state; the ciphertext bytes are a deterministic, invertible function (XOR with chosen plaintext)
+of these outputs. No information beyond the FKD-modeled outputs is revealed. BDPVA11 (Algorithm 5,
 Theorem 2) provides independent confirmation of overwrite-mode security.
 
 **Squeeze-phase coverage.** MRV15's FKD includes explicit squeeze output at each
