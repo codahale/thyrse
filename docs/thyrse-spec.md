@@ -1077,10 +1077,12 @@ instances: $`\varepsilon_{\mathrm{mu\text{-}key}} = 2^{48} \cdot 2^{65} / 2^{256
 When Thyrse is used as a running session with multiple finalizations, every finalizing operation replaces the chain
 value (§8.8). There is no fixed per-session key that persists across evaluations. In the chain classification of
 Mattsson ("Security of Symmetric Ratchets and Key Chains," 2024, §3.1), Thyrse is comparable to an ω-chain
-(randomized key chain where $`k_{i+1} = \mathrm{KDF}(k_i, r_i, n)`$) with three structural improvements: the chain
-state is 512 bits rather than the output key size, each link is a full n-KDF evaluation with a recoverable encoding
-(giving KDF security per §8.3, not only one-way security), and the per-link randomization comes from the full
-transcript rather than a single random value.
+(randomized key chain where $`k_{i+1} = \mathrm{KDF}(k_i, r_i, n)`$) with three structural improvements:
+
+- The chain state is 512 bits rather than the output key size.
+- Each link uses a recoverable encoding (§8.3), enabling the BCFG25 multi-input KDF reduction where any single
+  unpredictable input among the transcript's frames suffices for pseudorandomness.
+- The per-link randomization comes from the full transcript rather than a single random value.
 
 **No per-session key to target.** In a standard multi-user AEAD analysis, the adversary targets $`U`$ fixed keys,
 each encrypting many messages, and the multi-user advantage scales with $`U`$ because the adversary gets multiple
