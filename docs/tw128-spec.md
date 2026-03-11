@@ -677,7 +677,7 @@ CMT-4 (Section 6.10) does not use this bridge; see that section for its standalo
 3. **PRF-to-RF switching.** By the standard PRF-RF switching lemma, a PRF with $`q_{\mathrm{ctx}}`$ queries is
    indistinguishable from a lazy random function with advantage at most
    $`\varepsilon_{\mathrm{ctx\text{-}coll}} \le q_{\mathrm{ctx}}^2 / 2^{8C+1}`$
-   (the collision probability among $`q_{\mathrm{ctx}}`$ uniform $`8C`$-bit outputs).
+   (the birthday probability among $`q_{\mathrm{ctx}}`$ values in a $`2^{8C}`$-size range).
 
 **Bound:**
 
