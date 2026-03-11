@@ -65,8 +65,7 @@ bytes) followed by the big-endian encoding of `x`. It is self-delimiting when pa
 
 **`right_encode(x)`** encodes a non-negative integer `x` as a byte string consisting of the big-endian encoding of `x`
 followed by the length of the encoding (in bytes). `right_encode` is injective and suffix-free: the final byte
-determines the encoding's length, so a `right_encode` value can be unambiguously parsed from the right end of any byte
-string it terminates. For example:
+determines the encoding's length, so a trailing `right_encode` value can be unambiguously parsed from the right end of any byte string. For example:
 
 - `right_encode(0)` = `0x00 0x01`
 - `right_encode(127)` = `0x7F 0x01`
