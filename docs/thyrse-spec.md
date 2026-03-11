@@ -925,7 +925,9 @@ Applications requiring integrity should use `Seal` or authenticate the ciphertex
 **Seal / Open.** The TW128 key is derived via customization string `0x23`, and the RO-KDF argument (§8.3) establishes
 that this key is indistinguishable from a uniformly random $`C`$-byte string. Under the precondition that the
 transcript contains a fresh unpredictable input (§7.7), encoding injectivity (§8.3) ensures distinct Seal operations
-evaluate KT128 on distinct inputs, so each derived key is independently random. TW128's IND-CPA and INT-CTXT
+evaluate KT128 on distinct inputs, so each derived key is independently random. This holds whether the fresh input
+comes from a chain value in a running session or from a caller-supplied nonce in a one-shot AEAD deployment (§10);
+in either case, the varying input produces a distinct transcript and therefore a distinct key. TW128's IND-CPA and INT-CTXT
 properties (§8.1) then apply directly to each operation, and together imply IND-CCA2 (Bellare and Namprempre,
 ASIACRYPT 2000, Theorem 3.2). Chain independence (§8.4) ensures that subsequent protocol
 outputs — derived from the chain value under a different customization string (`0x20`) — reveal no information about
