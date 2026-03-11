@@ -973,8 +973,8 @@ $`L' = \mathrm{KDF}(K', N', AD')`$.
   verification encryptions in the game.
 - **Case 3: different context, different derived keys.** $`L \neq L'`$. Both encryptions must produce the
   same $`C^\star = \mathit{ct}^\star \| T^\star`$. Fix an arbitrary first opening $`(L, M)`$ producing
-  $`C^\star`$. For each candidate $`L' \neq L`$, the init $`\pi`$-inputs differ ($`L`$ and $`L'`$ occupy
-  distinct rate positions), so $`\pi`$ maps them to independent states. Under
+  $`C^\star`$. For each candidate $`L' \neq L`$, the init $`\pi`$-inputs differ in their rate content
+  ($`L \neq L'`$ at the same rate positions), so $`\pi`$ maps them to independent states. Under
   $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, no capacity collision merges the subsequent duplex chains, so the
   tags $`T^\star`$ and $`T'`$ are independent random variables over the random choice of $`\pi`$, each
   uniform over $`\{0,1\}^{8\tau}`$. For any single candidate,
