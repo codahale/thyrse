@@ -946,10 +946,10 @@ The reduction has three layers: replace KT128 with a random oracle (indifferenti
 instance with inductive composition (§§8.3–8.5), and invoke TW128's IND-CPA, INT-CTXT, and CMT-4 properties
 (§8.1).
 
-**Domain separation.** All operation codes are in the range `0x01`–`0x08`. All KT128 customization strings are in the
-range `0x20`–`0x24`. Operation codes appear in the transcript encoding (the message to KT128), while customization
-strings are appended to the message in KT128's input encoding (RFC 9861, §3.2), structurally separate from the
-transcript bytes. No confusion between the two is possible regardless of byte values.
+**Domain separation.** Operation codes are embedded in the transcript (the message $`M`$ to KT128), while customization
+strings are encoded separately via KT128's input format (RFC 9861, §3.2). The two are structurally separate and cannot
+interfere. The five Thyrse customization bytes (`0x20`–`0x24`) are mutually distinct, ensuring that the KT128 evaluations
+within each finalization target independent random oracles.
 
 **Parameters.**
 
