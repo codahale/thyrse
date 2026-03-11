@@ -592,7 +592,7 @@ duplexing call. TW128's tags ($`\tau = 32`$ bytes) and chain values
 
 1. **Padded vs. padded (different domain bytes).** The domain byte occupies a fixed position in the TurboSHAKE padding frame (byte position `pos` in `pad_permute`). Two padded blocks with different domain bytes differ in that byte position, hence have different rate content and different full $`\pi`$-inputs regardless of capacity.
 
-2. **Padded vs. unpadded.** Unpadded intermediate blocks (set $`\mathcal{U}`$) carry no domain byte or `0x80` padding. Padded blocks always contain a domain byte at position `pos` and `0x80` at position $`R-1`$ in the rate. This rate-content difference alone ensures different full 1600-bit $`\pi`$-inputs. When both a padded and an unpadded call have zero capacity input (e.g., duplex init vs. first KDF intermediate absorb), the padding bytes in the rate still resolve the ambiguity.
+2. **Padded vs. unpadded.** Every unpadded intermediate $`\pi`$-call (set $`\mathcal{U}`$) inherits its capacity from a prior $`\pi`$-output. Init calls start from zero capacity; all other padded calls (chain value finalization, tag squeeze) inherit capacity from a prior $`\pi`$-output in their own duplex chain. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, all $`\pi`$-output capacities are pairwise distinct. A prior $`\pi`$-output with zero capacity (which would collide with an init call's input capacity) occurs with probability at most $`\sigma/2^c`$, absorbed into $`\varepsilon_{\mathrm{cap}}`$. Therefore no padded and unpadded call share the same capacity, and their full 1600-bit $`\pi`$-inputs are distinct.
 
 3. **Within a set.** Calls within the same role are distinguished by one of two mechanisms:
 
