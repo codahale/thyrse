@@ -835,9 +835,9 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
   - *Block $`j > 0`$:* After processing block $`j-1`$, the overwrite rule has written the ciphertext bytes of
     block $`j-1`$ (uniform by induction) into the rate, and $`\pi`$ is applied at the block boundary. The capacity
     output of this $`\pi`$-call is distinct from all other $`\pi`$-output capacities under
-    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. This distinct capacity, combined with the rate content, forms a full
-    1600-bit $`\pi`$-input that has not been queried before — regardless of the rate content, a novel capacity
-    suffices for input freshness. The $`\pi`$-output is therefore uniformly random, giving a uniform state at the
+    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Since two 1600-bit $`\pi`$-inputs can only be equal if both their rate
+    and capacity parts match, a novel capacity alone guarantees a novel full input regardless of the rate
+    content. The $`\pi`$-output is therefore uniformly random, giving a uniform state at the
     start of block $`j`$. The same XOR and overwrite arguments as block 0 then apply to each byte in this block.
   - *Final partial block:* The last block may contain $`0 \le k < R`$ ciphertext bytes followed by `pad_permute`. The
     $`k`$ bytes are uniform by the same argument. The `pad_permute` call applies $`\pi`$ to a fresh input (distinct
