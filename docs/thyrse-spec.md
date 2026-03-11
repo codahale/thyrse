@@ -1087,7 +1087,7 @@ transcript rather than a single random value.
 each encrypting many messages, and the multi-user advantage scales with $`U`$ because the adversary gets multiple
 observations under each key. Thyrse's ratcheting structure (§8.8) eliminates this attack surface: the chain value
 after each finalization is fresh and used exactly once. The multi-target surface consists only of the $`U`$ initial
-key material values, not $`U \cdot q`$ chain values. This corresponds to the observation in Collins, Riepel, and Tran
+key material values, not $`U \cdot q`$ chain values. This is analogous to the observation in Collins, Riepel, and Tran
 ("On the Tight Security of the Double Ratchet," CCS 2024, Theorem 5) that for composed ratchet protocols, the
 symmetric-key multi-session cost reduces to a collision term on the root key space plus the multi-instance security of
 the underlying primitives. In Thyrse's case, KT128 is modeled as a random oracle, so the multi-instance symmetric-key
