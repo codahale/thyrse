@@ -755,8 +755,8 @@ $`\mathrm{right\_encode}`$).
 as required by §4.1), $`\mathrm{deinterleave}(\mathrm{interleave}(F_0, \ldots, F_{m-1}))`$ returns
 $`(F_0, \ldots, F_{m-1})`$.
 
-*Proof.* **Base case ($`m = 0`$).** $`\mathrm{interleave}()`$ is the empty string. $`|T| = 0`$, the loop does not
-execute, and the algorithm returns $`[]`$. Correct.
+*Proof.* The empty case is immediate: $`\mathrm{interleave}()`$ is the empty string, $`|T| = 0`$, the loop does not
+execute, and the algorithm returns $`[]`$. The remainder proceeds by induction on $`m \geq 1`$.
 
 **Base case ($`m = 1`$).** $`T = F_0 \mathbin\| \mathrm{right\_encode}(0)`$. The algorithm reads
 $`\mathrm{right\_encode}(0)`$ from the right, obtaining $`s_0 = 0`$. The frame bytes are
