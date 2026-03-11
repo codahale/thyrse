@@ -444,7 +444,10 @@ uniform 1600-bit output — not merely computationally pseudorandom. Freshness h
 
    The total freshness-failure probability is at most $`\mu_{\mathrm{duplex}}\, t / 2^{\min(k,c)}`$, where
    $`\mu_{\mathrm{duplex}}`$ is the total duplexing calls across all leaf and final-node evaluations. This cost is charged
-   as part of the online-vs-offline term in the decomposition (Section 6.5).
+   as part of the online-vs-offline term in the decomposition (Section 6.5). The KDF sponge's $`\pi`$-calls follow the
+   same pattern (init from zero capacity with the master key in the rate, then intermediate calls with inherited
+   capacity) and are accounted for separately through the bridge theorem's $`\varepsilon_{\mathrm{ks}}`$ term
+   (Section 6.4).
 
 Conditioned on both $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and adversary-query freshness, all construction $`\pi`$-outputs
 are exactly uniform. This principle is the engine for the bare-bound analyses in Sections 6.7–6.9: once both conditions
