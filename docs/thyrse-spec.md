@@ -681,8 +681,8 @@ target secret.
 
 **Theorem 8 (BCFG25).** Let $`\mathrm{H_T}`$ be a random oracle (with fixed output length for NOF, or unbounded output
 length for XOF). Let $`\mathbf{\Sigma} = (\Sigma_1, \ldots, \Sigma_r)`$ be a source collection with mapping
-$`\Sigma`$-map, each source outputting at most $`u`$ elements. Let $`\mathit{req}`$ be $`\mathit{req}_N`$ (at least one
-honest key per query) for NOF or $`\mathit{req}_X`$ (adding XOF freshness) for XOF. Then for any adversary $`\mathcal{A}`$ against the KDF security of
+$`\Sigma`$-map, each source outputting at most $`u`$ elements. For NOF, let $`\mathit{req} = \mathit{req}_N`$ (at least one honest key per query).
+For XOF, let $`\mathit{req} = \mathit{req}_X`$ (adding a freshness condition on each query). Then for any adversary $`\mathcal{A}`$ against the KDF security of
 $`\mathrm{RO\text{-}KDF}_n[\mathrm{H_T}]`$:
 
 ```math
