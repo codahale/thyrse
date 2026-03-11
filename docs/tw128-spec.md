@@ -885,7 +885,11 @@ call) differs in at least one byte. The capacity portion is identical (both comp
 to position $`p`$), so the full 1600-bit $`\pi`$-input is distinct from the legitimate computation's input at the same
 point. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, this input is also distinct from all other construction calls' inputs
 (no capacity collision from a separate duplex instance), so the input is fresh and $`\pi`$ produces an independent
-output. All subsequent state — including the tag — is therefore independent of the legitimate tag.
+output. The resulting $`\pi`$-output is uniform; its capacity is distinct from all other
+construction capacities under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Each subsequent $`\pi`$-call in the
+forged duplex chain inherits its capacity from the preceding fresh output, so the same freshness argument
+applies at every step through to the tag squeeze. The tag is therefore a uniform $`\tau`$-byte value
+independent of the legitimate tag.
 For $`n > 1`$: a different ciphertext in at least one chunk produces a different chain value by the same
 byte-level divergence argument within that leaf; the final node absorbs different data, producing a different capacity
 state and hence a different tag.
