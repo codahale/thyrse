@@ -399,9 +399,6 @@ Let:
   ideal-permutation model. This is an analysis parameter, not a deployment-controlled quantity; Section 7.4
   provides guidance on choosing $`t`$ for bound evaluation.
 - $`S`$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
-- $`Q`$: total number of AEAD outputs (encryption-oracle responses plus any outputs the adversary compares in a forgery or
-  commitment game) in one security experiment (per key epoch); each encryption-oracle response (ciphertext + tag) counts
-  as one AEAD output. Used in birthday-style collision bounds.
 - $`q_{\mathrm{ctx}}`$: number of distinct context strings $`X`$ queried to the KDF in one security experiment.
 - $`n = \max(1, \lceil |M|/B \rceil)`$: number of chunks for a message of length $`|M|`$.
 - Throughout Section 6, $`c = 8C = 256`$ denotes the capacity in bits.
@@ -501,7 +498,7 @@ leaf is a single duplex evaluation ($`q = 1`$), so at the per-leaf level the FKD
 bound simplifies to $`\ell^2/2^b + \ell^2/2^c + \mu N/2^k`$, and
 $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$ captures the advantage for leaf $`i`$
 with $`l_i`$ duplexing calls. With $`q = 1`$ the capacity terms of FKD and FKS
-coincide up to a factor of 2 ($`\ell^2/2^c`$ vs.\ $`2\ell/2^c`$; for $`\ell \geq 2`$
+coincide up to a factor of 2 ($`\ell^2/2^c`$ vs. $`2\ell/2^c`$; for $`\ell \geq 2`$
 FKD is actually looser). The KDF sponge (Section 6.4) is a single-evaluation
 keyed sponge covered by MRV15 Theorem 1 (FKS).
 
