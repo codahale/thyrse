@@ -630,8 +630,9 @@ where $`q_{\mathrm{tree}}`$ is the number of inner-function calls and $`n`$ is t
 to $`\varepsilon_{\mathrm{indiff}} \leq 2(\sigma + t)^2 / 2^{c+1}`$. With $`c = 256`$, the 128-bit security level is
 maintained.
 
-**KT128 collision resistance.** Collision resistance of $`H`$-byte (64-byte) digests: 256-bit collision resistance under
-the Keccak sponge claim, exceeding the 128-bit security target.
+**KT128 collision resistance.** For $`\ell`$-byte digests, KT128 provides $`\min(4\ell, c/2)`$-bit collision resistance
+under the Keccak sponge claim. Chain values ($`H = 64`$ bytes) and key derivations ($`C = 32`$ bytes) both achieve
+$`\min(256, 128) = 128`$-bit collision resistance, meeting the security target.
 
 **KT128 domain separation.** KT128 accepts a customization string $`S`$ whose encoding is injective (RFC 9861, §3.2).
 Evaluations with distinct $`S`$ values therefore have disjoint input spaces and are modeled as independent random oracles.
