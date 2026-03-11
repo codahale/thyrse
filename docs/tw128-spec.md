@@ -164,9 +164,10 @@ For $`n > 1`$, the final node is a duplex that:
 6. Calls `pad_permute(0x06)` and squeezes the $`\tau`$-byte tag.
 
 The transition from overwrite-mode encryption (step 2) to XOR-mode absorption (step 3) does not require a permutation:
-the overwrite-mode equivalence (Lemma 2 in Section 6) ensures that the duplex state after encrypting chunk 0 is
-identical to the state that would result from XOR-absorbing the same ciphertext. Both modes resume from the same
-`pos` offset.
+overwrite-mode encryption writes `ct[j] = pt[j] XOR S[pos]` into `S[pos]`, which produces the same state byte as
+XOR-absorbing the plaintext (`S[pos] ^= pt[j]`), since both yield `S[pos] = ct[j]`. The duplex state after encrypting
+chunk 0 is therefore identical to the state that would result from XOR-absorbing the same plaintext, and both modes
+resume from the same `pos` offset. Section 6.2 provides the full algebraic argument.
 
 The Sakura frame bits at the tag are: chaining hop `'0'` + final `'1'` = `'01'`, yielding domain byte `0x06`
 (delimited suffix `'011'`). The fields above are:
