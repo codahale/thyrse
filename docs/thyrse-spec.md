@@ -1332,7 +1332,7 @@ ct_tag = p.seal(b"authenticated", b"seal this data")
 
 ### 12.5 Ratchet + Derive
 
-`Derive` output with and without `Ratchet`, demonstrating that `Ratchet` changes subsequent outputs (forward secrecy).
+Baseline `Derive` output without `Ratchet`, for comparison with the `Ratchet` case below. `Derive` output changes after `Ratchet`, demonstrating forward secrecy.
 
 ```python
 # Without Ratchet

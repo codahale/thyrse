@@ -41,7 +41,7 @@
     {
       "id": "12.5.1",
       "title": "Mix + Derive (no Ratchet)",
-      "description": "Baseline Derive output without Ratchet, for comparison with §12.5.2.",
+      "description": "Baseline Derive output without Ratchet, for comparison with the Ratchet case below.",
       "init_label": "test.vector",
       "expected": {
         "derive": "b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf"
