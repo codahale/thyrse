@@ -866,10 +866,14 @@ encryption oracle (standard INT-CTXT definition) — must guess the correct $`\t
 probability at most $`2^{-8\tau}`$.
 
 Even if the adversary has previously queried encryption on the same context and observed one valid tag, a different
-ciphertext produces a different tag. For $`n = 1`$: a different ciphertext produces different rate content after
-overwrite, diverging capacity states at the next permutation call (under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), yielding
-an independent tag. For $`n > 1`$: a different ciphertext in at least one chunk produces a different chain value;
-the final node absorbs different data, producing a different capacity state and hence a different tag.
+ciphertext produces a different tag. For $`n = 1`$: let $`p`$ be the first byte position where the forged ciphertext
+differs from the legitimate one. Both duplexes process identical bytes up to position $`p`$, so their states agree at
+that point. At position $`p`$, the overwrite rule writes different ciphertext bytes into $`S[\mathit{pos}]`$, producing
+different rate content. At the next permutation boundary, the $`\pi`$-inputs differ in at least one rate byte, so the
+outputs are independent. All subsequent state — including the tag — is therefore independent of the legitimate tag.
+For $`n > 1`$: a different ciphertext in at least one chunk produces a different chain value by the same
+byte-level divergence argument within that leaf; the final node absorbs different data, producing a different capacity
+state and hence a different tag.
 
 If the forged ciphertext has a different length, the chunking or final-block `pos` differs, producing a structurally
 different tag computation. If the forgery targets a different context $`(N', AD')`$, the derived key differs, so the tag
