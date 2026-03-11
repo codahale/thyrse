@@ -445,7 +445,7 @@ uniform 1600-bit output — not merely computationally pseudorandom. Freshness h
 
    | Call type | Secret component | Match probability |
    |---|---|---|
-   | Init (first $`\pi`$-call) | Key in rate | $`\le 1/2^k`$ |
+   | Init ($`\mathcal{I}`$) | Key in rate | $`\le 1/2^k`$ |
    | Intermediate | Capacity from prior $`\pi`$-output | $`\le 1/2^c`$ |
 
    The total freshness-failure probability is at most $`\mu_{\mathrm{duplex}}\, t / 2^{\min(k,c)}`$, where
