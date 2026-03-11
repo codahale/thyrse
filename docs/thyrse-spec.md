@@ -712,9 +712,9 @@ Each finalizing operation evaluates KT128 with a fixed customization string (e.g
 Derive output). These are independent RO-KDF instances, each with its own random oracle $`\mathrm{H_T}`$.
 
 Second, within each oracle, the construction applies directly: the transcript encoding (§4) serves as the recoverable
-encoding $`\langle \cdot \rangle`$, and each frame in the transcript — `Init`, `Mix`, `Fork`, `Chain`, or the finalizing
-operation itself — corresponds to one input position of the $`n`$-KDF, with the frame's value field as the key material
-$`\sigma_i`$ and the surrounding structure (operation code, label, position marker) as the context $`c_i`$. For `Mix`
+encoding $`\langle \cdot \rangle`$. Each frame in the transcript — `Init`, `Mix`, `Fork`, `Chain`, or the finalizing
+operation itself — corresponds to one input position of the $`n`$-KDF. The frame's value field is the key material
+$`\sigma_i`$; the surrounding structure (operation code, label, position marker) is the context $`c_i`$. For `Mix`
 frames carrying secret data, the source $`\Sigma_i`$ is the caller's key material distribution. For all other frames
 (`Init` labels, `Fork` ordinals, `Chain` values from a previous finalization, the finalizing frame's own metadata), the
 source produces values that are either public or determined by earlier protocol operations; these are modeled as
