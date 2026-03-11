@@ -823,30 +823,27 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
 - Distinct contexts map to independent uniformly random keys in $`\mathsf{G}_1`$.
 - Under a truly random key $`K_{tw}`$ (from the lazy RF in $`\mathsf{G}_1`$) and the ideal permutation conditioned on
   $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the ciphertext distribution is independent of the adversary's plaintext choice.
-  The argument proceeds by induction over rate blocks, showing that each ciphertext block is uniformly distributed
-  regardless of the plaintext:
+  The argument proceeds by induction over rate blocks, showing that each block's ciphertext is uniformly distributed
+  regardless of the plaintext. A key structural observation: the overwrite rule writes ciphertext bytes (not plaintext
+  bytes) into the state, so the duplex state after each block is a deterministic function of the ciphertext and the
+  inherited capacity — both plaintext-independent quantities. This ensures state plaintext-independence propagates
+  across blocks.
   - *Block 0:* The `init` step absorbs the truly random key $`K_{tw}`$ and applies $`\pi`$ via `pad_permute`; the
     resulting state is uniformly random (Lemma 1). Each ciphertext byte
     $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is uniform because XOR with a uniform value is uniform.
     The overwrite rule $`S[\mathit{pos}] \leftarrow \mathit{ct}[j]`$ writes the ciphertext byte (uniform) into the
     state, not the plaintext byte. The adversary's plaintext choice determines *which* uniform value
-    $`\mathit{ct}[j]`$ takes, but not its distribution.
+    $`\mathit{ct}[j]`$ takes, but not its distribution. The post-block state therefore depends only on uniform
+    ciphertext values and is itself plaintext-independent.
   - *Block $`j > 0`$:* After processing block $`j-1`$, the overwrite rule has written the ciphertext bytes of
     block $`j-1`$ (uniform by induction) into the rate, and $`\pi`$ is applied at the block boundary. The capacity
     output of this $`\pi`$-call is distinct from all other $`\pi`$-output capacities under
-    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. This capacity output becomes the capacity component of the state at
-    the start of block $`j`$, and hence of the $`\pi`$-input at the end of block $`j`$. Since no other
-    $`\pi`$-call shares this capacity value, the full 1600-bit $`\pi`$-input is novel regardless of the rate
-    content. The $`\pi`$-output is therefore uniformly random, giving a uniform state at the
-    start of block $`j`$. The same XOR and overwrite arguments as block 0 then apply to each byte in this block.
+    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Since no other $`\pi`$-call shares this capacity value, the full 1600-bit
+    $`\pi`$-input is novel regardless of the rate content. The $`\pi`$-output is therefore uniformly random, giving a
+    uniform state at the start of block $`j`$. The same XOR and overwrite arguments as block 0 then apply.
   - *Final partial block:* The last block may contain $`0 \le k < R`$ ciphertext bytes followed by `pad_permute`. The
     $`k`$ bytes are uniform by the same argument. The `pad_permute` call applies $`\pi`$ to a fresh input (distinct
     capacity under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the squeeze output is also uniform.
-
-  By the overwrite rule, the duplex state entering block $`j`$ is a deterministic function of the ciphertext bytes
-  from blocks $`0, \ldots, j{-}1`$ and the initial $`\pi`$-output. Since the induction shows each block's ciphertext
-  has the same conditional distribution regardless of the adversary's plaintext choice, the joint distribution of
-  a single duplex's ciphertext is independent of that choice.
 
   For $`n > 1`$, the argument extends to the full AEAD output. Distinct leaf indices (same $`K_{tw}`$, different
   `LEU64(i)`) produce distinct init $`\pi`$-inputs, and under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ the resulting
