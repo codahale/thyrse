@@ -906,9 +906,15 @@ Applying byte-level divergence to each case:
   point is unchanged (same final-node chain up to the absorption), but the rate differs, so the $`\pi`$-input is fresh
   and the tag is uniform.
 
-If the forged ciphertext has a different length, the final `pad_permute` call occurs at a different `pos` value,
-placing the domain byte at a different rate position; the resulting $`\pi`$-input differs from any legitimate
-computation's tag-squeeze input, so the tag is independent. If the forgery targets a different context
+For different-length forgeries, the mechanism depends on whether the chunk count changes. If the forged ciphertext has
+the same chunk count $`n`$ but a different total length, the last leaf's chain-value squeeze occurs at a different
+duplex position, producing an independent chain value; absorption of this chain value alters the final node's rate,
+making the tag-squeeze $`\pi`$-input fresh. If the chunk count differs, the number of absorbed chain values and the
+`length_encode(n-1)` suffix both change, structurally altering the final node's absorption stream. If the forgery
+crosses the $`n = 1`$ / $`n > 1`$ boundary, the tag domain byte itself differs (`0x07` vs `0x06`). In all sub-cases,
+the tag-squeeze $`\pi`$-input is distinct from any legitimate computation's, so the tag is uniform.
+
+If the forgery targets a different context
 $`(N', AD')`$, the derived key differs, producing a different init $`\pi`$-input and hence an independent state chain
 (no capacity collision under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$). Across $`S`$ attempts (union bound):
 
