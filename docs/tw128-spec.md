@@ -1018,8 +1018,9 @@ $`L' = \mathrm{KDF}(K', N', AD')`$.
   equal $`T^\star`$ is $`1/2^{8\tau}`$. Since each candidate requires at least one unique $`\pi`$-query
   (the init call for $`L'`$), the adversary can evaluate at most $`t + \sigma_v`$ candidates within their
   query budget. By a union bound, the probability over $`\pi`$ that any candidate yields $`T' = T^\star`$
-  is at most $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is
-  subsumed by the $`(t + \sigma_v)^2 / 2^{c+1}`$ term.
+  is at most $`(t + \sigma_v)/2^{8\tau}`$. Tag matching is a necessary condition for $`C^\star`$ agreement,
+  so the additional requirement that the ciphertext portions match can only reduce this probability.
+  The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed by the $`(t + \sigma_v)^2 / 2^{c+1}`$ term.
 
 Therefore:
 
