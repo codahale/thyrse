@@ -609,10 +609,13 @@ Overwrites the protocol state with zeros and invalidates the instance. After `Cl
 
 ## 8. Security Argument
 
-The security argument proceeds in five steps: (1) the transcript encoding is recoverable (§8.2); (2) each finalization
-is KDF-secure and collision-resistant (§8.3); (3) the chain value and operational output are independent (§8.4);
-(4) unpredictability propagates through the KDF chain (§8.5); (5) each operation inherits concrete security properties
-from the chain (§8.6).
+The security argument proceeds in five steps:
+
+1. The transcript encoding is recoverable (§8.2).
+2. Each finalization is KDF-secure and collision-resistant (§8.3).
+3. The chain value and operational output are independent (§8.4).
+4. Unpredictability propagates through the KDF chain (§8.5).
+5. Each operation inherits concrete security properties from the chain (§8.6).
 
 ### 8.1 Assumptions
 
