@@ -889,23 +889,25 @@ encryption oracle (standard INT-CTXT definition) — must guess the correct $`\t
 probability at most $`2^{-8\tau}`$.
 
 Even if the adversary has previously queried encryption on the same context and observed one valid tag, a different
-ciphertext produces a different tag. For $`n = 1`$: let $`p`$ be the first byte position where the forged ciphertext
-differs from the legitimate one. Both duplexes process identical bytes up to position $`p`$, so their states agree at
-that point. At position $`p`$, the overwrite rule writes different ciphertext bytes into $`S[\mathit{pos}]`$, producing
-different rate content. Whether $`p`$ falls within an intermediate full-rate block or within the final partial block
-before `pad_permute`, the rate portion of the next $`\pi`$-input (either the full-rate permutation or the `pad_permute`
-call) differs in at least one byte. The capacity portion is identical (both computations share the same duplex chain up
-to position $`p`$), so the full 1600-bit $`\pi`$-input is distinct from the legitimate computation's input at the same
-point. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, this input is also distinct from all other construction calls' inputs
-(no capacity collision from a separate duplex instance), so the input is fresh and $`\pi`$ produces an independent
-output. The resulting $`\pi`$-output is uniform; its capacity is distinct from all other
-construction capacities under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Each subsequent $`\pi`$-call in the
-forged duplex chain inherits its capacity from the preceding fresh output, so the same freshness argument
-applies at every step through to the tag squeeze. The tag is therefore a uniform $`\tau`$-byte value
-independent of the legitimate tag.
-For $`n > 1`$: a different ciphertext in at least one chunk produces a different chain value by the same
-byte-level divergence argument within that leaf; the final node absorbs different data, producing a different capacity
-state and hence a different tag.
+ciphertext produces a different tag. The core mechanism (**byte-level divergence**): let $`p`$ be the first byte
+position where a forged ciphertext differs from the legitimate one within a duplex. Both computations process identical
+bytes up to $`p`$, so their states agree. At $`p`$, the overwrite rule writes different ciphertext bytes, changing the
+rate. The next $`\pi`$-input differs in at least one rate byte while sharing the same capacity (same chain up to $`p`$),
+so the full 1600-bit input is distinct from the legitimate computation's. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$,
+this input is also distinct from all other construction calls' inputs, so $`\pi`$ produces a uniform output. Each
+subsequent $`\pi`$-call inherits its capacity from this fresh output, so freshness cascades through to the tag squeeze.
+
+Applying byte-level divergence to each case:
+
+- *$`n = 1`$:* The forged ciphertext diverges within the single duplex. The tag is uniform and independent of the
+  legitimate tag.
+- *$`n > 1`$, chunk 0:* Chunk 0 is processed by the final-node duplex directly. Byte-level divergence applies within
+  the final node; no chain values are involved.
+- *$`n > 1`$, leaf chunk $`i \geq 1`$:* The leaf's state diverges at the first differing byte, and freshness cascades
+  through to the chain-value squeeze. The forged chain value is therefore independent of the legitimate one. The final
+  node XOR-absorbs this different chain value, altering the rate of a subsequent $`\pi`$-call. The capacity at that
+  point is unchanged (same final-node chain up to the absorption), but the rate differs, so the $`\pi`$-input is fresh
+  and the tag is uniform.
 
 If the forged ciphertext has a different length, the final `pad_permute` call occurs at a different `pos` value,
 placing the domain byte at a different rate position; the resulting $`\pi`$-input differs from any legitimate
