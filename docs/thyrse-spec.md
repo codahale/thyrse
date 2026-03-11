@@ -15,9 +15,9 @@ finalizing operation, KT128 (KangarooTwelve) is evaluated over the transcript to
 both). Bulk encryption is delegated to TW128 when authenticated or unauthenticated ciphertext is needed.
 
 This structure forms a **KDF chain**: each finalization consumes the current transcript and produces a chain value that
-carries unpredictability forward into the next instance. If an adversary does not know any single input to a transcript
-instance, they learn nothing about the chain value or operational output, and therefore nothing about any subsequent
-link in the chain. Unpredictability propagates forward indefinitely through finalizations. This is the framework's
+carries unpredictability forward into the next instance. If at least one input to a transcript instance is
+unpredictable to the adversary, they learn nothing about the chain value or operational output, and therefore nothing
+about any subsequent link in the chain. Unpredictability propagates forward indefinitely through finalizations. This is the framework's
 central security guarantee.
 
 The framework provides the following operations:
