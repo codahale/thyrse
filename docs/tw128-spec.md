@@ -404,7 +404,8 @@ Let:
   ideal-permutation model. This is an analysis parameter, not a deployment-controlled quantity; Section 7.4
   provides guidance on choosing $`t`$ for bound evaluation.
 - $`S`$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
-- $`q_{\mathrm{ctx}}`$: number of distinct context strings $`X`$ queried to the KDF in one security experiment.
+- $`q_{\mathrm{ctx}}`$: number of distinct contexts (one per distinct $`(K, N, AD)`$ triple; the context encoding
+  is defined in Section 6.4).
 - $`n = \max(1, \lceil |M|/B \rceil)`$: number of chunks for a message of length $`|M|`$.
 - Throughout Section 6, $`c = 8C = 256`$ denotes the capacity in bits.
 
@@ -636,16 +637,18 @@ Inner/final node separability follows directly from Sakura Lemma 4: the final-no
 This section executes the single game hop that replaces the TurboSHAKE128 KDF with a lazy random function, using the
 MRV15 framework (Section 6.2) and domain separation (Section 6.3).
 
-**Context encoding and derived-key map.** Define the AEAD context encoding:
+**Context encoding and derived-key map.** Each $`(K, N, AD)`$ triple defines a *context*. The context encoding is:
 
 ```math
-X = \mathrm{encode\_string}(K)\,\|\,\mathrm{encode\_string}(N)\,\|\,\mathrm{encode\_string}(AD),
+X = \mathrm{encode\_string}(K)\,\|\,\mathrm{encode\_string}(N)\,\|\,\mathrm{encode\_string}(AD).
 ```
-and the derived-key map:
+The derived-key map is:
 
 ```math
 F(X) = \mathrm{TurboSHAKE128}(X,\;\mathtt{0x09},\;C).
 ```
+Distinct triples produce distinct $`X`$ values (by injectivity of `encode_string`), so $`q_{\mathrm{ctx}}`$
+(Section 6.1) equals the number of distinct triples queried.
 **Games.**
 
 ```
@@ -827,40 +830,38 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
 
 *Justification.* In $`\mathsf{G}_1`$ conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$:
 
-- Each encryption query uses a fresh nonce (nonce-respecting), so each context string $`X`$ is distinct.
+- Each encryption query uses a fresh nonce (nonce-respecting), so each context is distinct (Section 6.4).
 - Distinct contexts map to independent uniformly random keys in $`\mathsf{G}_1`$.
 - Under a truly random key $`K_{tw}`$ (from the lazy RF in $`\mathsf{G}_1`$) and the ideal permutation conditioned on
   $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the ciphertext distribution is independent of the adversary's plaintext choice.
-  The argument proceeds by induction over rate blocks, showing that each block's ciphertext is uniformly distributed
-  regardless of the plaintext. A key structural observation: the overwrite rule writes ciphertext bytes (not plaintext
-  bytes) into the state, so the duplex state after each block is a deterministic function of the ciphertext and the
-  inherited capacity — both plaintext-independent quantities. This ensures state plaintext-independence propagates
-  across blocks.
+  The argument proceeds by induction over rate blocks. The overwrite rule ensures plaintext-independence propagates
+  across blocks: because ciphertext bytes (not plaintext bytes) are written into the state, the duplex state after
+  each block depends only on the ciphertext and the inherited capacity.
+
   - *Block 0:* The `init` step absorbs the truly random key $`K_{tw}`$ and applies $`\pi`$ via `pad_permute`; the
     resulting state is uniformly random (Lemma 1). Each ciphertext byte
     $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is uniform because XOR with a uniform value is uniform.
-    The overwrite rule $`S[\mathit{pos}] \leftarrow \mathit{ct}[j]`$ writes the ciphertext byte (uniform) into the
-    state, not the plaintext byte. The adversary's plaintext choice determines *which* uniform value
-    $`\mathit{ct}[j]`$ takes, but not its distribution. The post-block state therefore depends only on uniform
-    ciphertext values and is itself plaintext-independent.
-  - *Block $`j > 0`$:* After processing block $`j-1`$, the overwrite rule has written the ciphertext bytes of
-    block $`j-1`$ (uniform by induction) into the rate, and $`\pi`$ is applied at the block boundary. The capacity
-    output of this $`\pi`$-call is distinct from all other $`\pi`$-output capacities under
-    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Since no other $`\pi`$-call shares this capacity value, the full 1600-bit
-    $`\pi`$-input is novel regardless of the rate content. The $`\pi`$-output is therefore uniformly random, giving a
-    uniform state at the start of block $`j`$. The same XOR and overwrite arguments as block 0 then apply.
-  - *Final partial block:* The last block may contain $`0 \le k < R`$ ciphertext bytes followed by `pad_permute`. The
-    $`k`$ bytes are uniform by the same argument. The `pad_permute` call applies $`\pi`$ to a fresh input (distinct
-    capacity under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the squeeze output is also uniform.
+    The overwrite rule writes $`\mathit{ct}[j]`$ into the state, so the post-block state depends only on uniform
+    ciphertext values and is plaintext-independent.
 
-  For $`n > 1`$, the argument extends to the full AEAD output. Distinct leaf indices (same $`K_{tw}`$, different
-  `LEU64(i)`) produce distinct init $`\pi`$-inputs, and under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ the resulting
-  capacity chains remain disjoint, so each leaf's $`\pi`$-call set is independent of every other leaf's. Applying the
-  single-duplex induction to each leaf in isolation, every leaf's ciphertext chunk is independently uniform. The chain
-  values squeezed from leaves $`1, \ldots, n{-}1`$ are uniform $`\pi`$-outputs from fresh inputs. The final node absorbs
-  these chain values and produces the tag; its tag-squeeze $`\pi`$-call is on a fresh input (distinct capacity under
-  $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the tag is also uniform. The joint distribution of all chunks' ciphertexts
-  and the tag is therefore independent of the adversary's plaintext choice.
+  - *Block $`j > 0`$:* $`\pi`$ is applied at the block boundary. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the
+    capacity output of this $`\pi`$-call is distinct from all other $`\pi`$-output capacities. Block $`j`$'s first
+    $`\pi`$-call inherits this capacity as its input capacity. Every other $`\pi`$-call's input capacity is either
+    zero (init calls) or inherited from a different $`\pi`$-output (which is pairwise distinct under
+    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so no other call shares this input capacity, and the full 1600-bit
+    $`\pi`$-input is novel regardless of the rate content. The $`\pi`$-output is therefore uniformly random, and
+    the same XOR and overwrite arguments as block 0 apply. If the block is a final partial block ($`0 \le k < R`$
+    bytes followed by `pad_permute`), the $`k`$ ciphertext bytes are uniform by the same argument, and the
+    `pad_permute` $`\pi`$-call is on a fresh input (distinct capacity), so the squeeze output is also uniform.
+
+  - *Multi-chunk ($`n > 1`$):* Distinct leaf indices (same $`K_{tw}`$, different `LEU64(i)`) produce distinct init
+    $`\pi`$-inputs. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the resulting capacity chains remain disjoint, so
+    each leaf's $`\pi`$-calls are independent of every other leaf's. Applying the single-duplex induction to each
+    leaf, every leaf's ciphertext chunk is independently uniform. The chain values squeezed from leaves
+    $`1, \ldots, n{-}1`$ are uniform $`\pi`$-outputs from fresh inputs. The final node absorbs these chain values
+    and produces the tag; its tag-squeeze $`\pi`$-call is on a fresh input (distinct capacity), so the tag is also
+    uniform. The joint distribution of all chunks' ciphertexts and the tag is therefore independent of the
+    adversary's plaintext choice.
 
 The bare IND-CPA advantage is therefore zero. The total bound follows from the decomposition in Section 6.5.
 
