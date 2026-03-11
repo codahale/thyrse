@@ -980,17 +980,17 @@ $`L' = \mathrm{KDF}(K', N', AD')`$.
   where $`t`$ is the adversary's offline $`\pi`$-query budget and $`\sigma_v`$ is the $`\pi`$-calls for the two
   verification encryptions in the game.
 - **Case 3: different context, different derived keys.** $`L \neq L'`$. Both encryptions must produce the
-  same $`C^\star = \mathit{ct}^\star \| T^\star`$. Fix an arbitrary first opening $`(L, M)`$ producing
-  $`C^\star`$. For each candidate $`L' \neq L`$, the init $`\pi`$-inputs differ in their rate content
-  ($`L \neq L'`$ at the same rate positions), so $`\pi`$ maps them to independent states. Under
-  $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, no capacity collision merges the subsequent duplex chains, so the
-  tags $`T^\star`$ and $`T'`$ are independent random variables over the random choice of $`\pi`$, each
-  uniform over $`\{0,1\}^{8\tau}`$. For any single candidate,
-  $`\Pr_\pi[T' = T^\star] = 1/2^{8\tau}`$. Each candidate requires at least one $`\pi`$-call for init, so the
-  adversary can evaluate at most $`t + \sigma_v`$ candidates. By a union bound, the probability over $`\pi`$
-  that any candidate yields $`T' = T^\star`$ is at most $`(t + \sigma_v)/2^{8\tau}`$. The
-  $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed by the
-  $`(t + \sigma_v)^2 / 2^{c+1}`$ term.
+  same $`C^\star = \mathit{ct}^\star \| T^\star`$. Fix the first opening $`(L, M)`$ and its full evaluation
+  under $`\pi`$, which determines $`C^\star`$ and in particular the tag $`T^\star`$. For each candidate
+  $`L' \neq L`$, the second opening's init $`\pi`$-input differs in the rate ($`L \neq L'`$ at the same
+  rate positions). Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, no capacity collision merges the subsequent
+  duplex chains, so every $`\pi`$-call in the second opening is on a fresh input independent of the first
+  opening's $`\pi`$-calls. The second opening's tag $`T'`$ is therefore uniform over $`\pi`$ conditioned on
+  the first opening, giving $`\Pr_\pi[T' = T^\star] = 1/2^{8\tau}`$. Each candidate requires at least one
+  $`\pi`$-call for init, so the adversary can evaluate at most $`t + \sigma_v`$ candidates. By a union
+  bound, the probability over $`\pi`$ that any candidate yields $`T' = T^\star`$ is at most
+  $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed by
+  the $`(t + \sigma_v)^2 / 2^{c+1}`$ term.
 
 Therefore:
 
