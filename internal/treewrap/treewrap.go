@@ -1,11 +1,11 @@
-// Package treewrap implements TreeWrap, a tree-parallel authenticated encryption algorithm that uses a Sakura flat-tree
+// Package treewrap implements TW128, a tree-parallel authenticated encryption algorithm that uses a Sakura flat-tree
 // topology with kangaroo hopping to enable SIMD acceleration on large inputs.
 //
 // The final node (index 0) encrypts chunk 0 directly (the "message hop"). For multi-chunk messages, independent leaves
 // (indices 1..n-1) encrypt subsequent chunks and produce chain values that are absorbed into the final node (the
 // "chaining hop"). All leaf operations are independent and executed in parallel using SIMD-accelerated permutations.
 //
-// TreeWrap provides both stateful incremental types ([Encryptor] and [Decryptor]) and stateless convenience functions
+// This package provides both stateful incremental types ([Encryptor] and [Decryptor]) and stateless convenience functions
 // ([EncryptAndMAC] and [DecryptAndMAC]). It is intended as a building block for duplex-based protocols, where key
 // uniqueness and associated data are managed by the caller. The key MUST be unique per invocation.
 package treewrap

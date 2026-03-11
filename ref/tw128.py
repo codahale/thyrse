@@ -68,13 +68,13 @@ def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
 # region: aead_functions
 import hmac
 
-def treewrap128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
     assert len(K) == C, "K must be exactly 32 bytes"
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
     ct, tag = encrypt_and_mac(tw_key, M)
     return ct + tag
 
-def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
     assert len(K) == C, "K must be exactly 32 bytes"
     if len(ct_tag) < TAU:
         return None

@@ -1,7 +1,7 @@
-// Package tw128 implements TreeWrap128, a tree-parallel authenticated encryption algorithm built on TurboSHAKE128.
+// Package tw128 implements TW128, a tree-parallel authenticated encryption algorithm.
 //
-// It provides both bare EncryptAndMAC/DecryptAndMAC functions (delegating to the internal treewrap implementation)
-// and a [crypto/cipher.AEAD] interface that adds nonce/AD-based key derivation per the spec Section 5.2.
+// It provides both bare EncryptAndMAC/DecryptAndMAC functions and a [crypto/cipher.AEAD] interface that adds
+// nonce/AD-based key derivation per the spec Section 5.2.
 package tw128
 
 import (
@@ -39,8 +39,8 @@ func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [
 	return treewrap.DecryptAndMAC(dst, key, ciphertext)
 }
 
-// New returns a new [cipher.AEAD] using TreeWrap128 with the given key and nonce size.
-// It panics if len(key) != KeySize or nonceSize < 1.
+// New returns a new [cipher.AEAD] using TW128 with the given key and nonce size. It panics if len(key) != KeySize or
+// nonceSize < 1.
 func New(key []byte, nonceSize int) cipher.AEAD {
 	if len(key) != KeySize {
 		panic("tw128: invalid key size")

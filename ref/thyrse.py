@@ -3,10 +3,10 @@
 import hmac
 from .encodings import left_encode, right_encode, encode_string
 from .kt128 import kt128
-from .treewrap import encrypt_and_mac, decrypt_and_mac
+from .tw128 import encrypt_and_mac, decrypt_and_mac
 
 # region: constants
-C = 32   # TreeWrap key and tag size (bytes).
+C = 32   # TW128 key and tag size (bytes).
 H = 64   # Chain value size (bytes).
 
 # Operation codes.

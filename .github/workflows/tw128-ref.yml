@@ -6,14 +6,14 @@ on:
     branches: [ "main" ]
     paths:
       - 'docs/tw128-spec.md'
-      - 'docs/treewrap-test-vectors.json'
+      - 'docs/tw128-test-vectors.json'
       - 'ref/**'
       - 'tools/embed.py'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'docs/tw128-spec.md'
-      - 'docs/treewrap-test-vectors.json'
+      - 'docs/tw128-test-vectors.json'
       - 'ref/**'
       - 'tools/embed.py'
 
@@ -34,7 +34,7 @@ jobs:
         python-version: '3.x'
 
     - name: Run test vectors
-      run: python3 -m unittest ref.test_treewrap -v
+      run: python3 -m unittest ref.test_tw128 -v
 
   spec-freshness:
     name: Check Spec Freshness

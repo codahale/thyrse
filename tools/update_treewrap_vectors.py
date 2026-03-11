@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recompute expected outputs in treewrap-test-vectors.json from the ref/ package."""
+"""Recompute expected outputs in tw128-test-vectors.json from the ref/ package."""
 
 import json
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ref.treewrap import encrypt_and_mac, decrypt_and_mac, treewrap128_encrypt, B, TAU
+from ref.tw128 import encrypt_and_mac, decrypt_and_mac, tw128_encrypt, B, TAU
 
 
 def make_message(msg_def: dict) -> bytes:
@@ -60,7 +60,7 @@ def update_aead(section: dict) -> None:
         msg = make_message(vec["message"])
         checks = vec.get("checks", {})
 
-        ct_tag = treewrap128_encrypt(key, nonce, ad, msg)
+        ct_tag = tw128_encrypt(key, nonce, ad, msg)
 
         expected: dict = {}
         if len(ct_tag) <= 160:
@@ -71,16 +71,16 @@ def update_aead(section: dict) -> None:
 
         if checks.get("nonce_reuse_xor_leak"):
             alt_msg = make_message(vec["alt_message"])
-            reuse_ct_tag = treewrap128_encrypt(key, nonce, ad, alt_msg)
+            reuse_ct_tag = tw128_encrypt(key, nonce, ad, alt_msg)
             expected["reuse_ct_tag_hex"] = reuse_ct_tag.hex()
 
         if checks.get("swap_nonce_ad"):
-            swap_ct_tag = treewrap128_encrypt(key, ad, nonce, msg)
+            swap_ct_tag = tw128_encrypt(key, ad, nonce, msg)
             expected["swap_nonce_ad_ct_tag_hex"] = swap_ct_tag.hex()
 
         if checks.get("ad_empty_vs_zero_byte"):
             alt_ad = bytes.fromhex(vec["alt_ad_hex"])
-            alt_ad_ct_tag = treewrap128_encrypt(key, nonce, alt_ad, msg)
+            alt_ad_ct_tag = tw128_encrypt(key, nonce, alt_ad, msg)
             expected["alt_ad_ct_tag_hex"] = alt_ad_ct_tag.hex()
 
         vec["expected"] = expected

@@ -1,12 +1,12 @@
-"""Test TreeWrap128 bare and AEAD modes against the canonical test vectors."""
+"""Test TW128 bare and AEAD modes against the canonical test vectors."""
 
 import json
 import unittest
 from pathlib import Path
 
-from .treewrap import encrypt_and_mac, decrypt_and_mac, treewrap128_encrypt, treewrap128_decrypt, B, TAU
+from .tw128 import encrypt_and_mac, decrypt_and_mac, tw128_encrypt, tw128_decrypt, B, TAU
 
-VECTORS_PATH = Path(__file__).resolve().parent.parent / "docs" / "treewrap-test-vectors.json"
+VECTORS_PATH = Path(__file__).resolve().parent.parent / "docs" / "tw128-test-vectors.json"
 
 
 def make_message(msg_def):
@@ -80,7 +80,7 @@ class TestAEADVectors(unittest.TestCase):
                 exp = case["expected"]
                 checks = case.get("checks", {})
 
-                ct_tag = treewrap128_encrypt(key, nonce, ad, msg)
+                ct_tag = tw128_encrypt(key, nonce, ad, msg)
                 ct, tag = ct_tag[:-TAU], ct_tag[-TAU:]
 
                 if "ct_tag_hex" in exp:
@@ -91,29 +91,29 @@ class TestAEADVectors(unittest.TestCase):
                     self.assertEqual(tag.hex(), exp["tag_hex"])
 
                 # Round-trip
-                pt = treewrap128_decrypt(key, nonce, ad, ct_tag)
+                pt = tw128_decrypt(key, nonce, ad, ct_tag)
                 self.assertEqual(pt, msg)
 
                 # Bad nonce
                 if checks.get("bad_nonce"):
                     bad_nonce = bytearray(nonce)
                     bad_nonce[0] ^= 0x01
-                    self.assertIsNone(treewrap128_decrypt(key, bytes(bad_nonce), ad, ct_tag))
+                    self.assertIsNone(tw128_decrypt(key, bytes(bad_nonce), ad, ct_tag))
 
                 # Bad AD
                 if checks.get("bad_ad"):
-                    self.assertIsNone(treewrap128_decrypt(key, nonce, ad + b"\x01", ct_tag))
+                    self.assertIsNone(tw128_decrypt(key, nonce, ad + b"\x01", ct_tag))
 
                 # Bad tag
                 if checks.get("bad_tag"):
                     bad_ct_tag = bytearray(ct_tag)
                     bad_ct_tag[-TAU] ^= 0x01
-                    self.assertIsNone(treewrap128_decrypt(key, nonce, ad, bytes(bad_ct_tag)))
+                    self.assertIsNone(tw128_decrypt(key, nonce, ad, bytes(bad_ct_tag)))
 
                 # Nonce reuse XOR leak
                 if checks.get("nonce_reuse_xor_leak"):
                     alt_msg = make_message(case["alt_message"])
-                    reuse_ct_tag = treewrap128_encrypt(key, nonce, ad, alt_msg)
+                    reuse_ct_tag = tw128_encrypt(key, nonce, ad, alt_msg)
                     self.assertEqual(reuse_ct_tag.hex(), exp["reuse_ct_tag_hex"])
                     ct1 = ct_tag[:-TAU]
                     ct2 = reuse_ct_tag[:-TAU]
@@ -123,23 +123,23 @@ class TestAEADVectors(unittest.TestCase):
 
                 # Swap nonce and AD
                 if checks.get("swap_nonce_ad"):
-                    swap_ct_tag = treewrap128_encrypt(key, ad, nonce, msg)
+                    swap_ct_tag = tw128_encrypt(key, ad, nonce, msg)
                     self.assertEqual(swap_ct_tag.hex(), exp["swap_nonce_ad_ct_tag_hex"])
                     self.assertNotEqual(swap_ct_tag, ct_tag)
                     # Original ct_tag rejected with swapped nonce/ad
-                    self.assertIsNone(treewrap128_decrypt(key, ad, nonce, ct_tag))
+                    self.assertIsNone(tw128_decrypt(key, ad, nonce, ct_tag))
 
                 # AD empty vs zero byte
                 if checks.get("ad_empty_vs_zero_byte"):
                     alt_ad = bytes.fromhex(case["alt_ad_hex"])
-                    alt_ct_tag = treewrap128_encrypt(key, nonce, alt_ad, msg)
+                    alt_ct_tag = tw128_encrypt(key, nonce, alt_ad, msg)
                     self.assertEqual(alt_ct_tag.hex(), exp["alt_ad_ct_tag_hex"])
                     self.assertNotEqual(alt_ct_tag, ct_tag)
                     # Cross-rejection
-                    self.assertIsNone(treewrap128_decrypt(key, nonce, alt_ad, ct_tag))
-                    self.assertIsNone(treewrap128_decrypt(key, nonce, ad, alt_ct_tag))
+                    self.assertIsNone(tw128_decrypt(key, nonce, alt_ad, ct_tag))
+                    self.assertIsNone(tw128_decrypt(key, nonce, ad, alt_ct_tag))
                     # Alt round-trip
-                    self.assertEqual(treewrap128_decrypt(key, nonce, alt_ad, alt_ct_tag), msg)
+                    self.assertEqual(tw128_decrypt(key, nonce, alt_ad, alt_ct_tag), msg)
 
 
 if __name__ == "__main__":

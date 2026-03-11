@@ -69,7 +69,7 @@ type aeadVector struct {
 
 func loadTestVectors(t *testing.T) testVectorFile {
 	t.Helper()
-	data, err := os.ReadFile("../../docs/treewrap-test-vectors.json")
+	data, err := os.ReadFile("../../docs/tw128-test-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -230,7 +230,7 @@ derivation and tag verification.
 
 *Procedure:*
 
-<!-- begin:code:ref/treewrap.py:internal_functions -->
+<!-- begin:code:ref/tw128.py:internal_functions -->
 ```python
 # Sakura message-hop / chaining-hop framing: '110^{62}' packed LSB-first.
 HOP_FRAME = bytes([0x03]) + bytes(7)
@@ -289,7 +289,7 @@ def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
 def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
     return _tree_process(key, ciphertext, "D")
 ```
-<!-- end:code:ref/treewrap.py:internal_functions -->
+<!-- end:code:ref/tw128.py:internal_functions -->
 
 The final node (index 0) always encrypts chunk 0. Leaf operations for chunks 1 through $`n-1`$ are independent and may
 execute in parallel. Tag computation begins as soon as all chain values are available. `decrypt_and_mac` produces the
@@ -320,17 +320,17 @@ each field is prefixed with its `left_encode`d bit-length (`left_encode(8*len(x)
 produce the same KDF input as a different triple. Domain byte `0x09` separates key derivation from all other TW128
 domain bytes (`0x08`, `0x0B`, `0x07`, `0x06`).
 
-<!-- begin:code:ref/treewrap.py:aead_functions -->
+<!-- begin:code:ref/tw128.py:aead_functions -->
 ```python
 import hmac
 
-def treewrap128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
     assert len(K) == C, "K must be exactly 32 bytes"
     tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
     ct, tag = encrypt_and_mac(tw_key, M)
     return ct + tag
 
-def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
     assert len(K) == C, "K must be exactly 32 bytes"
     if len(ct_tag) < TAU:
         return None
@@ -339,7 +339,7 @@ def treewrap128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes |
     pt, tag = decrypt_and_mac(tw_key, ct)
     return pt if hmac.compare_digest(tag, tag_expected) else None
 ```
-<!-- end:code:ref/treewrap.py:aead_functions -->
+<!-- end:code:ref/tw128.py:aead_functions -->
 
 ## 6. Security Properties
 
@@ -1286,7 +1286,7 @@ proof-bound figure alone.
 
 All test vectors in this section are for TW128.
 
-<!-- begin:vectors:docs/treewrap-test-vectors.json:bare -->
+<!-- begin:vectors:docs/tw128-test-vectors.json:bare -->
 ### 10.1 Internal Function Vectors
 
 All internal function vectors use:
@@ -1355,12 +1355,12 @@ Swapping chunks 1 and 2 (bytes 0–8,191 and 8,192–16,383) yields tag
 
 For all internal function vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as
 `EncryptAndMAC`.
-<!-- end:vectors:docs/treewrap-test-vectors.json:bare -->
+<!-- end:vectors:docs/tw128-test-vectors.json:bare -->
 
-<!-- begin:vectors:docs/treewrap-test-vectors.json:aead -->
+<!-- begin:vectors:docs/tw128-test-vectors.json:aead -->
 ### 10.2 TW128 Vectors
 
-These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt` (the TW128 instantiation),
+These vectors validate `tw128_encrypt` / `tw128_decrypt` (the TW128 instantiation),
 including SP 800-185 `encode_string` key derivation.
 
 #### 10.2.1 Empty Message
@@ -1373,7 +1373,7 @@ including SP 800-185 `encode_string` key derivation.
 | M len | 0 |
 | ct‖tag | `1b581c73ae9475f3fe9a3695cbcb97d5fa6bf4fe50d5077c05307ee93333f585` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 10.2.2 33-Byte Message With 5-Byte AD
@@ -1386,7 +1386,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | M len | 33 (`00 01 02 ... mod 256`) |
 | ct‖tag | `ad06981fb8996d3a370fdff698dde70799641537c999562e9da3cc315998790f90079f24283c57e81120e7d5c3cc5c122b32c96b41769a24c1b4bffbff76f7b92d` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 10.2.3 Multi-Chunk Message (8193 Bytes)
@@ -1400,7 +1400,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | ct[:32] | `c865e59fbaee05479be69b2e5d321fb917c03358e7ea3ab4f5a83157ebfc0ace` |
 | tag | `be9035c011815da2706dc38f548a019165ebec1987c574913e4e4f18255c7b7f` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 10.2.4 Nonce Reuse Behavior (Equal-Length Messages)
@@ -1413,7 +1413,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | M len | 64 (`00 01 02 ... mod 256`) |
 | ct‖tag | `5105314ef74b22ad003d53ee853ad28d8eeaf3cc0e20244911d96597cf4bb37ca74cffa7ea574705198f81c0e80c3766aea6e0ef2ba1dfc92009606ac220af91b5e9fdad578dd16ab44e58fd5e8f7e58ea586dbd7a7382fe09d715e7c22eb14e` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Reusing the same `(K, N, AD)` with a different message is deterministic and yields
 `ct1 xor ct2 = m1 xor m2` within each rate block (168 bytes); overwrite mode causes
@@ -1430,7 +1430,7 @@ Nonce reuse is out of scope for Section 6 nonce-respecting claims.
 | M len | 48 (`00 01 02 ... mod 256`) |
 | ct‖tag | `d6c8e417669baeb1b6acb530dfef004efe1c7422c7e09821d03e9bf7e44a6d9808fb2d2c8c3466de4dc973c7c70a7692650495153855f4627b136e9da82ab591bc9762113b9b3a66f5fd507168950081` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Swapping `N` and `AD` (same byte length) yields a different `ct‖tag` and does not
 validate the original `ct‖tag`.
@@ -1445,7 +1445,7 @@ validate the original `ct‖tag`.
 | M len | 32 (`00 01 02 ... 1f`) |
 | ct‖tag | `6c6842b44331dca922bce7f3073f51b350a00676b4dba240d32f04ab8df28b20a6b4e5dfe5917f4ea5d55f469ea5f9c796658dd1015025fb2e73f3d02936506a` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖tag`.
 
@@ -1459,7 +1459,7 @@ Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖
 | M len | 17 (`00 01 02 ... 10`) |
 | ct‖tag | `2a590aaa049945f3306c6a4fce20538e1c2100b200d4f6009400efb3b5495a5fe9f7decb3aa27c597db789e8f280405604` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 10.2.8 Rate-Minus-One Message (167 Bytes, R-1 Boundary)
@@ -1473,7 +1473,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | ct[:32] | `35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84` |
 | tag | `32a0a6438ebd3b9bdcc76da34f9bc63fd2196b133cf6a3bef683b4b8c28dd43f` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 10.2.9 Exact-Rate Message (168 Bytes, R Boundary)
@@ -1487,7 +1487,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | ct[:32] | `35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84` |
 | tag | `54d3ebf2d79bacb8ca1217643a4bb71dc90bd5b5241b78f3a2e2491133047099` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
 #### 10.2.10 Large Nonce (32 Bytes)
@@ -1500,9 +1500,9 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | M len | 48 (`00 01 02 ... mod 256`) |
 | ct‖tag | `77431d80e360764438411dca0d9d76598d097b9fbfecb7e4e805532c5f4fff46bb3834e3df28209cb07413f531d104ed6b0d2f132c775cfd6a556b1f75f4769555751936ccab6d1a0f5cddfd3f608f0f` |
 
-`treewrap128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
+`tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
-<!-- end:vectors:docs/treewrap-test-vectors.json:aead -->
+<!-- end:vectors:docs/tw128-test-vectors.json:aead -->
 
 ## Appendix A. Exact Per-Query $`\sigma`$ Formula
 

@@ -12,7 +12,7 @@
 Thyrse is a protocol framework that sequences cryptographic operations as frames appended to a transcript. At each
 finalizing operation, KT128 (KangarooTwelve) is evaluated over the transcript to derive two independent outputs: a
 **chain value** that seeds the next transcript instance, and an **operational output** (a key, pseudorandom bytes, or
-both). Bulk encryption is delegated to TreeWrap when authenticated or unauthenticated ciphertext is needed.
+both). Bulk encryption is delegated to TW128 when authenticated or unauthenticated ciphertext is needed.
 
 This structure forms a **KDF chain**: each finalization consumes the current transcript and produces a chain value that
 carries unpredictability forward into the next instance. If an adversary does not know any single input to a transcript
@@ -37,7 +37,7 @@ The framework provides the following operations:
 
 | Symbol | Value | Description                          |
 |--------|-------|--------------------------------------|
-| C      | 32    | TreeWrap key and tag size (bytes)    |
+| C      | 32    | TW128 key and tag size (bytes)    |
 | H      | 64    | Chain value size (bytes)             |
 
 ## 3. Dependencies
@@ -45,11 +45,11 @@ The framework provides the following operations:
 **`KT128(M, S, ℓ)`:** KangarooTwelve as specified in RFC 9861. Takes a message `M`, a customization string `S`, and
 an output length `ℓ` in bytes.
 
-**`TreeWrap.EncryptAndMAC(key, plaintext) → (ciphertext, tag)`:** As specified in the TreeWrap specification. Takes a
+**`TW128.EncryptAndMAC(key, plaintext) → (ciphertext, tag)`:** As specified in the TW128 specification. Takes a
 `C`-byte key and arbitrary-length plaintext; returns same-length ciphertext and a `C`-byte tag.
 
-**`TreeWrap.DecryptAndMAC(key, ciphertext) → (plaintext, tag)`:** Takes a `C`-byte key and arbitrary-length ciphertext;
-returns same-length plaintext and a `C`-byte tag. TreeWrap does not perform tag verification; the caller is responsible
+**`TW128.DecryptAndMAC(key, ciphertext) → (plaintext, tag)`:** Takes a `C`-byte key and arbitrary-length ciphertext;
+returns same-length plaintext and a `C`-byte tag. TW128 does not perform tag verification; the caller is responsible
 for comparing the returned tag against an expected value.
 
 ### 3.1 Integer and String Encoding
@@ -178,12 +178,12 @@ Each KT128 evaluation uses a 1-byte customization string that identifies the pur
 | 0x23 | Seal key derivation            | Seal / Open         |
 | 0x24 | Ratchet chain derivation       | Ratchet             |
 
-TreeWrap's internal domain bytes are not listed here; they are specified in the TreeWrap specification
+TW128's internal domain bytes are not listed here; they are specified in the TW128 specification
 and covered by its own security analysis.
 
 <!-- begin:code:ref/thyrse.py:constants -->
 ```python
-C = 32   # TreeWrap key and tag size (bytes).
+C = 32   # TW128 key and tag size (bytes).
 H = 64   # Chain value size (bytes).
 
 # Operation codes.
@@ -412,7 +412,7 @@ mechanism (e.g., a signature over the transcript) or when confidentiality alone 
 
 Callers MUST ensure that a fresh, unpredictable value (such as a nonce or ephemeral key) has been absorbed via `Mix`
 before any `Mask` operation. If two protocol runs reach the same transcript state and then `Mask` different plaintexts,
-they derive the same TreeWrap key. This is catastrophic: TreeWrap with a repeated key leaks plaintext XOR differences,
+they derive the same TW128 key. This is catastrophic: TW128 with a repeated key leaks plaintext XOR differences,
 fully compromising confidentiality. This requirement is analogous to the nonce requirement of conventional AEAD schemes;
 it is the caller's responsibility and is not enforced by the framework.
 
@@ -429,7 +429,7 @@ When the transcript contains at least one unpredictable input, Mask provides IND
 
 3. Encrypt:
 
-- `(ciphertext, tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`
+- `(ciphertext, tag) ← TW128.EncryptAndMAC(key, plaintext)`
 
 4. Reset the transcript to a single frame:
 
@@ -450,7 +450,7 @@ Return `ciphertext`. The tag is not transmitted.
 
 3. Decrypt:
 
-- `(plaintext, tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
+- `(plaintext, tag) ← TW128.DecryptAndMAC(key, ciphertext)`
 
 4. Reset the transcript to a single frame:
 
@@ -513,7 +513,7 @@ authenticity, and CMT-4 committing security (§8.6).
 
 3. Encrypt:
 
-- `(ciphertext, tag) ← TreeWrap.EncryptAndMAC(key, plaintext)`
+- `(ciphertext, tag) ← TW128.EncryptAndMAC(key, plaintext)`
 
 4. Reset the transcript to a single frame:
 
@@ -537,7 +537,7 @@ The `tag` parameter MUST be exactly $`C`$ bytes. The `ciphertext` has the same l
 
 3. Decrypt:
 
-- `(plaintext, computed_tag) ← TreeWrap.DecryptAndMAC(key, ciphertext)`
+- `(plaintext, computed_tag) ← TW128.DecryptAndMAC(key, ciphertext)`
 
 4. Reset the transcript (unconditionally) to a single frame:
 
@@ -636,14 +636,14 @@ the Keccak sponge claim, exceeding the 128-bit security target.
 **KT128 domain separation.** KT128 accepts a customization string $`S`$ whose encoding is injective (RFC 9861, §3.2).
 Evaluations with distinct $`S`$ values therefore have disjoint input spaces and are modeled as independent random oracles.
 
-**TreeWrap.** Under a uniformly random $`C`$-byte key, TreeWrap provides:
+**TW128.** Under a uniformly random $`C`$-byte key, TW128 provides:
 
 - **IND-CPA** confidentiality (nonce-free: each key is used once).
 - **INT-CTXT** authenticity, with forgery probability at most $`S / 2^{8C}`$ for $`S`$ attempts.
 - **CMT-4** committing security (Bellare and Hoang, EUROCRYPT 2022): a ciphertext does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs.
 - **Tag PRF:** the full $`C`$-byte tag is a pseudorandom function of $`(\mathit{key}, \mathit{ciphertext})`$.
 
-TreeWrap does not perform tag verification; the caller (Thyrse) is responsible. See the TreeWrap specification for proofs
+TW128 does not perform tag verification; the caller (Thyrse) is responsible. See the TW128 specification for proofs
 of these properties.
 
 ### 8.2 KDF Security and the RO-KDF Construction
@@ -813,9 +813,9 @@ non-ratchet operations, KT128's domain separation property (§8.1) means that di
 independent random oracles. The chain value and operational output are therefore independent: observing the operational
 output (or ciphertext encrypted under a key derived from it) reveals no information about the chain value.
 
-**Tag absorption.** For `Mask` and `Seal`, the chain frame absorbs the TreeWrap tag alongside the chain value. The tag
-is a deterministic function of the TreeWrap key and the ciphertext, and the ciphertext is itself derived from the
-TreeWrap key and the plaintext. Since the TreeWrap key is derived from a different customization string (`0x22` or
+**Tag absorption.** For `Mask` and `Seal`, the chain frame absorbs the TW128 tag alongside the chain value. The tag
+is a deterministic function of the TW128 key and the ciphertext, and the ciphertext is itself derived from the
+TW128 key and the plaintext. Since the TW128 key is derived from a different customization string (`0x22` or
 `0x23`) than the chain value (`0x20`), the key and chain value are independent. The entire tag computation is therefore
 a function of quantities independent of the chain value, so absorbing the tag reveals no information about the chain
 value and the composition argument is preserved.
@@ -902,28 +902,28 @@ unrecoverable from the chain value by KT128 preimage resistance. Forward secrecy
 securely discards all state associated with the pre-ratchet transcript. Without secure erasure, an adversary who
 compromises the implementation's internal state may be able to recover prior keys.
 
-**Mask / Unmask.** The TreeWrap key is derived via KT128 with customization string `0x22`. Under the RO-KDF argument
+**Mask / Unmask.** The TW128 key is derived via KT128 with customization string `0x22`. Under the RO-KDF argument
 (§8.3), this key is indistinguishable from a uniformly random `C`-byte string as long as the transcript contains an
-unpredictable input. By the TreeWrap IND-CPA assumption (§8.1), `Mask` provides IND-CPA confidentiality.
+unpredictable input. By the TW128 IND-CPA assumption (§8.1), `Mask` provides IND-CPA confidentiality.
 
-The tag is a deterministic function of the TreeWrap key, which is derived from a different customization string
+The tag is a deterministic function of the TW128 key, which is derived from a different customization string
 (`0x22`) than the chain value (`0x20`). By chain independence (§8.4), the tag reveals no information about the chain
 value, preserving composition. If the
 ciphertext is tampered with, the sender and receiver compute different tags, causing their transcripts to diverge and
 all subsequent operations to produce different results. However, `Mask` alone does not provide integrity guarantees.
 Applications requiring integrity should use `Seal` or authenticate the ciphertext externally.
 
-**Seal / Open.** The security of `Seal` follows in two steps. First, the TreeWrap key is derived via customization
+**Seal / Open.** The security of `Seal` follows in two steps. First, the TW128 key is derived via customization
 string `0x23`, and the RO-KDF argument (§8.3) establishes that this key is indistinguishable from a uniformly random
-$`C`$-byte string. Second, TreeWrap under a uniformly random key provides IND-CPA and INT-CTXT (§8.1), which together
+$`C`$-byte string. Second, TW128 under a uniformly random key provides IND-CPA and INT-CTXT (§8.1), which together
 imply IND-CCA2 (Bellare and Namprempre, ASIACRYPT 2000, Theorem 3.2). Chain independence (§8.4) ensures that subsequent
 protocol outputs — derived from the chain value under a different customization string (`0x20`) — reveal no information
 about the Seal key, so the IND-CCA2 guarantee is not weakened by the adversary's view of later operations.
 
-TreeWrap's CMT-4 property (§8.1) requires that keys are derived via a collision-resistant mapping from caller-level
+TW128's CMT-4 property (§8.1) requires that keys are derived via a collision-resistant mapping from caller-level
 inputs. KDF security (§8.3) ensures each key is indistinguishable from random, and collision resistance of KT128 (§8.1)
 ensures distinct transcripts produce distinct keys except with negligible probability, satisfying the collision-resistance
-requirement. Together these satisfy TreeWrap's bare-usage requirement, giving CMT-4 committing security.
+requirement. Together these satisfy TW128's bare-usage requirement, giving CMT-4 committing security.
 
 `Open` advances the transcript unconditionally with the computed tag. On verification failure, the receiver's computed
 tag differs from the sender's, and the chain frame absorbs a different value. All subsequent operations produce
@@ -936,7 +936,7 @@ produce distinct transcripts, guaranteeing independent outputs at any subsequent
 ### 8.7 Concrete Security Bound
 
 The reduction has three layers: replace KT128 with a random oracle (indifferentiability), apply the RO-KDF argument per
-instance with inductive composition (§§8.3–8.5), and invoke TreeWrap's IND-CPA, INT-CTXT, and CMT-4 properties
+instance with inductive composition (§§8.3–8.5), and invoke TW128's IND-CPA, INT-CTXT, and CMT-4 properties
 (§8.1).
 
 **Domain separation.** All operation codes are in the range `0x01`–`0x08`. All KT128 customization strings are in the
@@ -956,7 +956,7 @@ transcript bytes. No confusion between the two is possible regardless of byte va
 | $`H`$  | Chain value length = 512 bits                                                  |
 
 The data complexity $`\sigma`$ counts all Keccak-p[1600,12] calls made by the protocol, including both KT128
-finalizations and TreeWrap encryption/decryption. All share the same ideal permutation and contribute to the global
+finalizations and TW128 encryption/decryption. All share the same ideal permutation and contribute to the global
 indifferentiability budget.
 
 **Combined bound.**
@@ -970,7 +970,7 @@ where:
 - $`\varepsilon_{\mathrm{perm}}`$ is the advantage of distinguishing Keccak-p[1600,12] from a random permutation
   (conjectured negligible).
 - $`2(\sigma + t)^2 / 2^{c+1} = 2(\sigma + t)^2 / 2^{257}`$ is the sponge indifferentiability term, covering all
-  Keccak-p evaluations globally (Thyrse backbone and TreeWrap internals). The factor of 2 arises from the Sakura
+  Keccak-p evaluations globally (Thyrse backbone and TW128 internals). The factor of 2 arises from the Sakura
   composition: the combined indifferentiability of KT128 (tree hash on TurboSHAKE128) is bounded by
   $`q_{\mathrm{tree}}^2 / 2^{c+1} + (\sigma + t)^2 / 2^{c+1}`$, which simplifies to $`2(\sigma + t)^2 / 2^{c+1}`$
   since $`q_{\mathrm{tree}} \leq \sigma`$.
@@ -981,8 +981,8 @@ where:
   dominated by the caller's weakest key material: the chain value source contributes at most $`t / 2^{512}`$
   (negligible), so the per-instance bound collapses to the weakest caller-supplied source.
 - $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ bounds chain value collisions (§8.5).
-- $`\varepsilon_{\mathrm{tw}}`$ is the combined advantage against TreeWrap's IND-CPA, INT-CTXT, and CMT-4 properties.
-  See the TreeWrap specification for the concrete bound; the dominant term is $`S / 2^{8C} = S / 2^{256}`$ for forgery
+- $`\varepsilon_{\mathrm{tw}}`$ is the combined advantage against TW128's IND-CPA, INT-CTXT, and CMT-4 properties.
+  See the TW128 specification for the concrete bound; the dominant term is $`S / 2^{8C} = S / 2^{256}`$ for forgery
   resistance.
 
 **Numerical evaluation.** For typical parameters — $`q \leq 2^{48}`$ finalizations, $`\sigma + t \leq 2^{64}`$ total
@@ -991,7 +991,7 @@ Keccak-p calls, $`S \leq 2^{48}`$ forgery attempts, and 256-bit key material ($`
 - Indifferentiability: $`2(2^{64})^2 / 2^{257} = 2^{-128}`$
 - RO-KDF: $`2^{48} \cdot 2 \cdot 2^{64} / 2^{256} = 2^{-143}`$
 - Chain collisions: $`(2^{48})^2 / 2^{513} = 2^{-417}`$
-- TreeWrap forgery: $`2^{48} / 2^{256} = 2^{-208}`$
+- TW128 forgery: $`2^{48} / 2^{256} = 2^{-208}`$
 
 The indifferentiability term dominates. The 128-bit security target is met as long as the caller ensures
 $`\varepsilon_{\mathrm{kdf}} \leq 2^{-128}`$ (i.e., the original key material has at least 128 bits of min-entropy)
@@ -1105,7 +1105,7 @@ $`\sigma_{\mathrm{total}} + t \leq 2^{80}`$, $`S = 2^{48}`$ total forgery attemp
 - Indifferentiability: $`2 \cdot 2^{160} / 2^{257} = 2^{-96}`$
 - Multi-target key recovery: $`2^{32} \cdot 2^{81} / 2^{256} = 2^{-143}`$
 - Cross-session chain collisions: $`2^{128} / 2^{513} = 2^{-385}`$
-- TreeWrap forgery: $`2^{48} / 2^{256} = 2^{-208}`$
+- TW128 forgery: $`2^{48} / 2^{256} = 2^{-208}`$
 
 The indifferentiability term dominates. The aggregate data complexity ($`\sigma_{\mathrm{total}}`$) grows with the
 number of instances, reducing the effective security margin from the single-instance 128 bits to 96 bits at
@@ -1128,7 +1128,7 @@ first expensive permutation, which is sufficient for a typical AEAD header (`Ini
 
 ### 9.2 Constant-Time Operation
 
-Implementations MUST ensure constant-time processing for all secret data. KT128 and TreeWrap MUST not branch on any
+Implementations MUST ensure constant-time processing for all secret data. KT128 and TW128 MUST not branch on any
 input values. Tag verification in `Open` MUST use constant-time comparison.
 
 ### 9.3 Memory Sanitization
@@ -1139,12 +1139,12 @@ in-place SHOULD overwrite the buffer with zeros (not with the original ciphertex
 attacker-controlled). Callers MUST NOT read or act on plaintext from a failed `Open`.
 
 **Protocol state.** The `Clear` operation (§7.8) zeros the internal state, buffered key material, and stored `Init`
-label. Implementations SHOULD also zero derived TreeWrap keys and intermediate chain values as soon as they are no
+label. Implementations SHOULD also zero derived TW128 keys and intermediate chain values as soon as they are no
 longer needed. For forward secrecy to hold after any finalization, the pre-finalization state SHOULD be erased;
 retaining it in memory weakens the forward secrecy guarantee.
 
 **Registers.** Implementations SHOULD clear SIMD and general-purpose registers that held secret data (key material,
-chain values, intermediate KT128 or TreeWrap state) before returning from operations.
+chain values, intermediate KT128 or TW128 state) before returning from operations.
 
 **Language-level considerations.** In languages with garbage collection or compiler optimizations that may elide stores
 to dead memory, implementations SHOULD use platform-specific secure-zeroing primitives (e.g., `explicit_bzero`,
@@ -1156,7 +1156,7 @@ to dead memory, implementations SHOULD use platform-specific secure-zeroing prim
 ($`2(\sigma + t)^2 / 2^{c+1}`$) is a limit of the proof technique, not a known weakness in the construction. It
 bounds the advantage of an adversary who can distinguish the Keccak-p[1600,12] sponge from a random oracle, which is
 the model under which KT128's security is proven. The $`\sigma + t \leq 2^{64}`$ threshold at which this bound reaches
-$`2^{-128}`$ is shared by all constructions built on the same permutation (SHA-3, SHAKE, TurboSHAKE, KT128, TreeWrap).
+$`2^{-128}`$ is shared by all constructions built on the same permutation (SHA-3, SHAKE, TurboSHAKE, KT128, TW128).
 At 168 bytes per sponge block, this corresponds to roughly $`2^{71}`$ bytes (2.8 exabytes). Beyond this threshold, the
 proof no longer guarantees 128-bit security, but this does not mean the construction becomes insecure; it means the
 reduction to the ideal permutation model is no longer tight enough to make the claim. No known attack exploits this
@@ -1165,7 +1165,7 @@ gap.
 **Per-operation costs.** A non-finalizing operation (Init, Mix) appends to the running transcript without forcing a
 permutation; it contributes $`\lceil \text{frame size} / 168 \rceil`$ sponge blocks to $`\sigma`$. Each finalizing
 operation (Derive, Ratchet, Mask, Seal) evaluates KT128 twice (chain value and operational output), costing at least 2
-Keccak-p calls plus absorption of the transcript. Mask and Seal additionally invoke TreeWrap, whose cost is
+Keccak-p calls plus absorption of the transcript. Mask and Seal additionally invoke TW128, whose cost is
 proportional to the plaintext length.
 
 **Thyrse-specific limits.** Within Thyrse itself, there is no per-session key lifetime concern analogous to AEAD nonce
@@ -1238,7 +1238,7 @@ def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag)
   theorem.
 - NIST SP 800-185: SHA-3 Derived Functions (`left_encode`, `right_encode`, `encode_string`).
 - RFC 9861: KangarooTwelve and TurboSHAKE.
-- TreeWrap128 specification. Defines the tree-parallel authenticated encryption scheme used by Mask and Seal. Provides
+- TW128128 specification. Defines the tree-parallel authenticated encryption scheme used by Mask and Seal. Provides
   IND-CPA, INT-CTXT, CMT-4, and tag PRF security claims referenced in §8.1.
 
 ## 12. Test Vectors

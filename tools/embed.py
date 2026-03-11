@@ -113,7 +113,7 @@ def _make_message(msg_def: dict) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# TreeWrap vector renderers
+# TW128 vector renderers
 # ---------------------------------------------------------------------------
 
 def render_bare_vectors(data: dict) -> str:
@@ -179,7 +179,7 @@ def render_aead_vectors(data: dict) -> str:
 
     lines.append("### 10.2 TW128 Vectors")
     lines.append("")
-    lines.append("These vectors validate `treewrap128_encrypt` / `treewrap128_decrypt` (the TW128 instantiation),")
+    lines.append("These vectors validate `tw128_encrypt` / `tw128_decrypt` (the TW128 instantiation),")
     lines.append("including SP 800-185 `encode_string` key derivation.")
     lines.append("")
 
@@ -212,7 +212,7 @@ def render_aead_vectors(data: dict) -> str:
             lines.append(f"| ct[:32] | `{exp['ct_prefix32_hex']}` |")
             lines.append(f"| tag | `{exp['tag_hex']}` |")
         lines.append("")
-        lines.append("`treewrap128_decrypt(K, N, AD, ct\u2016tag)` returns the original plaintext.")
+        lines.append("`tw128_decrypt(K, N, AD, ct\u2016tag)` returns the original plaintext.")
         lines.append("Changing `N`, `AD`, or `tag` causes decryption to return `None`.")
         checks = case.get("checks", {})
         if checks.get("nonce_reuse_xor_leak"):
