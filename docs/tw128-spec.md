@@ -833,10 +833,13 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
     The overwrite rule $`S[\mathit{pos}] \leftarrow \mathit{ct}[j]`$ writes the ciphertext byte (uniform) into the
     state, not the plaintext byte. The adversary's plaintext choice determines *which* uniform value
     $`\mathit{ct}[j]`$ takes, but not its distribution.
-  - *Block $`j > 0`$:* The ciphertext bytes from all preceding rate blocks (uniform by induction) have been written into the rate via the overwrite rule.
-    The capacity is carried forward from the previous $`\pi`$-output. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$,
-    this capacity has not appeared in any other $`\pi`$-call, so the full input (rate || capacity) is fresh and the
-    output is uniformly random. The same XOR and overwrite arguments apply.
+  - *Block $`j > 0`$:* After processing block $`j-1`$, the overwrite rule has written the ciphertext bytes of
+    block $`j-1`$ (uniform by induction) into the rate, and $`\pi`$ is applied at the block boundary. The capacity
+    output of this $`\pi`$-call is distinct from all other $`\pi`$-output capacities under
+    $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. This distinct capacity, combined with the rate content, forms a full
+    1600-bit $`\pi`$-input that has not been queried before — regardless of the rate content, a novel capacity
+    suffices for input freshness. The $`\pi`$-output is therefore uniformly random, giving a uniform state at the
+    start of block $`j`$. The same XOR and overwrite arguments as block 0 then apply to each byte in this block.
   - *Final partial block:* The last block may contain $`0 \le k < R`$ ciphertext bytes followed by `pad_permute`. The
     $`k`$ bytes are uniform by the same argument. The `pad_permute` call applies $`\pi`$ to a fresh input (distinct
     capacity under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the squeeze output is also uniform.
