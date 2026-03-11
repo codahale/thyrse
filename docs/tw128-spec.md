@@ -683,10 +683,13 @@ $`\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}`$ cover
 
 > [!NOTE]
 > The $`\varepsilon_{\mathrm{cap}}`$ term already covers all capacity collisions globally, including those
-> internal to the KDF. The MRV15 capacity terms ($`(q\ell)^2/2^b`$ and $`2q^2\ell/2^c`$ in the FKS bound) are
-> therefore subsumed by $`\varepsilon_{\mathrm{cap}}`$. The non-redundant contribution from
-> $`\varepsilon_{\mathrm{ks}}`$ is the online-vs-offline term $`\mu_{\mathrm{kdf}}\, t / 2^k`$, which captures
-> key-recovery-style attacks not covered by the capacity birthday bound.
+> internal to the KDF. The MRV15 full-state term $`(q\ell)^2/2^b`$ is always negligible at $`b = 1600`$. The
+> FKS capacity term $`2q^2\ell/2^c`$ is of the same order as the KDF's contribution to
+> $`\varepsilon_{\mathrm{cap}}`$ (which scales as $`q^2\ell^2/2^{c+1}`$); for $`\ell \geq 4`$ the latter
+> dominates, and for shorter KDF inputs the FKS term exceeds it by at most a small constant factor that does
+> not affect the security level. The non-redundant contribution from $`\varepsilon_{\mathrm{ks}}`$ is the
+> online-vs-offline term $`\mu_{\mathrm{kdf}}\, t / 2^k`$, which captures key-recovery-style attacks not
+> covered by the capacity birthday bound.
 
 Let $`\mathsf{CtxColl}`$ denote the event of a derived-key collision among distinct contexts. This context-collision term
 is per experiment/per key epoch.
