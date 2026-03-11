@@ -149,7 +149,7 @@ The encodings used here (`left_encode`, `encode_string`, `length_encode`) are de
 
 TW128 uses the Sakura final-node-growing topology with kangaroo hopping, following KangarooTwelve (ePrint
 2016/770, Sections 1 and 3.3). The final node (index 0) is a duplex that encrypts chunk 0 directly (the "message
-hop"). Chunks 1 through $`n-1`$ are processed by independent leaf Duplexes that produce chain values (the "chaining hop").
+hop"). Chunks 1 through $`n-1`$ are processed by independent leaf duplexes that produce chain values (the "chaining hop").
 
 For $`n = 1`$, the final node encrypts the entire message and produces the tag via `pad_permute(0x07)`. The Sakura frame
 bits are: message hop `'1'` + final `'1'` = `'11'`, yielding domain byte `0x07` (delimited suffix `'111'`).
@@ -657,7 +657,7 @@ CMT-4 (Section 6.10) does not use this bridge; see that section for its standalo
 
 1. **Domain separation (Section 6.3).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the KDF's $`\pi`$-calls (set
    $`\mathcal{K}`$, domain byte `0x09`) are on inputs disjoint from all other components' $`\pi`$-calls. The KDF sponge
-   evaluation is therefore functionally independent of the leaf ciphers and final-node Duplex.
+   evaluation is therefore functionally independent of the leaf ciphers and final-node duplex.
 
 2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a single-evaluation keyed sponge (absorb context, squeeze
    once) with uniformly random master key $`K`$. By the outer-keyed sponge result (ADMV15; see Section 6.2), after the
@@ -766,11 +766,11 @@ identical chunking.
 This bijection is used in Section 6.10 (CMT-4) to rule out two different plaintexts opening the same ciphertext under
 one key.
 
-**Final-node tag (n = 1).** For single-chunk messages, the final node is a single Duplex that inits with
+**Final-node tag (n = 1).** For single-chunk messages, the final node is a single duplex that inits with
 $`(K_{tw}, 0)`$ via `pad_permute(0x08)`, encrypts the entire message (overwrite mode, covered by Lemma 2), and squeezes
 the tag via `pad_permute(0x07)`. This is one continuous FKD evaluation.
 
-**Final-node tag (n > 1).** For multi-chunk messages, the final node is a single Duplex that:
+**Final-node tag (n > 1).** For multi-chunk messages, the final node is a single duplex that:
 
 1. Inits with $`(K_{tw}, 0)`$ via `pad_permute(0x08)`.
 2. Encrypts chunk 0 (overwrite mode, covered by Lemma 2).
