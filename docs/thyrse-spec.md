@@ -38,7 +38,7 @@ The framework provides the following operations:
 | Symbol | Value | Description                          |
 |--------|-------|--------------------------------------|
 | C      | 32    | TW128 key and tag size (bytes)    |
-| H      | 64    | Chain value size (bytes)             |
+| H      | 64    | Chain value size (bytes); oversized for birthday-bound margin (§8.5) |
 
 ## 3. Dependencies
 
@@ -879,10 +879,13 @@ transitions:
 \mathrm{Adv}^{\mathrm{chain}}(\mathcal{A}) \leq q \cdot \varepsilon_{\mathrm{kdf}}
 ```
 
-**Chain value collisions.** Each chain value is $`H = 64`$ bytes (512 bits). The birthday bound for collisions across
-$`q`$ instances is $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$. A collision would cause two instances to share identical
-subsequent transcripts. For $`q \leq 2^{48}`$, this probability is $`2^{-417}`$, far below the 128-bit security
-target.
+**Chain value collisions.** Each chain value is $`H = 64`$ bytes (512 bits), twice the minimum needed for 128-bit
+collision resistance (§8.1). The oversized output ensures the birthday bound for chain collisions —
+$`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ — remains negligible relative to the indifferentiability term
+($`2(\sigma + t)^2 / 2^{257}`$), even in multi-user settings where the total number of chain values $`Q = U \cdot q`$
+is large (§8.9.2). At $`H = 32`$, the collision term would share the same denominator as the indifferentiability term,
+making chain collisions a binding constraint at large $`Q`$. For $`q \leq 2^{48}`$, the collision probability is
+$`2^{-417}`$, far below the 128-bit security target.
 
 ### 8.6 Per-Operation Security
 
