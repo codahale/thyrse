@@ -843,11 +843,12 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
     $`k`$ bytes are uniform by the same argument. The `pad_permute` call applies $`\pi`$ to a fresh input (distinct
     capacity under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the squeeze output is also uniform.
 
-  By induction, all ciphertext bytes are uniform. Since only ciphertext bytes enter the state via the overwrite rule,
-  state evolution depends on the uniform ciphertext sequence, not the adversary's plaintext choice.
+  By the overwrite rule, the duplex state entering block $`j`$ is a deterministic function of the ciphertext bytes
+  from blocks $`0, \ldots, j{-}1`$ and the initial $`\pi`$-output. Since the induction shows each block's ciphertext
+  has the same conditional distribution regardless of the adversary's plaintext choice, the joint distribution of
+  the entire ciphertext — and hence the adversary's view — is independent of that choice.
 
-The adversary therefore receives exactly uniformly random ciphertexts regardless of which plaintext it submits.
-The bare IND-CPA advantage is zero. The total bound follows from the decomposition in Section 6.5.
+The bare IND-CPA advantage is therefore zero. The total bound follows from the decomposition in Section 6.5.
 
 ### 6.8 INT-CTXT
 
