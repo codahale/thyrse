@@ -904,8 +904,7 @@ $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}`$), so it provides no 
 encryption oracle already reveals. Removing the decryption oracle reduces the game to IND-CPA.
 
 **Step 2: Substitute bare bounds.** From Sections 6.7 and 6.8:
-$`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} \le \sigma^2/2^{1601}`$ (absorbed by
-$`\varepsilon_{\mathrm{cap}}`$ per the Section 6.1 convention) and
+$`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$ and
 $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}`$. Therefore:
 
 ```math
