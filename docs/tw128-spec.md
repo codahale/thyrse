@@ -52,7 +52,7 @@ the five domain separation bytes used by TW128.
 
 Unlike the XOR-absorb approach used by SpongeWrap, the `encrypt` and `decrypt` operations write ciphertext directly
 into the rate rather than XORing plaintext into it. This is the Overwrite-mode style analyzed in Bertoni et al.
-(Section 6.2, Algorithm 5; Theorem 2) and used in Section 6. Intermediate (non-final) encrypt/decrypt blocks fill the
+(BDPVA11 §6.2, Algorithm 5; Theorem 2) and used in Section 6. Intermediate (non-final) encrypt/decrypt blocks fill the
 full R = 168 byte rate and permute without padding; only terminal operations (initialization, chain value finalization, and the tag
 `_duplex_pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply TurboSHAKE-style padding via `pad_permute`. For full-rate
 blocks, a write-only state update is also faster than read-XOR-write on most architectures.
@@ -1134,7 +1134,7 @@ techniques that make this possible, progressing from data layout through schedul
 - **Share one scheduling pipeline for encrypt and decrypt.** Both directions use the same chunk batching, index
   binding, and chain-value accumulation logic; only the XOR direction differs.
 - **Keep domain bytes and index mapping exact.** The constants `0x08`, `0x0B`, `0x09`, `0x07`, `0x06` and the
-  `key ‖ LEU64(index)` binding (index 0 for the final node, 1 through $`n`$ for leaves) are structural for
+  `key ‖ LEU64(index)` binding (index 0 for the final node, 1 through $`n-1`$ for leaves) are structural for
   interoperability and security analysis.
 - **No misuse resistance (MRAE).** TW128 is not SIV-style: nonce reuse leaks plaintext XOR (Section 6.7).
   Applications requiring nonce-misuse resistance should use a dedicated MRAE construction.
