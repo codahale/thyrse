@@ -296,8 +296,9 @@ Append frame `(0x02, label, data)`.
 
 ### 7.3 Fork
 
-Clones the protocol state into `N` independent branches and modifies the base. Each branch receives a left-encoded
-ordinal ID for domain separation. The base receives ordinal `0`; clones receive ordinals `1` through `N`.
+Clones the protocol state into `N` independent branches. All `N+1` states (base and clones) receive a Fork frame with
+a distinct left-encoded ordinal for domain separation. The base receives ordinal `0`; clones receive ordinals `1`
+through `N`.
 
 **`Fork(label, values...) → clones[]`**
 
