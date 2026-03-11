@@ -594,7 +594,13 @@ duplexing call. TW128's tags ($`\tau = 32`$ bytes) and chain values
 
 1. **Padded vs. padded (different domain bytes).** The domain byte occupies a fixed position in the TurboSHAKE padding frame (byte position `pos` in `pad_permute`). Two padded blocks with different domain bytes differ in that byte position, hence have different rate content and different full $`\pi`$-inputs regardless of capacity.
 
-2. **Padded vs. unpadded.** Every unpadded intermediate $`\pi`$-call (set $`\mathcal{U}`$) inherits its capacity from a prior $`\pi`$-output. Init calls start from zero capacity; all other padded calls (chain value finalization, tag squeeze) inherit capacity from a prior $`\pi`$-output in their own duplex chain. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, all $`\pi`$-output capacities are pairwise distinct. A prior $`\pi`$-output with zero capacity (which would collide with an init call's input capacity) occurs with probability at most $`\sigma/2^c`$, absorbed into $`\varepsilon_{\mathrm{cap}}`$. Therefore no padded and unpadded call share the same capacity, and their full 1600-bit $`\pi`$-inputs are distinct.
+2. **Padded vs. unpadded.** Every unpadded intermediate $`\pi`$-call (set $`\mathcal{U}`$) inherits its capacity from a prior $`\pi`$-output. Two sub-cases determine why this capacity cannot match a padded call's input capacity:
+
+   - **(a) Non-init padded calls** (chain value finalization, tag squeeze) also inherit capacity from a prior $`\pi`$-output in their own duplex chain. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, all $`\pi`$-output capacities are pairwise distinct, so no unpadded call and non-init padded call share a capacity value. This is a direct consequence of the birthday-type event that $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ excludes.
+
+   - **(b) Init calls** start from zero capacity. An unpadded call's inherited capacity (a uniformly random $`c`$-bit $`\pi`$-output) could equal zero. This is a single-target preimage event, not a pairwise collision: each of at most $`\sigma`$ capacity outputs equals zero with probability $`2^{-c}`$, giving a total failure probability of at most $`\sigma/2^c`$, which is dominated by $`\varepsilon_{\mathrm{cap}}`$.
+
+   In both sub-cases, the capacities differ, so the full 1600-bit $`\pi`$-inputs are distinct.
 
 3. **Within a set.** Calls within the same role are distinguished by one of two mechanisms:
 
