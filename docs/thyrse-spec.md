@@ -859,7 +859,12 @@ By (2), the chain value is indistinguishable from a uniformly random $`H`$-byte 
 unpredictable input to the next instance, satisfying the precondition of Theorem 8 for that instance. By (1), no
 operational output from the current instance helps predict it.
 
-**Hybrid argument.** Assume Instance 0 contains at least one unpredictable input, as required by the per-operation
+**Hybrid argument.** The per-instance analysis (§8.2) conservatively models chain values as adversarially known,
+so that KDF security rests entirely on the caller's secret `Mix` inputs. The following hybrid argument refines this:
+it shows that each chain value is indistinguishable from random and therefore alone satisfies Theorem 8's
+precondition for the next instance, even if no fresh key material is mixed.
+
+Assume Instance 0 contains at least one unpredictable input, as required by the per-operation
 preconditions (§7.4, §7.6, §7.7). The composition across $`q`$ instances is formalized as a sequence of $`q`$ hybrid
 games. In Hybrid $`j`$ (for $`j = 0, \ldots, q`$), the chain values $`\mathit{cv}_0, \ldots, \mathit{cv}_{j-1}`$ are
 replaced with
