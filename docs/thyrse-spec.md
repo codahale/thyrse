@@ -932,12 +932,15 @@ ciphertext is tampered with, the sender and receiver compute different tags, cau
 all subsequent operations to produce different results. However, `Mask` alone does not provide integrity guarantees.
 Applications requiring integrity should use `Seal` or authenticate the ciphertext externally.
 
-**Seal / Open.** The security of `Seal` follows in two steps. First, the TW128 key is derived via customization
-string `0x23`, and the RO-KDF argument (§8.3) establishes that this key is indistinguishable from a uniformly random
-$`C`$-byte string. Second, TW128 under a uniformly random key provides IND-CPA and INT-CTXT (§8.1), which together
-imply IND-CCA2 (Bellare and Namprempre, ASIACRYPT 2000, Theorem 3.2). Chain independence (§8.4) ensures that subsequent
-protocol outputs — derived from the chain value under a different customization string (`0x20`) — reveal no information
-about the Seal key, so the IND-CCA2 guarantee is not weakened by the adversary's view of later operations.
+**Seal / Open.** The TW128 key is derived via customization string `0x23`, and the RO-KDF argument (§8.3) establishes
+that this key is indistinguishable from a uniformly random $`C`$-byte string. Under the precondition that the
+transcript contains a fresh unpredictable input (§7.7), encoding injectivity (§8.3) ensures distinct Seal operations
+evaluate KT128 on distinct inputs, so each derived key is independently random. TW128's IND-CPA and INT-CTXT
+properties (§8.1) then apply directly to each operation, and together imply IND-CCA2 (Bellare and Namprempre,
+ASIACRYPT 2000, Theorem 3.2). Chain independence (§8.4) ensures that subsequent protocol
+outputs — derived from the chain value under a different customization string (`0x20`) — reveal no information about
+the Seal key, so the confidentiality and authenticity guarantees are not weakened by the adversary's view of later
+operations.
 
 For Seal to achieve CMT-4 committing security at the protocol level, two conditions must hold. First, distinct
 transcripts must produce distinct keys: collision resistance of KT128 (§8.1) ensures this except with probability at
