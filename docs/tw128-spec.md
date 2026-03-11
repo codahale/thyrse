@@ -22,15 +22,15 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ## 2. Parameters
 
-| Symbol | Value             | Description                                           |
-|--------|-------------------|-------------------------------------------------------|
-| f      | Keccak-p[1600,12] | 1600-bit state, 12 rounds                             |
-| R      | 168               | Sponge rate (bytes); $`1600/8 - 32 = 168`$            |
-| C      | 32                | Capacity (bytes); key and chain value size             |
-| $`\tau`$ | 32              | Tag size (bytes); equal to C for this instantiation    |
-| $`K_L`$ | 32               | Key length (bytes)                                    |
-| B      | 8192              | Chunk size (bytes), matching KangarooTwelve            |
-| KDF    | TurboSHAKE128     | RFC 9861                                               |
+| Symbol   | Value             | Description                                         |
+|----------|-------------------|-----------------------------------------------------|
+| f        | Keccak-p[1600,12] | per RFC 9861, 1600-bit state, 12 rounds             |
+| C        | 32                | Capacity (bytes); key and chain value size          |
+| R        | 168               | Sponge rate (bytes); $`1600/8 - 32 = 168`$          |
+| $`\tau`$ | 32                | Tag size (bytes); equal to C for this instantiation |
+| $`K_L`$  | 32                | Key length (bytes)                                  |
+| B        | 8192              | Chunk size (bytes), matching KangarooTwelve         |
+| KDF      | TurboSHAKE128     | per RFC 9861, 32-byte capacity                      |
 
 **Constraint verification.** $`C + 8 = 40 \leq 167 = R - 1`$. $`\max(\tau, C) = 32 < 168 = R`$.
 
