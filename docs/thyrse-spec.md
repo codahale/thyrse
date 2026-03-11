@@ -826,27 +826,7 @@ value and the composition argument is preserved.
 
 ### 8.5 KDF Chain Property
 
-**Formal context.** Alwen, Coretti, and Dodis (ACD19) formalize a *KDF chain* as a PRF-PRNG primitive
-(Definition 16): a pair $`(\mathsf{P\text{-}Init}, \mathsf{P\text{-}Up})`$ where $`\mathsf{P\text{-}Init}(k)`$ produces
-an initial state $`\sigma`$ and $`\mathsf{P\text{-}Up}(\sigma, I)`$ produces a new state $`\sigma'`$ and an output
-$`R`$. The PRF-PRNG security game (Definition 17, Figure 7) captures three properties in a single definition:
-resilience (the output is pseudorandom when the state is refreshed with a uniformly random input), forward security
-(corrupting the state does not compromise prior outputs), and the PRF property (adversarially chosen inputs on an
-uncorrupted state produce pseudorandom outputs). This is the formal primitive underlying the symmetric-key ratchet in the Signal
-protocol.
-
-**Correspondence to Thyrse.** Each Thyrse finalization is an instance of $`\mathsf{P\text{-}Up}`$: the transcript plays
-the role of the input $`I`$, the chain value (CS `0x20`) plays the role of the new state $`\sigma'`$, and
-the operational output (CS `0x21`–`0x24`) plays the role of $`R`$. The chain independence
-argument (§8.4) justifies treating $`\sigma'`$ and $`R`$ as independent, which is the analogue of the PRF-PRNG
-security game's separation between PRNG mode (state refresh) and PRF mode (output derivation).
-
-Thyrse's proof proceeds via BCFG25 (RO-KDF on a recoverable encoding) rather than ACD19's standard-model
-PRF-PRNG reduction. ACD19's composition theorem targets bidirectional messaging (CKA + FS-AEAD + PRF-PRNG),
-while Thyrse is a unidirectional transcript-based framework with a different operation set. The RO-KDF route gives
-tighter bounds and follows directly from KT128's indifferentiability.
-
-**KDF chain property.** Each finalization produces a chain value that is:
+Each finalization produces a chain value that is:
 
 1. **Independent** of the operational output (§8.4).
 2. **Unpredictable** to any adversary who does not know all inputs to the current transcript instance (§8.3, via
@@ -897,6 +877,15 @@ $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ — remains negligible relative to the indiff
 is large (§8.9.2). At $`H = 32`$, the collision term would share the same denominator as the indifferentiability term,
 making chain collisions a binding constraint at large $`Q`$. For $`q \leq 2^{48}`$, the collision probability is
 $`2^{-417}`$, far below the 128-bit security target.
+
+**Remark (relation to ACD19).** The chain value / operational output split is the analogue of Alwen, Coretti, and
+Dodis's PRF-PRNG primitive (ACD19, Definition 16), where $`\mathsf{P\text{-}Up}(\sigma, I)`$ produces a new state
+$`\sigma'`$ and an output $`R`$. Each Thyrse finalization is an instance of $`\mathsf{P\text{-}Up}`$: the transcript
+plays the role of $`I`$, the chain value the role of $`\sigma'`$, and the operational output the role of $`R`$.
+Chain independence (§8.4) is the analogue of the PRF-PRNG security game's separation between PRNG mode (state refresh)
+and PRF mode (output derivation). The proof above proceeds via BCFG25 rather than ACD19's standard-model reduction,
+which targets bidirectional messaging (CKA + FS-AEAD + PRF-PRNG). The RO-KDF route gives tighter bounds and follows
+directly from KT128's indifferentiability.
 
 ### 8.6 Per-Operation Security
 
