@@ -925,10 +925,12 @@ imply IND-CCA2 (Bellare and Namprempre, ASIACRYPT 2000, Theorem 3.2). Chain inde
 protocol outputs — derived from the chain value under a different customization string (`0x20`) — reveal no information
 about the Seal key, so the IND-CCA2 guarantee is not weakened by the adversary's view of later operations.
 
-TW128's CMT-4 property (§8.1) requires that keys are derived via a collision-resistant mapping from caller-level
-inputs. KDF security (§8.3) ensures each key is indistinguishable from random, and collision resistance of KT128 (§8.1)
-ensures distinct transcripts produce distinct keys except with negligible probability, satisfying the collision-resistance
-requirement. Together these satisfy TW128's bare-usage requirement, giving CMT-4 committing security.
+For Seal to achieve CMT-4 committing security at the protocol level, two conditions must hold. First, distinct
+transcripts must produce distinct keys: collision resistance of KT128 (§8.1) ensures this except with negligible
+probability (bounded by the collision term in §8.7), so an adversary cannot produce a single ciphertext that is valid
+under two distinct transcript histories. Second, under each derived key, TW128 must be CMT-4 (§8.1), so the ciphertext
+does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs. KDF security (§8.3)
+ensures each key is indistinguishable from a uniformly random string, satisfying TW128's key distribution assumption.
 
 `Open` advances the transcript unconditionally with the computed tag. On verification failure, the receiver's computed
 tag differs from the sender's, and the chain frame absorbs a different value. All subsequent operations produce
