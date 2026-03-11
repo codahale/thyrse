@@ -849,7 +849,16 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
   By the overwrite rule, the duplex state entering block $`j`$ is a deterministic function of the ciphertext bytes
   from blocks $`0, \ldots, j{-}1`$ and the initial $`\pi`$-output. Since the induction shows each block's ciphertext
   has the same conditional distribution regardless of the adversary's plaintext choice, the joint distribution of
-  the entire ciphertext — and hence the adversary's view — is independent of that choice.
+  a single duplex's ciphertext is independent of that choice.
+
+  For $`n > 1`$, the argument extends to the full AEAD output. Distinct leaf indices (same $`K_{tw}`$, different
+  `LEU64(i)`) produce distinct init $`\pi`$-inputs, and under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ the resulting
+  capacity chains remain disjoint, so each leaf's $`\pi`$-call set is independent of every other leaf's. Applying the
+  single-duplex induction to each leaf in isolation, every leaf's ciphertext chunk is independently uniform. The chain
+  values squeezed from leaves $`1, \ldots, n{-}1`$ are uniform $`\pi`$-outputs from fresh inputs. The final node absorbs
+  these chain values and produces the tag; its tag-squeeze $`\pi`$-call is on a fresh input (distinct capacity under
+  $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the tag is also uniform. The joint distribution of all chunks' ciphertexts
+  and the tag is therefore independent of the adversary's plaintext choice.
 
 The bare IND-CPA advantage is therefore zero. The total bound follows from the decomposition in Section 6.5.
 
