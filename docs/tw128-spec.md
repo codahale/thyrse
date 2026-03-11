@@ -998,13 +998,14 @@ $`L' = \mathrm{KDF}(K', N', AD')`$.
   under $`\pi`$, which determines $`C^\star`$ and in particular the tag $`T^\star`$. For each candidate
   $`L' \neq L`$, the second opening's init $`\pi`$-input differs in the rate ($`L \neq L'`$ at the same
   rate positions). Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, no capacity collision merges the subsequent
-  duplex chains, so every $`\pi`$-call in the second opening is on a fresh input independent of the first
-  opening's $`\pi`$-calls. The second opening's tag $`T'`$ is therefore uniform over $`\pi`$ conditioned on
-  the first opening, giving $`\Pr_\pi[T' = T^\star] = 1/2^{8\tau}`$. Each candidate requires at least one
-  $`\pi`$-call for init, so the adversary can evaluate at most $`t + \sigma_v`$ candidates. By a union
-  bound, the probability over $`\pi`$ that any candidate yields $`T' = T^\star`$ is at most
-  $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed by
-  the $`(t + \sigma_v)^2 / 2^{c+1}`$ term.
+  duplex chains, so every $`\pi`$-call in the second opening is on an input distinct from the first
+  opening's $`\pi`$-calls. In particular, the tag-squeeze $`\pi`$-input of the second opening is fresh:
+  over the random choice of $`\pi`$, the probability that it maps to a state whose first $`\tau`$ bytes
+  equal $`T^\star`$ is $`1/2^{8\tau}`$. Since each candidate requires at least one unique $`\pi`$-query
+  (the init call for $`L'`$), the adversary can evaluate at most $`t + \sigma_v`$ candidates within their
+  query budget. By a union bound, the probability over $`\pi`$ that any candidate yields $`T' = T^\star`$
+  is at most $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is
+  subsumed by the $`(t + \sigma_v)^2 / 2^{c+1}`$ term.
 
 Therefore:
 
