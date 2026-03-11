@@ -1200,7 +1200,7 @@ by the TurboSHAKE128-based KDF to derive a unique internal key, not passed to th
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs -- they prove authenticity but are not
 necessarily pseudorandom. TW128's tag is a full PRF: under a random key, the tag is indistinguishable from a random
-string (Section 6.1). This stronger property is useful for protocols that derive further keying material from the tag.
+string (Section 6.6). This stronger property is useful for protocols that derive further keying material from the tag.
 
 ### 8.1 Operational Safety Limits
 
