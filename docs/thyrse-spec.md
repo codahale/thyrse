@@ -852,11 +852,11 @@ replaced with
 uniformly random strings independent of all other protocol values. Hybrid 0 is the real game; Hybrid $`q`$ replaces
 all chain values with random. The transition from Hybrid $`j`$ to Hybrid $`j + 1`$ replaces $`\mathit{cv}_j`$ with a
 random string. The reduction embeds the KDF security challenge at Instance $`j`$: it simulates Instances
-$`0, \ldots, j-1`$ honestly using the random chain values it chose (which it knows), and simulates Instances
+$`0, \ldots, j-1`$ honestly using the random chain values it chose, and simulates Instances
 $`j+1, \ldots, q-1`$ with real KT128 evaluations. An adversary distinguishing these two hybrids implies an adversary
-against the KDF security of Instance $`j`$, because $`\mathit{cv}_j`$ is the output of a random oracle
-(`0x20`, or `0x24` for `Ratchet`) on a transcript containing an unpredictable input (either fresh key material in
-Instance 0, or the already-random $`\mathit{cv}_{j-1}`$ from the hybrid assumption). For `Ratchet`, only a single
+against the KDF security of Instance $`j`$. The chain value $`\mathit{cv}_j`$ is the output of a random oracle
+— `0x20` for non-ratchet operations, `0x24` for `Ratchet` — on a transcript containing an unpredictable input:
+fresh key material in Instance 0, or the already-random $`\mathit{cv}_{j-1}`$ from the hybrid assumption. For `Ratchet`, only a single
 oracle is evaluated and no operational output is produced, so the chain independence condition (§8.4) is vacuously
 satisfied. The RO-KDF bound applies in all cases. By a union bound over the $`q`$
 transitions:
