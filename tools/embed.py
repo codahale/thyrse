@@ -253,7 +253,7 @@ def render_thyrse_vectors(data: dict) -> str:
     lines.append("`(hex)`.")
 
     # IDs to skip when encountered in the main loop (handled as groups).
-    skip = {"16.5.2", "16.9.2", "16.9.3"}
+    skip = {"12.5.2", "12.9.2", "12.9.3"}
 
     for vec in vectors:
         vid = vec["id"]
@@ -264,15 +264,15 @@ def render_thyrse_vectors(data: dict) -> str:
         exp = vec["expected"]
 
         # --- Heading & description ---
-        if vid == "16.5.1":
-            v1, v2 = by_id["16.5.1"], by_id["16.5.2"]
+        if vid == "12.5.1":
+            v1, v2 = by_id["12.5.1"], by_id["12.5.2"]
             lines.append("")
-            lines.append("### 16.5 Ratchet + Derive")
+            lines.append("### 12.5 Ratchet + Derive")
             lines.append("")
             lines.append(_quote_ops(v1["description"]) + " " + _quote_ops(v2["description"]))
-        elif vid == "16.9.1":
+        elif vid == "12.9.1":
             lines.append("")
-            lines.append("### 16.9 Multiple Seals in Sequence")
+            lines.append("### 12.9 Multiple Seals in Sequence")
             lines.append("")
             lines.append(_quote_ops(vec["description"]))
         else:
@@ -284,13 +284,13 @@ def render_thyrse_vectors(data: dict) -> str:
         lines.append("")
 
         # --- Code block ---
-        if vid == "16.1":
+        if vid == "12.1":
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
             lines.append('output = p.derive(b"output", 32)')
             lines.append("```")
-        elif vid == "16.2":
+        elif vid == "12.2":
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
@@ -298,7 +298,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('p.mix(b"nonce", b"test-nonce-value")')
             lines.append('output = p.derive(b"output", 32)')
             lines.append("```")
-        elif vid == "16.3":
+        elif vid == "12.3":
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
@@ -306,7 +306,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('ct_tag = p.seal(b"message", b"hello, world!")')
             lines.append('output = p.derive(b"output", 32)')
             lines.append("```")
-        elif vid == "16.4":
+        elif vid == "12.4":
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
@@ -314,7 +314,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('ct = p.mask(b"unauthenticated", b"mask this data")')
             lines.append('ct_tag = p.seal(b"authenticated", b"seal this data")')
             lines.append("```")
-        elif vid == "16.5.1":
+        elif vid == "12.5.1":
             lines.append("```python")
             lines.append("# Without Ratchet")
             lines.append("p = Protocol()")
@@ -329,7 +329,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('p.ratchet(b"forward-secrecy")')
             lines.append('output_after_ratchet = p.derive(b"output", 32)')
             lines.append("```")
-        elif vid == "16.6":
+        elif vid == "12.6":
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
@@ -339,7 +339,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('clone_1_output = clones[0].derive(b"output", 32)  # "prover" (ordinal 1)')
             lines.append('clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)')
             lines.append("```")
-        elif vid == "16.7":
+        elif vid == "12.7":
             lines.append("```python")
             lines.append("# Sender")
             lines.append("sender = Protocol()")
@@ -359,7 +359,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('pt = receiver.open(b"message", ct, tag)')
             lines.append('confirm = receiver.derive(b"confirm", 32)')
             lines.append("```")
-        elif vid == "16.8":
+        elif vid == "12.8":
             lines.append("```python")
             lines.append("# Sender")
             lines.append("sender = Protocol()")
@@ -380,7 +380,7 @@ def render_thyrse_vectors(data: dict) -> str:
             lines.append('pt = receiver.open(b"message", ct, tag)  # returns None')
             lines.append('receiver_after = receiver.derive(b"after", 32)')
             lines.append("```")
-        elif vid == "16.9.1":
+        elif vid == "12.9.1":
             lines.append("```python")
             lines.append("p = Protocol()")
             lines.append(f'p.init(b"{init_label}")')
@@ -394,47 +394,47 @@ def render_thyrse_vectors(data: dict) -> str:
         lines.append("")
 
         # --- Table ---
-        if vid == "16.1":
+        if vid == "12.1":
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             lines.append(f"| Derive output | `{exp['derive']}` |")
-        elif vid == "16.2":
+        elif vid == "12.2":
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             lines.append(f"| Derive output | `{exp['derive']}` |")
-        elif vid == "16.3":
+        elif vid == "12.3":
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
             lines.append(f"| Derive output | `{exp['derive']}` |")
-        elif vid == "16.4":
+        elif vid == "12.4":
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             lines.append(f"| Mask output (ct) | `{exp['mask']}` |")
             lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
-        elif vid == "16.5.1":
-            v2 = by_id["16.5.2"]
+        elif vid == "12.5.1":
+            v2 = by_id["12.5.2"]
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             lines.append(f"| Derive (no Ratchet) | `{exp['derive']}` |")
             lines.append(f"| Derive (after Ratchet) | `{v2['expected']['derive']}` |")
-        elif vid == "16.6":
+        elif vid == "12.6":
             lines.append("| Branch | Derive output |")
             lines.append("|--------|---------------|")
             lines.append(f"| Base (ordinal 0) | `{exp['base_derive']}` |")
             lines.append(f"| Clone 1 / \"prover\" (ordinal 1) | `{exp['clone_1_derive']}` |")
             lines.append(f"| Clone 2 / \"verifier\" (ordinal 2) | `{exp['clone_2_derive']}` |")
-        elif vid == "16.7":
+        elif vid == "12.7":
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
-        elif vid == "16.8":
+        elif vid == "12.8":
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             lines.append(f"| Seal output (ct \u2016 tag) | `{exp['seal']}` |")
             lines.append("| Open result | \u22a5 (authentication failed) |")
-        elif vid == "16.9.1":
-            v2, v3 = by_id["16.9.2"], by_id["16.9.3"]
+        elif vid == "12.9.1":
+            v2, v3 = by_id["12.9.2"], by_id["12.9.3"]
             lines.append("| Seal | Output (ct \u2016 tag) |")
             lines.append("|------|-------------------|")
             lines.append(f"| 1 | `{exp['seal']}` |")

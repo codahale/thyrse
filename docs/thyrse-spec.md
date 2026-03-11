@@ -1254,7 +1254,7 @@ def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag)
 All values are hex-encoded. All test vectors use `Init` label `"test.vector"`. Byte string literals are shown in hex as
 `(hex)`.
 
-### 16.1 Init + Derive
+### 12.1 Init + Derive
 
 Minimal protocol producing output.
 
@@ -1268,7 +1268,7 @@ output = p.derive(b"output", 32)
 |-------|-------|
 | Derive output | `25feba088971a4b573101369ea1c8d83e6f102c2dc46e5cceb81a0b97fca514c` |
 
-### 16.2 Init + Mix + Mix + Derive
+### 12.2 Init + Mix + Mix + Derive
 
 Multiple non-finalizing operations before `Derive`.
 
@@ -1284,7 +1284,7 @@ output = p.derive(b"output", 32)
 |-------|-------|
 | Derive output | `0db4090efec2ba935dac63a18d88df04859d1dedf4a60f428393674520b67e39` |
 
-### 16.3 Init + Mix + Seal + Derive
+### 12.3 Init + Mix + Seal + Derive
 
 Full AEAD followed by `Derive`.
 
@@ -1301,7 +1301,7 @@ output = p.derive(b"output", 32)
 | Seal output (ct ‖ tag) | `dde795eebaaa663b55e904c1e4da1c6c6f1c770b9c90fd17b8add38741dd5e4c821ad0e5aeb4bbfbc18d89ebe4` |
 | Derive output | `e6a99cd5ac77af8370dd09e5f1ea020b1ded0a7415a9dadcbe6133e917dd2498` |
 
-### 16.4 Init + Mix + Mask + Seal
+### 12.4 Init + Mix + Mask + Seal
 
 Combined unauthenticated and authenticated encryption.
 
@@ -1318,9 +1318,9 @@ ct_tag = p.seal(b"authenticated", b"seal this data")
 | Mask output (ct) | `21fc87f3008b3cff62fb2584c970` |
 | Seal output (ct ‖ tag) | `f078ea89c7dea34a821c8470544ec5a70061c75aa9de8a1d49e4a9e816455ca54f78e50a2a1981d1c0a47cfe4d20` |
 
-### 16.5 Ratchet + Derive
+### 12.5 Ratchet + Derive
 
-Baseline `Derive` output without `Ratchet`, for comparison with §16.5.2. `Derive` output changes after `Ratchet`, demonstrating forward secrecy.
+Baseline `Derive` output without `Ratchet`, for comparison with §12.5.2. `Derive` output changes after `Ratchet`, demonstrating forward secrecy.
 
 ```python
 # Without Ratchet
@@ -1342,7 +1342,7 @@ output_after_ratchet = p.derive(b"output", 32)
 | Derive (no Ratchet) | `b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf` |
 | Derive (after Ratchet) | `23be92e694890a8b3d6fb5b4885b3b5a63539ad8da6fc5e8e20cf34728dbeb91` |
 
-### 16.6 Fork + Derive
+### 12.6 Fork + Derive
 
 `Fork` with two branches, each producing `Derive`. All three outputs are independent.
 
@@ -1362,7 +1362,7 @@ clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)
 | Clone 1 / "prover" (ordinal 1) | `329696ce84ae7aef8577db9841d82956b60f9f7ce38449d8b83092f3a46a89ad` |
 | Clone 2 / "verifier" (ordinal 2) | `19644cc5d0a5bc8f52eb647a581b85ba868ce0cb3561f8d2a58f1bf6ed1a3e82` |
 
-### 16.7 Seal + Open Round-Trip
+### 12.7 Seal + Open Round-Trip
 
 Successful authenticated encryption and decryption. Post-operation `Derive` outputs match.
 
@@ -1390,7 +1390,7 @@ confirm = receiver.derive(b"confirm", 32)
 |-------|-------|
 | Seal output (ct ‖ tag) | `1383ffe1d63304655b9b94ae27f2a50ea1734e2df148381c2080d70ad86bac40e84d08e43b48b0b9f4a106156a` |
 
-### 16.8 Seal + Open with Tampered Ciphertext
+### 12.8 Seal + Open with Tampered Ciphertext
 
 `Open` returns ⊥ and subsequent `Derive` outputs diverge from the sender.
 
@@ -1420,7 +1420,7 @@ receiver_after = receiver.derive(b"after", 32)
 | Seal output (ct ‖ tag) | `6e73c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a` |
 | Open result | ⊥ (authentication failed) |
 
-### 16.9 Multiple Seals in Sequence
+### 12.9 Multiple Seals in Sequence
 
 First of three sequential Seals. Each derives a different key because the transcript advances via tag absorption.
 

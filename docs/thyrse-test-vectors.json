@@ -1,7 +1,7 @@
 {
   "vectors": [
     {
-      "id": "16.1",
+      "id": "12.1",
       "title": "Init + Derive",
       "description": "Minimal protocol producing output.",
       "init_label": "test.vector",
@@ -10,7 +10,7 @@
       }
     },
     {
-      "id": "16.2",
+      "id": "12.2",
       "title": "Init + Mix + Mix + Derive",
       "description": "Multiple non-finalizing operations before Derive.",
       "init_label": "test.vector",
@@ -19,7 +19,7 @@
       }
     },
     {
-      "id": "16.3",
+      "id": "12.3",
       "title": "Init + Mix + Seal + Derive",
       "description": "Full AEAD followed by Derive.",
       "init_label": "test.vector",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "16.4",
+      "id": "12.4",
       "title": "Init + Mix + Mask + Seal",
       "description": "Combined unauthenticated and authenticated encryption.",
       "init_label": "test.vector",
@@ -39,16 +39,16 @@
       }
     },
     {
-      "id": "16.5.1",
+      "id": "12.5.1",
       "title": "Mix + Derive (no Ratchet)",
-      "description": "Baseline Derive output without Ratchet, for comparison with §16.5.2.",
+      "description": "Baseline Derive output without Ratchet, for comparison with §12.5.2.",
       "init_label": "test.vector",
       "expected": {
         "derive": "b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf"
       }
     },
     {
-      "id": "16.5.2",
+      "id": "12.5.2",
       "title": "Mix + Ratchet + Derive",
       "description": "Derive output changes after Ratchet, demonstrating forward secrecy.",
       "init_label": "test.vector",
@@ -57,7 +57,7 @@
       }
     },
     {
-      "id": "16.6",
+      "id": "12.6",
       "title": "Fork + Derive",
       "description": "Fork with two branches, each producing Derive. All three outputs are independent.",
       "init_label": "test.vector",
@@ -68,7 +68,7 @@
       }
     },
     {
-      "id": "16.7",
+      "id": "12.7",
       "title": "Seal + Open Round-Trip",
       "description": "Successful authenticated encryption and decryption. Post-operation Derive outputs match.",
       "init_label": "test.vector",
@@ -77,7 +77,7 @@
       }
     },
     {
-      "id": "16.8",
+      "id": "12.8",
       "title": "Seal + Open with Tampered Ciphertext",
       "description": "Open returns \u22a5 and subsequent Derive outputs diverge from the sender.",
       "init_label": "test.vector",
@@ -86,7 +86,7 @@
       }
     },
     {
-      "id": "16.9.1",
+      "id": "12.9.1",
       "title": "Multiple Seals (1 of 3)",
       "description": "First of three sequential Seals. Each derives a different key because the transcript advances via tag absorption.",
       "init_label": "test.vector",
@@ -95,7 +95,7 @@
       }
     },
     {
-      "id": "16.9.2",
+      "id": "12.9.2",
       "title": "Multiple Seals (2 of 3)",
       "description": "Second of three sequential Seals.",
       "init_label": "test.vector",
@@ -104,7 +104,7 @@
       }
     },
     {
-      "id": "16.9.3",
+      "id": "12.9.3",
       "title": "Multiple Seals (3 of 3)",
       "description": "Third of three sequential Seals.",
       "init_label": "test.vector",
