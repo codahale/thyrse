@@ -852,7 +852,7 @@ tighter bounds and follows directly from KT128's indifferentiability.
 1. **Independent** of the operational output (§8.4).
 2. **Unpredictable** to any adversary who does not know all inputs to the current transcript instance (§8.3, via
    Theorem 8).
-3. **Absorbed as an input** to the next transcript instance, via the chain frame (§4.3).
+3. **Absorbed as an input** to the next transcript instance, via the chain frame (§4.4).
 
 By (2), the chain value is indistinguishable from a uniformly random $`H`$-byte string. By (3), it serves as an
 unpredictable input to the next instance, satisfying the precondition of Theorem 8 for that instance. By (1), no
@@ -1245,7 +1245,7 @@ def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag)
   theorem.
 - NIST SP 800-185: SHA-3 Derived Functions (`left_encode`, `right_encode`, `encode_string`).
 - RFC 9861: KangarooTwelve and TurboSHAKE.
-- TW128128 specification. Defines the tree-parallel authenticated encryption scheme used by Mask and Seal. Provides
+- TW128 specification. Defines the tree-parallel authenticated encryption scheme used by Mask and Seal. Provides
   IND-CPA, INT-CTXT, CMT-4, and tag PRF security claims referenced in §8.1.
 
 ## 12. Test Vectors
