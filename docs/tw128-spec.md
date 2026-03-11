@@ -994,7 +994,7 @@ CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the brid
 \mathrm{Adv}_{\mathrm{CMT\text{-}4}}(\mathcal{A}) \le \frac{(t + \sigma_v)^2}{2^{c+1}} + \frac{t + \sigma_v}{2^{8\tau}}.
 ```
 Where $`\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}`$,
-$`\mu\, t / 2^k`$ is the combined online-vs-offline term: $`\mu_{\mathrm{kdf}}\, t / 2^k`$ from the KDF (Section 6.4) plus $`\mu_{\mathrm{duplex}}\, t / 2^k`$ from leaf and final-node freshness (Section 6.1); MRV15 capacity terms are subsumed by $`\varepsilon_{\mathrm{cap}}`$. and
+$`\mu\, t / 2^k`$ is the combined online-vs-offline term: $`\mu_{\mathrm{kdf}}\, t / 2^k`$ from the KDF (Section 6.4) plus $`\mu_{\mathrm{duplex}}\, t / 2^k`$ from leaf and final-node freshness (Section 6.1); MRV15 capacity terms are within a constant factor of $`\varepsilon_{\mathrm{cap}}`$ (by Cauchy-Schwarz, $`\sum \ell_i^2 / 2^c \leq 2(\sum \ell_i)^2 / 2^{c+1} \leq 2\varepsilon_{\mathrm{cap}}`$; cross-terms with $`t`$ widen the margin further). And
 $`\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}`$ is the PRF-RF switching cost.
 Parameters are defined in Section 6.1.
 
