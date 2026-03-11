@@ -884,6 +884,11 @@ transitions:
 \mathrm{Adv}^{\mathrm{chain}}(\mathcal{A}) \leq q \cdot \varepsilon_{\mathrm{kdf}}
 ```
 
+Since each hybrid step preserves an unpredictable input in the transcript (the now-random
+$`\mathit{cv}_{j-1}`$, or fresh key material for Instance 0), and each operational output is derived from an
+independent oracle on that transcript (§8.4), the operational outputs are also indistinguishable from random across
+all $`q`$ instances under the same bound.
+
 **Chain value collisions.** Each chain value is $`H = 64`$ bytes (512 bits), twice the minimum needed for 128-bit
 collision resistance (§8.1). The oversized output ensures the birthday bound for chain collisions —
 $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ — remains negligible relative to the indifferentiability term
