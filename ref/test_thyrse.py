@@ -306,14 +306,14 @@ class TestVectorsJSON(unittest.TestCase):
         self.fail(f"vector {vid} not found")
 
     def test_16_1_init_derive(self):
-        vec = self._vec("16.1")
+        vec = self._vec("12.1")
         p = Protocol()
         p.init(vec["init_label"].encode())
         output = p.derive(b"output", 32)
         self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_2_mix_mix_derive(self):
-        vec = self._vec("16.2")
+        vec = self._vec("12.2")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -322,7 +322,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_3_seal_derive(self):
-        vec = self._vec("16.3")
+        vec = self._vec("12.3")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -332,7 +332,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_4_mask_seal(self):
-        vec = self._vec("16.4")
+        vec = self._vec("12.4")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -342,7 +342,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(sealed.hex(), vec["expected"]["seal"])
 
     def test_16_5_1_derive_no_ratchet(self):
-        vec = self._vec("16.5.1")
+        vec = self._vec("12.5.1")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -350,7 +350,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_5_2_ratchet_derive(self):
-        vec = self._vec("16.5.2")
+        vec = self._vec("12.5.2")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -359,7 +359,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(output.hex(), vec["expected"]["derive"])
 
     def test_16_6_fork(self):
-        vec = self._vec("16.6")
+        vec = self._vec("12.6")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -369,7 +369,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(clones[1].derive(b"output", 32).hex(), vec["expected"]["clone_2_derive"])
 
     def test_16_7_seal_open_roundtrip(self):
-        vec = self._vec("16.7")
+        vec = self._vec("12.7")
         sender = Protocol()
         sender.init(vec["init_label"].encode())
         sender.mix(b"key", b"test-key-material")
@@ -390,7 +390,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(sender.derive(b"confirm", 32), receiver.derive(b"confirm", 32))
 
     def test_16_8_seal_open_tampered(self):
-        vec = self._vec("16.8")
+        vec = self._vec("12.8")
         sender = Protocol()
         sender.init(vec["init_label"].encode())
         sender.mix(b"key", b"test-key-material")
@@ -411,7 +411,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertNotEqual(sender.derive(b"after", 32), receiver.derive(b"after", 32))
 
     def test_16_9_1_seal(self):
-        vec = self._vec("16.9.1")
+        vec = self._vec("12.9.1")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -420,7 +420,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(s1.hex(), vec["expected"]["seal"])
 
     def test_16_9_2_seal(self):
-        vec = self._vec("16.9.2")
+        vec = self._vec("12.9.2")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
@@ -430,7 +430,7 @@ class TestVectorsJSON(unittest.TestCase):
         self.assertEqual(s2.hex(), vec["expected"]["seal"])
 
     def test_16_9_3_seal(self):
-        vec = self._vec("16.9.3")
+        vec = self._vec("12.9.3")
         p = Protocol()
         p.init(vec["init_label"].encode())
         p.mix(b"key", b"test-key-material")
