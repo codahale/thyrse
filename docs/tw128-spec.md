@@ -880,8 +880,11 @@ Even if the adversary has previously queried encryption on the same context and 
 ciphertext produces a different tag. For $`n = 1`$: let $`p`$ be the first byte position where the forged ciphertext
 differs from the legitimate one. Both duplexes process identical bytes up to position $`p`$, so their states agree at
 that point. At position $`p`$, the overwrite rule writes different ciphertext bytes into $`S[\mathit{pos}]`$, producing
-different rate content. At the next permutation boundary, the $`\pi`$-inputs differ in at least one rate byte, so the
-outputs are independent. All subsequent state — including the tag — is therefore independent of the legitimate tag.
+different rate content. Whether $`p`$ falls within an intermediate full-rate block or within the final partial block
+before `pad_permute`, the rate portion of the next $`\pi`$-input (either the full-rate permutation or the `pad_permute`
+call) differs in at least one byte. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the $`\pi`$-output is therefore
+independent of the legitimate computation's output at the same point. All subsequent state — including the tag — is
+therefore independent of the legitimate tag.
 For $`n > 1`$: a different ciphertext in at least one chunk produces a different chain value by the same
 byte-level divergence argument within that leaf; the final node absorbs different data, producing a different capacity
 state and hence a different tag.
