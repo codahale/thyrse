@@ -536,16 +536,15 @@ The single-target bound (Theorems 5 + 6, combined in the ideal-permutation
 model) is:
 
 ```math
-\mathrm{Adv}^{\mathrm{ind}[1]}_{\mathrm{OKS}}(M,\mu,N)
-  \;\leq\; \frac{M^2 + 2\mu N}{2^c} + \lambda(N) + \frac{2\!\left(\frac{k}{r}\right)\!N}{2^b},
+\mathrm{Adv}^{\mathrm{ind}[1]}_{\mathrm{OKS}}(\sigma,\mu,t)
+  \;\leq\; \frac{\sigma^2 + 2\mu\, t}{2^c} + \lambda(t) + \frac{2\!\left(\frac{k}{r}\right)\!t}{2^b},
 ```
-where $`M`$ is the data complexity — construction calls to $`\pi`$ ($`\sigma`$ in
-Section 6.1 notation), $`\mu`$ is the total maximum multiplicity, $`N`$ is the
-adversary's offline $`\pi`$-query budget ($`t`$ in Section 6.1), and $`\lambda(N)`$
+where $`\sigma`$, $`\mu`$, and $`t`$ are as defined in Section 6.1 (translating
+ADMV15's native parameters $`M \to \sigma`$, $`N \to t`$), and $`\lambda(t)`$
 is a key-recovery term bounded in ADMV15 Lemma 2. The dominant
-terms $`M^2/2^c`$ and $`2\mu N/2^c`$ match MRV15's capacity and online-vs-offline
-terms up to a constant factor. The remaining terms ($`\lambda(N)`$ and
-$`2(k/r)N/2^b`$) are negligible at $`b = 1600`$.
+terms $`\sigma^2/2^c`$ and $`2\mu\, t/2^c`$ match MRV15's capacity and online-vs-offline
+terms up to a constant factor. The remaining terms ($`\lambda(t)`$ and
+$`2(k/r)\,t/2^b`$) are negligible at $`b = 1600`$.
 
 After the init permutation, the full state is
 $`\pi(K \| \mathit{index} \| \mathtt{0x08}\text{-pad} \| 0^c)`$. Since $`K`$ is
