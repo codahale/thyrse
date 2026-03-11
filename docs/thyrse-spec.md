@@ -935,8 +935,9 @@ the Seal key, so the confidentiality and authenticity guarantees are not weakene
 operations.
 
 For Seal to achieve CMT-4 committing security at the protocol level, two conditions must hold. First, distinct
-transcripts must produce distinct keys: collision resistance of KT128 (§8.1) ensures this except with probability at
-most $`q^2 / 2^{8C+1}`$, which is dominated by the indifferentiability term in §8.7. An adversary therefore cannot
+transcripts must produce distinct keys: encoding injectivity (§8.3) ensures distinct Seal operations evaluate KT128
+on distinct inputs, so under the random oracle model the derived keys collide with probability at most
+$`q^2 / 2^{8C+1}`$, which is dominated by the indifferentiability term in §8.7. An adversary therefore cannot
 produce a single ciphertext that is valid under two distinct transcript histories. Second, under each derived key, TW128 must be CMT-4 (§8.1), so the ciphertext
 does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs. KDF security (§8.3)
 ensures each key is indistinguishable from a uniformly random string, satisfying TW128's key distribution assumption.
