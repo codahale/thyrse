@@ -973,9 +973,11 @@ $`L' = \mathrm{KDF}(K', N', AD')`$.
   same $`C^\star = \mathit{ct}^\star \| T^\star`$. By domain separation (Section 6.3) and exact uniformity
   (Section 6.1), the final-node squeeze $`\pi`$-call under $`L'`$ has a fresh input, so the tag under $`L'`$ is
   uniform over $`\{0,1\}^{8\tau}`$ and independent of $`T^\star`$. A single candidate matches with probability
-  $`1/2^{8\tau}`$. The adversary can evaluate at most $`t + \sigma_v`$ candidates (each tag evaluation costs at
-  least one $`\pi`$-call), so by a union bound the match probability is at most
-  $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed by the
+  $`1/2^{8\tau}`$. Each candidate key produces an independent state after the init permutation (different
+  key → different $`\pi`$-input → independent $`\pi`$-output under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so
+  the adversary gains no advantage from sharing intermediate computation across candidates. Each candidate
+  requires at least one $`\pi`$-call for init, so the adversary can evaluate at most $`t + \sigma_v`$
+  independent candidates. By a union bound, the match probability is at most $`(t + \sigma_v)/2^{8\tau}`$. The $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ conditioning cost is subsumed by the
   $`(t + \sigma_v)^2 / 2^{c+1}`$ term.
 
 Therefore:
