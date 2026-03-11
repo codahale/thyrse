@@ -456,9 +456,9 @@ Return `ciphertext`. The tag is not transmitted.
 
 Return `plaintext`.
 
-*Warning:* Any application-level processing of the unmasked plaintext MUST be treated as untrusted and safely buffered
-until an external authenticating operation (such as verifying a signature over a subsequent `Derive` output) has
-succeeded.
+*Warning:* Callers MUST NOT act on unmasked plaintext until an external authenticating operation (such as verifying a
+signature over a subsequent `Derive` output) has succeeded. Until then, the plaintext is unauthenticated and MUST be
+held without further processing.
 
 Because `Mask` provides no authentication, a tampered ciphertext produces a different tag at the receiver, causing the
 sender's and receiver's transcripts to silently diverge. All subsequent outputs will differ. Unlike a failed `Open`,
