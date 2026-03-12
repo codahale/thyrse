@@ -969,9 +969,11 @@ where:
   contributing $`2t / 2^{512}`$ per oracle (negligible). The factor of 2 in $`2t`$ is from BCFG25
   Proposition 7; $`t`$ upper-bounds the number of random oracle queries, which is at most the Keccak-p budget.
 - $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ bounds chain value collisions (§6.4).
-- $`\varepsilon_{\mathrm{tw}}`$ is the combined advantage against TW128's IND-CPA, INT-CTXT, and CMT-4 properties.
-  See the TW128 specification for the concrete bound; the dominant term is $`S / 2^{256}`$ for forgery
-  resistance.
+- $`\varepsilon_{\mathrm{tw}}`$ is TW128's bare-game advantage (TW128 spec §6.9): the residual after conditioning
+  on capacity separation and adversary-query freshness. TW128's capacity and freshness costs share the same
+  Keccak-p permutation and are already absorbed into the global $`\varepsilon_{\mathrm{cap}}`$ term above.
+  The dominant bare-game term is $`2S / 2^{8\tau} = 2S / 2^{256}`$ (IND-CCA2, the strongest property
+  Thyrse claims for Seal). See the TW128 specification §6.14 for the full summary.
 
 **Numerical evaluation.** For typical parameters — $`q \leq 2^{48}`$ finalizations, $`\sigma + t \leq 2^{64}`$ total
 Keccak-p calls, $`S \leq 2^{48}`$ forgery attempts, and 256-bit key material ($`\kappa = 256`$):
@@ -979,7 +981,7 @@ Keccak-p calls, $`S \leq 2^{48}`$ forgery attempts, and 256-bit key material ($`
 - Indifferentiability: $`2(2^{64})^2 / 2^{257} = 2^{-128}`$
 - RO-KDF: $`4 \cdot 2^{64} / 2^{256} = 2^{-190}`$
 - Chain collisions: $`(2^{48})^2 / 2^{513} = 2^{-417}`$
-- TW128 forgery: $`2^{48} / 2^{256} = 2^{-208}`$
+- TW128 (IND-CCA2): $`2 \cdot 2^{48} / 2^{256} = 2^{-207}`$
 
 The indifferentiability term dominates. The 128-bit security target is met as long as the caller ensures
 $`4t / 2^{\kappa} \leq 2^{-128}`$ (i.e., the original key material has at least 130 bits of min-entropy)
@@ -1088,7 +1090,7 @@ $`\sigma_{\mathrm{total}} + t \leq 2^{80}`$, $`S = 2^{48}`$ total forgery attemp
 - Indifferentiability: $`2 \cdot 2^{160} / 2^{257} = 2^{-96}`$
 - Multi-target key recovery: $`2^{32} \cdot 2^{82} / 2^{256} = 2^{-142}`$
 - Cross-session chain collisions: $`2^{128} / 2^{513} = 2^{-385}`$
-- TW128 forgery: $`2^{48} / 2^{256} = 2^{-208}`$
+- TW128 (IND-CCA2): $`2 \cdot 2^{48} / 2^{256} = 2^{-207}`$
 
 The indifferentiability term dominates. The aggregate data complexity ($`\sigma_{\mathrm{total}}`$) grows with the
 number of instances, reducing the effective security margin from the single-instance 128 bits to 96 bits at
