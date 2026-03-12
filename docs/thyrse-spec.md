@@ -832,16 +832,31 @@ satisfied. The RO-KDF bound applies in all cases. By a union bound over the $`q`
 transitions:
 
 ```math
-\mathrm{Adv}^{\mathrm{chain}}(\mathcal{A}) \leq q \cdot \varepsilon_{\mathrm{kdf}}
+\mathrm{Adv}^{\mathrm{chain}}(\mathcal{A}) \leq \sum_{j=0}^{q-1} \varepsilon_{\mathrm{kdf},j}
+```
+
+where $`\varepsilon_{\mathrm{kdf},j}`$ is the Theorem 8 bound at Instance $`j`$. At Instance 0, the weakest source
+is the caller's key material: $`\varepsilon_{\mathrm{kdf},0} = 2t / 2^{\kappa}`$. For $`j \geq 1`$, the weakest
+source is the chain value $`\mathit{cv}_{j-1}`$ — a uniformly random 512-bit string by the hybrid assumption — so
+$`\varepsilon_{\mathrm{kdf},j} = 2t / 2^{512}`$, negligible. The sum collapses:
+
+```math
+\mathrm{Adv}^{\mathrm{chain}}(\mathcal{A}) \leq \frac{2t}{2^{\kappa}} + (q - 1) \cdot \frac{2t}{2^{512}} \approx \frac{2t}{2^{\kappa}}
 ```
 
 **Operational outputs.** In Hybrid $`q`$, every chain value is uniformly random, so each transcript $`T_j`$ contains
 an unpredictable input ($`\mathit{cv}_{j-1}`$ for $`j \geq 1`$, or fresh key material for Instance 0). Each
-operational output is derived from an independent oracle on that transcript (chain independence, above). Applying Theorem 8 to the
-operational oracle at each instance, the output is indistinguishable from random at cost
-$`\varepsilon_{\mathrm{kdf}}`$ per instance, for a total of $`q \cdot \varepsilon_{\mathrm{kdf}}`$ across all
-instances. Combined with the chain hybrid, the total cost of making both chain values and operational outputs
-pseudorandom is $`2q \cdot \varepsilon_{\mathrm{kdf}}`$.
+operational output is derived from an independent oracle on that transcript (chain independence, above). The same
+per-instance analysis applies: Instance 0 costs $`2t / 2^{\kappa}`$, and instances $`j \geq 1`$ cost
+$`2t / 2^{512}`$ each (the chain value dominates). Combined with the chain hybrid, the total cost of making both
+chain values and operational outputs pseudorandom is:
+
+```math
+\frac{4t}{2^{\kappa}} + 2(q - 1) \cdot \frac{2t}{2^{512}}
+```
+
+The second term is negligible for any practical $`q`$, so the effective cost is $`4t / 2^{\kappa}`$ — independent
+of the chain length.
 
 **Chain value collisions.** Each chain value is $`H = 64`$ bytes (512 bits), twice the minimum needed for 128-bit
 collision resistance (§6.1). The oversized output ensures the birthday bound for chain collisions —
@@ -938,7 +953,7 @@ indifferentiability budget.
 **Combined bound.**
 
 ```math
-\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma + t)^2}{2^{c+1}} + 2q \cdot \varepsilon_{\mathrm{kdf}} + \frac{q^2}{2^{8H+1}} + \varepsilon_{\mathrm{tw}}
+\varepsilon_{\mathrm{total}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma + t)^2}{2^{c+1}} + \frac{4t}{2^{\kappa}} + \frac{q^2}{2^{8H+1}} + \varepsilon_{\mathrm{tw}}
 ```
 
 where:
@@ -948,15 +963,11 @@ where:
 - $`2(\sigma + t)^2 / 2^{c+1} = 2(\sigma + t)^2 / 2^{257}`$ is the sponge indifferentiability term, covering all
   Keccak-p evaluations globally (Thyrse backbone and TW128 internals). The factor of 2 arises from the Sakura
   composition (§6.1).
-- $`2q \cdot \varepsilon_{\mathrm{kdf}}`$ accounts for the two-stage hybrid in §6.4: $`q`$ steps to replace chain
-  values with random, plus $`q`$ steps to replace operational outputs (keys and Derive values) with random. Each
-  step invokes Theorem 8 on a single oracle at cost $`\varepsilon_{\mathrm{kdf}}`$. For key material with
-  $`\kappa`$ bits of min-entropy,
-  $`\varepsilon_{\mathrm{kdf}} \leq 2 \cdot t / 2^{\kappa}`$ (the factor of 2 is from BCFG25 Proposition 7;
-  $`t`$ upper-bounds the number of random oracle queries, which is at most the Keccak-p budget). In the chain
-  setting, Theorem 8's sum over sources is dominated by the caller's weakest key material: the chain value source
-  contributes at most $`t / 2^{512}`$ (negligible), so the per-instance bound collapses to the weakest
-  caller-supplied source.
+- $`4t / 2^{\kappa}`$ is the RO-KDF cost from the two-stage hybrid in §6.4. Each finalization evaluates two
+  independent oracles (chain value and operational output); only Instance 0 pays the full cost
+  $`2t / 2^{\kappa}`$ per oracle, since for $`j \geq 1`$ the chain value is a 512-bit random string
+  contributing $`2t / 2^{512}`$ per oracle (negligible). The factor of 2 in $`2t`$ is from BCFG25
+  Proposition 7; $`t`$ upper-bounds the number of random oracle queries, which is at most the Keccak-p budget.
 - $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ bounds chain value collisions (§6.4).
 - $`\varepsilon_{\mathrm{tw}}`$ is the combined advantage against TW128's IND-CPA, INT-CTXT, and CMT-4 properties.
   See the TW128 specification for the concrete bound; the dominant term is $`S / 2^{256}`$ for forgery
@@ -966,12 +977,12 @@ where:
 Keccak-p calls, $`S \leq 2^{48}`$ forgery attempts, and 256-bit key material ($`\kappa = 256`$):
 
 - Indifferentiability: $`2(2^{64})^2 / 2^{257} = 2^{-128}`$
-- RO-KDF: $`2 \cdot 2^{48} \cdot 2 \cdot 2^{64} / 2^{256} = 2^{-142}`$
+- RO-KDF: $`4 \cdot 2^{64} / 2^{256} = 2^{-190}`$
 - Chain collisions: $`(2^{48})^2 / 2^{513} = 2^{-417}`$
 - TW128 forgery: $`2^{48} / 2^{256} = 2^{-208}`$
 
 The indifferentiability term dominates. The 128-bit security target is met as long as the caller ensures
-$`\varepsilon_{\mathrm{kdf}} \leq 2^{-128}`$ (i.e., the original key material has at least 128 bits of min-entropy)
+$`4t / 2^{\kappa} \leq 2^{-128}`$ (i.e., the original key material has at least 130 bits of min-entropy)
 and the total data complexity satisfies $`\sigma + t \leq 2^{64}`$.
 
 ### 6.7 Multi-User Security
@@ -1033,8 +1044,9 @@ Mattsson ("Security of Symmetric Ratchets and Key Chains," 2024, §3.1), Thyrse 
 **No per-session key to target.** In a standard multi-user AEAD analysis, the adversary targets $`U`$ fixed keys,
 each encrypting many messages, and the multi-user advantage scales with $`U`$ because the adversary gets multiple
 observations under each key. Thyrse's ratcheting structure (§6.4) eliminates this attack surface: the chain value
-after each finalization is fresh and used exactly once. The multi-target surface consists only of the $`U`$ initial
-key material values, not $`U \cdot q`$ chain values. This is analogous to the observation in Collins, Riepel, and Tran
+after each finalization is fresh and used exactly once. The single-instance RO-KDF cost is already independent of
+chain length (§6.4, §6.6), so the multi-user extension multiplies the Instance 0 cost by $`U`$: the multi-target
+surface is the $`U`$ initial key material values. This is analogous to the observation in Collins, Riepel, and Tran
 ("On the Tight Security of the Double Ratchet," CCS 2024, Theorem 5) that for composed ratchet protocols, the
 symmetric-key multi-session cost reduces to a collision term on the root key space plus the multi-instance security of
 the underlying primitives. In Thyrse's case, KT128 is modeled as a random oracle, so the multi-instance symmetric-key
