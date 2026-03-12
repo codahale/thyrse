@@ -45,12 +45,14 @@ The framework provides the following operations:
 **`KT128(M, S, ℓ)`:** KangarooTwelve as specified in RFC 9861. Takes a message `M`, a customization string `S`, and
 an output length `ℓ` in bytes.
 
-**`TW128.EncryptAndMAC(key, plaintext) → (ciphertext, tag)`:** As specified in the TW128 specification. Takes a
-`C`-byte key and arbitrary-length plaintext; returns same-length ciphertext and a `C`-byte tag.
+**`TW128.EncryptAndMAC(K, N, AD, M) → (ciphertext, tag)`:** As specified in the TW128 specification (§5.6). Takes a
+`C`-byte key `K`, a nonce `N`, associated data `AD`, and arbitrary-length plaintext `M`; returns same-length ciphertext
+and a `C`-byte tag. Thyrse passes `b""` for both `N` and `AD`.
 
-**`TW128.DecryptAndMAC(key, ciphertext) → (plaintext, tag)`:** Takes a `C`-byte key and arbitrary-length ciphertext;
-returns same-length plaintext and a `C`-byte tag. TW128 does not perform tag verification; the caller is responsible
-for comparing the returned tag against an expected value.
+**`TW128.DecryptAndMAC(K, N, AD, ct) → (plaintext, tag)`:** Takes a `C`-byte key `K`, a nonce `N`, associated data
+`AD`, and arbitrary-length ciphertext `ct`; returns same-length plaintext and a `C`-byte tag. TW128 does not perform tag
+verification; the caller is responsible for comparing the returned tag against an expected value. Thyrse passes `b""`
+for both `N` and `AD`.
 
 ### 3.1 Integer and String Encoding
 
@@ -429,7 +431,7 @@ When the transcript contains at least one unpredictable input, Mask provides IND
 
 3. Encrypt:
 
-- `(ciphertext, tag) ← TW128.EncryptAndMAC(key, plaintext)`
+- `(ciphertext, tag) ← TW128.EncryptAndMAC(key, b"", b"", plaintext)`
 
 4. Reset the transcript to a single frame:
 
@@ -448,7 +450,7 @@ Return `ciphertext`. The tag is not transmitted.
 
 3. Decrypt:
 
-- `(plaintext, tag) ← TW128.DecryptAndMAC(key, ciphertext)`
+- `(plaintext, tag) ← TW128.DecryptAndMAC(key, b"", b"", ciphertext)`
 
 4. Reset the transcript to a single frame:
 
@@ -472,7 +474,7 @@ there is no error signal — the divergence is detectable only through a later a
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
-        ct, tag = _encrypt_detached(mask_key, b"", b"", plaintext)
+        ct, tag = encrypt_and_mac(mask_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return ct
 
@@ -482,7 +484,7 @@ there is no error signal — the divergence is detectable only through a later a
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
-        pt, tag = _decrypt_detached(mask_key, b"", b"", ciphertext)
+        pt, tag = decrypt_and_mac(mask_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return pt
 ```
@@ -511,7 +513,7 @@ authenticity, and CMT-4 committing security (§8.6).
 
 3. Encrypt:
 
-- `(ciphertext, tag) ← TW128.EncryptAndMAC(key, plaintext)`
+- `(ciphertext, tag) ← TW128.EncryptAndMAC(key, b"", b"", plaintext)`
 
 4. Reset the transcript to a single frame:
 
@@ -533,7 +535,7 @@ The `tag` parameter MUST be exactly $`C`$ bytes. The `ciphertext` has the same l
 
 3. Decrypt:
 
-- `(plaintext, computed_tag) ← TW128.DecryptAndMAC(key, ciphertext)`
+- `(plaintext, computed_tag) ← TW128.DecryptAndMAC(key, b"", b"", ciphertext)`
 
 4. Reset the transcript (unconditionally) to a single frame:
 
@@ -555,7 +557,7 @@ Return `plaintext`.
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
-        ct, tag = _encrypt_detached(seal_key, b"", b"", plaintext)
+        ct, tag = encrypt_and_mac(seal_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_SEAL, chain, tag)
         return ct + tag
 
@@ -565,7 +567,7 @@ Return `plaintext`.
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
-        pt, computed_tag = _decrypt_detached(seal_key, b"", b"", ciphertext)
+        pt, computed_tag = decrypt_and_mac(seal_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
         if not hmac.compare_digest(computed_tag, tag):
             return None
@@ -636,15 +638,16 @@ $`\min(256, 128) = 128`$-bit collision resistance, meeting the security target.
 **KT128 domain separation.** KT128 accepts a customization string $`S`$ whose encoding is injective (RFC 9861, §3.2).
 Evaluations with distinct $`S`$ values therefore have disjoint input spaces and are modeled as independent random oracles.
 
-**TW128.** Under a uniformly random $`C`$-byte key, TW128 provides:
+**TW128.** Thyrse uses TW128's `EncryptAndMAC` / `DecryptAndMAC` functions (TW128 spec §5.6), passing empty nonce and
+associated data. Under a uniformly random $`C`$-byte key, TW128 provides:
 
 - **IND-CPA** confidentiality (nonce-free: each key is used once).
 - **INT-CTXT** authenticity, with forgery probability at most $`S / 2^{8C}`$ for $`S`$ attempts.
 - **CMT-4** committing security (Bellare and Hoang, EUROCRYPT 2022): a ciphertext does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs.
 - **Tag PRF:** the full $`C`$-byte tag is a pseudorandom function of $`(\mathit{key}, \mathit{ciphertext})`$.
 
-TW128 does not perform tag verification; the caller (Thyrse) is responsible. See the TW128 specification for proofs
-of these properties.
+`DecryptAndMAC` does not perform tag verification; the caller (Thyrse) is responsible. See the TW128 specification
+(§5.6, Caller obligations) for the full contract.
 
 ### 8.2 KDF Security and the RO-KDF Construction
 

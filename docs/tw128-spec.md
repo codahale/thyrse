@@ -197,16 +197,22 @@ def _leaf_decrypt(base: _DuplexState, index: int, chunk: bytes) -> tuple[bytes, 
 Decryption produces the same tag as encryption because both `_duplex_encrypt` and `_duplex_decrypt` overwrite
 the rate with ciphertext, yielding identical state evolution (see Section 6.4).
 
-### 5.6 Encrypt / Decrypt
+### 5.6 EncryptAndMAC / DecryptAndMAC
 
-**`TW128.Encrypt(K, N, AD, M) -> ct || tag`**\
-**`TW128.Decrypt(K, N, AD, ct || tag) -> M | None`**
+**`TW128.EncryptAndMAC(K, N, AD, M) -> (ct, tag)`**\
+**`TW128.DecryptAndMAC(K, N, AD, ct) -> (pt, tag)`**
 
 `K` MUST be exactly K_L bytes of uniformly random key material. `N` MUST NOT be reused for the same `(K, AD)` pair.
 
-`tw128_encrypt` and `tw128_decrypt` each build a base state from $`(K, N, AD)`$, split the message into $`B`$-byte chunks, and encrypt or decrypt chunk 0 on the final node. For single-chunk messages the final node produces the tag directly. For multi-chunk messages, each remaining chunk is processed by an independent leaf node whose chain value is absorbed into the final node, followed by the Sakura suffix and tag extraction.
+`encrypt_and_mac` and `decrypt_and_mac` each build a base state from $`(K, N, AD)`$, split the message into $`B`$-byte chunks, and encrypt or decrypt chunk 0 on the final node. For single-chunk messages the final node produces the tag directly. For multi-chunk messages, each remaining chunk is processed by an independent leaf node whose chain value is absorbed into the final node, followed by the Sakura suffix and tag extraction. Both functions return the ciphertext (or plaintext) and the tag as separate values.
 
-<!-- begin:code:ref/tw128.py:aead_functions -->
+**Caller obligations.** `EncryptAndMAC` and `DecryptAndMAC` are the fundamental operations; callers are responsible for the following:
+
+- **IND-CPA:** The caller MUST NOT reuse `(K, N, AD)` with different messages. Each unique combination of key, nonce, and associated data MUST encrypt at most one message.
+- **IND-CCA2:** The caller MUST verify the tag (using constant-time comparison) before releasing or acting on the plaintext returned by `DecryptAndMAC`. `DecryptAndMAC` returns unverified plaintext — the caller MUST NOT act on it before verifying the tag.
+- **CMT-4:** No additional caller obligation. CMT-4 committing security follows from TW128's structural properties (Section 6).
+
+<!-- begin:code:ref/tw128.py:core_functions -->
 ```python
 import hmac
 
@@ -220,7 +226,8 @@ HOP_FRAME = bytes([0x03]) + bytes(7)
 # Sakura interleaving block size for I = infinity (Section 5, Tree Topology).
 SAKURA_SUFFIX = b"\xff\xff"
 
-def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+def encrypt_and_mac(K: bytes, N: bytes, AD: bytes, M: bytes) -> tuple[bytes, bytes]:
+    """Encrypt, returning (ciphertext, tag) as separate values."""
     assert len(K) == K_L, "K must be exactly 32 bytes"
 
     n = max(1, -(-len(M) // B))
@@ -238,7 +245,7 @@ def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
 
     if n == 1:
         F = _duplex_pad_permute(F, 0x07)
-        return ct0 + bytes(F.S[:TAU])
+        return ct0, bytes(F.S[:TAU])
 
     # Multi-node: absorb hop frame, process leaves, absorb chain values.
     F = _duplex_absorb(F, HOP_FRAME)
@@ -250,13 +257,11 @@ def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
 
     F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
     F = _duplex_pad_permute(F, 0x06)
-    return b"".join(out_parts) + bytes(F.S[:TAU])
+    return b"".join(out_parts), bytes(F.S[:TAU])
 
-def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+def decrypt_and_mac(K: bytes, N: bytes, AD: bytes, ct: bytes) -> tuple[bytes, bytes]:
+    """Decrypt without tag verification, returning (unverified_plaintext, tag)."""
     assert len(K) == K_L, "K must be exactly 32 bytes"
-    if len(ct_tag) < TAU:
-        return None
-    ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
 
     n = max(1, -(-len(ct) // B))
     chunks = [ct[i * B : (i + 1) * B] for i in range(n)]
@@ -273,8 +278,7 @@ def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
 
     if n == 1:
         F = _duplex_pad_permute(F, 0x07)
-        tag = bytes(F.S[:TAU])
-        return pt0 if hmac.compare_digest(tag, tag_expected) else None
+        return pt0, bytes(F.S[:TAU])
 
     # Multi-node: absorb hop frame, process leaves, absorb chain values.
     F = _duplex_absorb(F, HOP_FRAME)
@@ -286,8 +290,30 @@ def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
 
     F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
     F = _duplex_pad_permute(F, 0x06)
-    tag = bytes(F.S[:TAU])
-    pt = b"".join(out_parts)
+    return b"".join(out_parts), bytes(F.S[:TAU])
+```
+<!-- end:code:ref/tw128.py:core_functions -->
+
+### 5.7 AEAD Wrappers
+
+**`TW128.Encrypt(K, N, AD, M) -> ct || tag`**\
+**`TW128.Decrypt(K, N, AD, ct || tag) -> M | None`**
+
+`tw128_encrypt` and `tw128_decrypt` provide a standard AEAD interface for the underlying `encrypt_and_mac` and `decrypt_and_mac` functions. `tw128_encrypt` concatenates the ciphertext and tag; `tw128_decrypt` splits the input, calls `decrypt_and_mac`, verifies the tag with constant-time comparison, and returns the plaintext or `None`.
+
+<!-- begin:code:ref/tw128.py:aead_functions -->
+```python
+def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+    """AEAD encryption: returns ct ‖ tag."""
+    ct, tag = encrypt_and_mac(K, N, AD, M)
+    return ct + tag
+
+def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+    """AEAD decryption: verifies tag and returns plaintext or None."""
+    if len(ct_tag) < TAU:
+        return None
+    ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
+    pt, tag = decrypt_and_mac(K, N, AD, ct)
     return pt if hmac.compare_digest(tag, tag_expected) else None
 ```
 <!-- end:code:ref/tw128.py:aead_functions -->

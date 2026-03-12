@@ -25,7 +25,7 @@ def _leaf_decrypt(base: _DuplexState, index: int, chunk: bytes) -> tuple[bytes, 
     return pt, bytes(L.S[:C])
 # endregion
 
-# region: aead_functions
+# region: core_functions
 import hmac
 
 K_L = 32  # Key length (bytes).
@@ -38,7 +38,8 @@ HOP_FRAME = bytes([0x03]) + bytes(7)
 # Sakura interleaving block size for I = infinity (Section 5, Tree Topology).
 SAKURA_SUFFIX = b"\xff\xff"
 
-def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+def encrypt_and_mac(K: bytes, N: bytes, AD: bytes, M: bytes) -> tuple[bytes, bytes]:
+    """Encrypt, returning (ciphertext, tag) as separate values."""
     assert len(K) == K_L, "K must be exactly 32 bytes"
 
     n = max(1, -(-len(M) // B))
@@ -56,7 +57,7 @@ def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
 
     if n == 1:
         F = _duplex_pad_permute(F, 0x07)
-        return ct0 + bytes(F.S[:TAU])
+        return ct0, bytes(F.S[:TAU])
 
     # Multi-node: absorb hop frame, process leaves, absorb chain values.
     F = _duplex_absorb(F, HOP_FRAME)
@@ -68,13 +69,11 @@ def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
 
     F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
     F = _duplex_pad_permute(F, 0x06)
-    return b"".join(out_parts) + bytes(F.S[:TAU])
+    return b"".join(out_parts), bytes(F.S[:TAU])
 
-def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+def decrypt_and_mac(K: bytes, N: bytes, AD: bytes, ct: bytes) -> tuple[bytes, bytes]:
+    """Decrypt without tag verification, returning (unverified_plaintext, tag)."""
     assert len(K) == K_L, "K must be exactly 32 bytes"
-    if len(ct_tag) < TAU:
-        return None
-    ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
 
     n = max(1, -(-len(ct) // B))
     chunks = [ct[i * B : (i + 1) * B] for i in range(n)]
@@ -91,8 +90,7 @@ def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
 
     if n == 1:
         F = _duplex_pad_permute(F, 0x07)
-        tag = bytes(F.S[:TAU])
-        return pt0 if hmac.compare_digest(tag, tag_expected) else None
+        return pt0, bytes(F.S[:TAU])
 
     # Multi-node: absorb hop frame, process leaves, absorb chain values.
     F = _duplex_absorb(F, HOP_FRAME)
@@ -104,44 +102,20 @@ def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
 
     F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
     F = _duplex_pad_permute(F, 0x06)
-    tag = bytes(F.S[:TAU])
-    pt = b"".join(out_parts)
-    return pt if hmac.compare_digest(tag, tag_expected) else None
+    return b"".join(out_parts), bytes(F.S[:TAU])
 # endregion
 
-# Non-normative helpers for protocol composition (e.g. Thyrse).
+# region: aead_functions
+def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
+    """AEAD encryption: returns ct ‖ tag."""
+    ct, tag = encrypt_and_mac(K, N, AD, M)
+    return ct + tag
 
-def _encrypt_detached(K: bytes, N: bytes, AD: bytes, M: bytes) -> tuple[bytes, bytes]:
-    """Encrypt, returning (ciphertext, tag) as separate values."""
-    ct_tag = tw128_encrypt(K, N, AD, M)
-    return ct_tag[:-TAU], ct_tag[-TAU:]
-
-def _decrypt_detached(K: bytes, N: bytes, AD: bytes, ct: bytes) -> tuple[bytes, bytes]:
-    """Decrypt without tag verification, returning (unverified_plaintext, tag)."""
-    assert len(K) == K_L, "K must be exactly 32 bytes"
-
-    n = max(1, -(-len(ct) // B))
-    chunks = [ct[i * B : (i + 1) * B] for i in range(n)]
-
-    prefix = encode_string(K) + encode_string(N) + encode_string(AD)
-    base = _duplex_absorb(_DuplexState(bytearray(200), 0), prefix)
-
-    F = _DuplexState(bytearray(base.S), base.pos)
-    F = _duplex_absorb(F, (0).to_bytes(8, "little"))
-    F = _duplex_pad_permute(F, 0x08)
-    F, pt0 = _duplex_decrypt(F, chunks[0])
-
-    if n == 1:
-        F = _duplex_pad_permute(F, 0x07)
-        return pt0, bytes(F.S[:TAU])
-
-    F = _duplex_absorb(F, HOP_FRAME)
-    out_parts = [pt0]
-    for i, chunk in enumerate(chunks[1:], start=1):
-        pt_i, cv = _leaf_decrypt(base, i, chunk)
-        out_parts.append(pt_i)
-        F = _duplex_absorb(F, cv)
-
-    F = _duplex_absorb(F, length_encode(n - 1) + SAKURA_SUFFIX)
-    F = _duplex_pad_permute(F, 0x06)
-    return b"".join(out_parts), bytes(F.S[:TAU])
+def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
+    """AEAD decryption: verifies tag and returns plaintext or None."""
+    if len(ct_tag) < TAU:
+        return None
+    ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
+    pt, tag = decrypt_and_mac(K, N, AD, ct)
+    return pt if hmac.compare_digest(tag, tag_expected) else None
+# endregion
