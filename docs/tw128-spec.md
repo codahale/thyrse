@@ -504,10 +504,13 @@ The parameters are $`b = 1600`$, $`c = 256`$, $`k = c = 256`$. Each
 leaf is a single duplex evaluation ($`q = 1`$), so at the per-leaf level the FKD
 bound simplifies to $`\ell^2/2^b + \ell^2/2^c + \mu N/2^k`$, and
 $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$ captures the advantage for leaf $`i`$
-with $`l_i`$ duplexing calls. With $`q = 1`$ the capacity terms of FKD and FKS
-coincide up to a factor of 2 ($`\ell^2/2^c`$ vs. $`2\ell/2^c`$; for $`\ell \geq 2`$
-FKD is actually looser). The KDF sponge (Section 6.4) is a single-evaluation
-keyed sponge covered by MRV15 Theorem 1 (FKS).
+with $`l_i`$ duplexing calls. With $`q = 1`$, the FKD capacity term is
+$`\ell^2/2^c`$ while the FKS capacity term is $`2\ell/2^c`$ — FKD is a factor of
+$`\ell/2`$ looser. At $`\ell \approx 49`$ blocks per full chunk this is roughly
+25×, but both terms remain negligible at $`c = 256`$ ($`\approx 2^{-245}`$ vs.
+$`\approx 2^{-249}`$). The KDF sponge (Section 6.4) is a single-evaluation keyed
+sponge covered by MRV15 Theorem 1 (FKS), whose tighter $`q^2\ell`$ scaling is
+relevant in the multi-query KDF setting.
 
 **Term analysis.** The FKD bound has three terms:
 
