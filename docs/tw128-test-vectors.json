@@ -3,7 +3,7 @@
   "aead": {
     "vectors": [
       {
-        "id": "10.1.1",
+        "id": "9.1.1",
         "title": "Empty Message",
         "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
         "nonce_hex": "000102030405060708090a0b",
@@ -22,7 +22,7 @@
         }
       },
       {
-        "id": "10.1.2",
+        "id": "9.1.2",
         "title": "33-Byte Message With 5-Byte AD",
         "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
         "nonce_hex": "a0a1a2a3a4a5a6a7a8a9aaab",
@@ -41,7 +41,7 @@
         }
       },
       {
-        "id": "10.1.3",
+        "id": "9.1.3",
         "title": "Multi-Chunk Message (8193 Bytes)",
         "key_hex": "42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
         "nonce_hex": "c0c1c2c3c4c5c6c7c8c9cacb",
@@ -61,7 +61,7 @@
         }
       },
       {
-        "id": "10.1.4",
+        "id": "9.1.4",
         "title": "Nonce Reuse Behavior (Equal-Length Messages)",
         "key_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
         "nonce_hex": "ffeeddccbbaa998877665544",
@@ -86,7 +86,7 @@
         }
       },
       {
-        "id": "10.1.5",
+        "id": "9.1.5",
         "title": "Swapped Nonce and AD Domains",
         "key_hex": "0f0e0d0c0b0a09080706050403020100112233445566778899aabbccddeeff00",
         "nonce_hex": "000102030405060708090a0b",
@@ -107,7 +107,7 @@
         }
       },
       {
-        "id": "10.1.6",
+        "id": "9.1.6",
         "title": "Empty AD vs One-Byte AD 00",
         "key_hex": "8899aabbccddeeff001122334455667700112233445566778899aabbccddeeff",
         "nonce_hex": "0c0d0e0f1011121314151617",
@@ -129,7 +129,7 @@
         }
       },
       {
-        "id": "10.1.7",
+        "id": "9.1.7",
         "title": "Long AD (128 Bytes)",
         "key_hex": "102132435465768798a9babbdcddedef00112233445566778899aabbccddeeff",
         "nonce_hex": "ababacadaeafb0b1b2b3b4b5",
@@ -148,7 +148,7 @@
         }
       },
       {
-        "id": "10.1.8",
+        "id": "9.1.8",
         "title": "Rate-Minus-One Message (167 Bytes, R-1 Boundary)",
         "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
         "nonce_hex": "d0d1d2d3d4d5d6d7d8d9dadb",
@@ -168,7 +168,7 @@
         }
       },
       {
-        "id": "10.1.9",
+        "id": "9.1.9",
         "title": "Exact-Rate Message (168 Bytes, R Boundary)",
         "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
         "nonce_hex": "d0d1d2d3d4d5d6d7d8d9dadb",
@@ -188,7 +188,7 @@
         }
       },
       {
-        "id": "10.1.10",
+        "id": "9.1.10",
         "title": "Large Nonce (32 Bytes)",
         "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
         "nonce_hex": "e0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",

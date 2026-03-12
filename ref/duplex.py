@@ -4,15 +4,13 @@ from .keccak import keccak_p1600
 from collections import namedtuple
 
 R = 168   # Sponge rate (bytes).
-C = 32    # Capacity (bytes); key and chain value size.
-TAU = 32  # Tag size (bytes).
-B = 8192  # Chunk size (bytes).
+C = 32    # Capacity (bytes).
 
 # S: 200-byte Keccak state (bytearray). pos: current offset into the rate.
 _DuplexState = namedtuple("_DuplexState", ["S", "pos"])
 
 def _duplex_pad_permute(D: _DuplexState, domain_byte: int) -> _DuplexState:
-    """Apply TurboSHAKE padding and permute. Resets pos to 0."""
+    """Apply multi-rate padding with domain separation and permute. Resets pos to 0."""
     S = bytearray(D.S)
     S[D.pos] ^= domain_byte
     S[R - 1] ^= 0x80

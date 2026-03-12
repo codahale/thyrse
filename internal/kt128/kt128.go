@@ -262,7 +262,7 @@ func (h *KT128) Equal(other *KT128) int {
 	return eq
 }
 
-// customSuffix appends C || right_encode(|C|) to dst and returns the result.
+// customSuffix appends C || length_encode(|C|) to dst and returns the result.
 func customSuffix(dst []byte, c []byte) []byte {
 	dst = append(dst, c...)
 	return enc.LengthEncode(dst, uint64(len(c)))

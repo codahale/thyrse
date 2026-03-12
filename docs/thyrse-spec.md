@@ -472,7 +472,7 @@ there is no error signal — the divergence is detectable only through a later a
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
-        ct, tag = encrypt_and_mac(mask_key, plaintext)
+        ct, tag = _encrypt_detached(mask_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return ct
 
@@ -482,7 +482,7 @@ there is no error signal — the divergence is detectable only through a later a
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
-        pt, tag = decrypt_and_mac(mask_key, ciphertext)
+        pt, tag = _decrypt_detached(mask_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return pt
 ```
@@ -555,7 +555,7 @@ Return `plaintext`.
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
-        ct, tag = encrypt_and_mac(seal_key, plaintext)
+        ct, tag = _encrypt_detached(seal_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_SEAL, chain, tag)
         return ct + tag
 
@@ -565,7 +565,7 @@ Return `plaintext`.
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
-        pt, computed_tag = decrypt_and_mac(seal_key, ciphertext)
+        pt, computed_tag = _decrypt_detached(seal_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
         if not hmac.compare_digest(computed_tag, tag):
             return None
@@ -1310,8 +1310,8 @@ output = p.derive(b"output", 32)
 
 | Field | Value |
 |-------|-------|
-| Seal output (ct ‖ tag) | `dde795eebaaa663b55e904c1e4da1c6c6f1c770b9c90fd17b8add38741dd5e4c821ad0e5aeb4bbfbc18d89ebe4` |
-| Derive output | `e6a99cd5ac77af8370dd09e5f1ea020b1ded0a7415a9dadcbe6133e917dd2498` |
+| Seal output (ct ‖ tag) | `a47534a760edf2b24077a2211900cc4db7a97036337d22bdf17fb0a285e99e7ea122e6e5bf94804371089bdb67` |
+| Derive output | `72d797a1cc50197c6c4a28c3ba9722f7ea2da5be4debe6af8e0eac3989ab1333` |
 
 ### 12.4 Init + Mix + Mask + Seal
 
@@ -1327,8 +1327,8 @@ ct_tag = p.seal(b"authenticated", b"seal this data")
 
 | Field | Value |
 |-------|-------|
-| Mask output (ct) | `21fc87f3008b3cff62fb2584c970` |
-| Seal output (ct ‖ tag) | `f078ea89c7dea34a821c8470544ec5a70061c75aa9de8a1d49e4a9e816455ca54f78e50a2a1981d1c0a47cfe4d20` |
+| Mask output (ct) | `dc27b27d7d5bd93935ef35f9f3e1` |
+| Seal output (ct ‖ tag) | `c32f614cad9498d547fec901f492d41977e4a507e454ecc6e648a6b5acec3bedd8359e4b4008bf8720f0d18c7de9` |
 
 ### 12.5 Ratchet + Derive
 
@@ -1400,7 +1400,7 @@ confirm = receiver.derive(b"confirm", 32)
 
 | Field | Value |
 |-------|-------|
-| Seal output (ct ‖ tag) | `1383ffe1d63304655b9b94ae27f2a50ea1734e2df148381c2080d70ad86bac40e84d08e43b48b0b9f4a106156a` |
+| Seal output (ct ‖ tag) | `9761c8e0370bf42d6a3c8e16e343276d93da7d0ec9546fda99d53d5f8319981248c2106145d10c439e2451cb31` |
 
 ### 12.8 Seal + Open with Tampered Ciphertext
 
@@ -1429,7 +1429,7 @@ receiver_after = receiver.derive(b"after", 32)
 
 | Field | Value |
 |-------|-------|
-| Seal output (ct ‖ tag) | `6e73c8fb8e615ac7d3bfdeaaa7e8e1af189b97db42b2870b693c5faf0be6bbc8345d8830401a53acccc756500a` |
+| Seal output (ct ‖ tag) | `104ba934631d8ff29731c4046aa6838924074bcd1e2d096b079c7ed031ea2f3f67a453e389e1292c813ea2fc0e` |
 | Open result | ⊥ (authentication failed) |
 
 ### 12.9 Multiple Seals in Sequence
@@ -1448,7 +1448,7 @@ ct_tag_3 = p.seal(b"msg", b"third message")
 
 | Seal | Output (ct ‖ tag) |
 |------|-------------------|
-| 1 | `f58f5895735ec5679a75651160f0e2b29ea495e5a13e482d22c5bd1f58c75a345a9dacbf4205022b27f809fcc2` |
-| 2 | `2b6b64822aa4ac6716aaf6226e20d4d9f1c6ac6bafbe00761b03663b3e574d91be5fa8918945fa311214cfa83e1b` |
-| 3 | `86de20dad1084ed184d23aa56a3c3001a468b67c6687b2ab93e5b640008b6c912f88b6a3a88cd4283a7719c273` |
+| 1 | `50e36d935a8014535ee39956c4eea213eace89c1e07e1d23a79540a7cb2deb7dbb9327c30ac435d3d30119a9bb` |
+| 2 | `b698325983a038f4bacfa830c7ee664fa0d03500bdfab70b61fdbb411e845f14d7505c6931db7ab7addae5295796` |
+| 3 | `8bbfd161b5e2b24cfed595f9efa93c8b813a499e2d774f3938227b501fb7fc0fa43442d88409687e1d217062ce` |
 <!-- end:vectors:docs/thyrse-test-vectors.json:thyrse -->

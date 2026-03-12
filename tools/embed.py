@@ -117,11 +117,11 @@ def _make_message(msg_def: dict) -> bytes:
 # ---------------------------------------------------------------------------
 
 def render_aead_vectors(data: dict) -> str:
-    """Render AEAD vectors as Markdown matching spec \u00a710.1."""
+    """Render AEAD vectors as Markdown matching spec \u00a79.1."""
     aead = data["aead"]
     lines: list[str] = []
 
-    lines.append("### 10.1 TW128 Vectors")
+    lines.append("### 9.1 TW128 Vectors")
     lines.append("")
     lines.append("These vectors validate `tw128_encrypt` / `tw128_decrypt` (the TW128 instantiation),")
     lines.append("including SP 800-185 `encode_string` context encoding.")
