@@ -72,6 +72,7 @@ returned tag against an expected value.
 | Symbol | Value | Description                          |
 |--------|-------|--------------------------------------|
 | H      | 64    | Chain value size (bytes); oversized for birthday-bound margin (§6.4) |
+| K_L    | 32    | TW128 key and tag length (bytes)     |
 
 ### 3.1 Operation Codes
 
@@ -411,8 +412,7 @@ of Derive, Mask, or Seal.
 
 Encrypts (`Mask`) or decrypts (`Unmask`) without authentication. Use `Mask` when integrity is provided by an external
 mechanism (e.g., a signature over the transcript) or when confidentiality alone is sufficient. Thyrse passes empty
-nonce and associated data to TW128; all domain separation comes from the transcript. In the following,
-$`K_L`$ denotes TW128's key and tag length (32 bytes).
+nonce and associated data to TW128; all domain separation comes from the transcript.
 
 Callers MUST ensure that a fresh, unpredictable value (such as a nonce or ephemeral key) has been absorbed via `Mix`
 before any `Mask` operation. If two protocol runs reach the same transcript state and then `Mask` different plaintexts,
