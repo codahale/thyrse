@@ -991,10 +991,12 @@ with $`\kappa`$ bits of min-entropy:
 hybrid argument over instances:
 
 ```math
-\varepsilon_{\mathrm{mu\text{-}key}} \leq U \cdot 2t / 2^{\kappa}
+\varepsilon_{\mathrm{mu\text{-}key}} \leq U \cdot 4t / 2^{\kappa}
 ```
 
-This is the multi-target analogue of the single-instance RO-KDF bound. The factor of $`U`$ is tight for one-way
+Each one-shot instance evaluates two independent oracles at Instance 0 (chain value via `0x20`, operational output
+via `0x21`–`0x23`); the factor of 4 is $`2t`$ from Theorem 8 times 2 for the union bound over both oracles.
+The factor of $`U`$ is tight for one-way
 primitives under black-box reductions (Bellare, Boldyreva, and Micali, "Public-key encryption in a multi-user
 setting," EUROCRYPT 2000; Biham, "How to forge DES-encrypted messages in $`2^{28}`$ steps," 1996).
 
@@ -1010,11 +1012,11 @@ For $`U = 2^{48}`$: $`2^{96} / 2^{513} = 2^{-417}`$.
 **Combined one-shot bound:**
 
 ```math
-\varepsilon_{\mathrm{one\text{-}shot}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + \frac{U \cdot 2t}{2^{\kappa}} + \frac{U^2}{2^{513}} + \varepsilon_{\mathrm{tw}}
+\varepsilon_{\mathrm{one\text{-}shot}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + \frac{U \cdot 4t}{2^{\kappa}} + \frac{U^2}{2^{513}} + \varepsilon_{\mathrm{tw}}
 ```
 
 The multi-target key recovery term dominates the user-scaling terms. For 256-bit keys and $`U = 2^{48}`$ one-shot
-instances: $`\varepsilon_{\mathrm{mu\text{-}key}} = 2^{48} \cdot 2^{65} / 2^{256} = 2^{-143}`$.
+instances: $`\varepsilon_{\mathrm{mu\text{-}key}} = 2^{48} \cdot 2^{66} / 2^{256} = 2^{-142}`$.
 
 #### 6.7.2 Running Sessions
 
@@ -1061,7 +1063,7 @@ is initialized with independent key material.
 **Combined running-session bound:**
 
 ```math
-\varepsilon_{\mathrm{session}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + \frac{U \cdot 2t}{2^{\kappa}} + \frac{Q^2}{2^{513}} + \varepsilon_{\mathrm{tw}}
+\varepsilon_{\mathrm{session}} \leq \varepsilon_{\mathrm{perm}} + \frac{2(\sigma_{\mathrm{total}} + t)^2}{2^{257}} + \frac{U \cdot 4t}{2^{\kappa}} + \frac{Q^2}{2^{513}} + \varepsilon_{\mathrm{tw}}
 ```
 
 The formula is identical to the one-shot bound with $`Q`$ replacing $`U`$ in the collision term, reflecting that
@@ -1072,7 +1074,7 @@ because only the initial key material is a static multi-target surface.
 $`\sigma_{\mathrm{total}} + t \leq 2^{80}`$, $`S = 2^{48}`$ total forgery attempts, and 256-bit key material:
 
 - Indifferentiability: $`2 \cdot 2^{160} / 2^{257} = 2^{-96}`$
-- Multi-target key recovery: $`2^{32} \cdot 2^{81} / 2^{256} = 2^{-143}`$
+- Multi-target key recovery: $`2^{32} \cdot 2^{82} / 2^{256} = 2^{-142}`$
 - Cross-session chain collisions: $`2^{128} / 2^{513} = 2^{-385}`$
 - TW128 forgery: $`2^{48} / 2^{256} = 2^{-208}`$
 
