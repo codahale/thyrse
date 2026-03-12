@@ -211,12 +211,12 @@ def render_thyrse_vectors(data: dict) -> str:
         if vid == "9.5.1":
             v1, v2 = by_id["9.5.1"], by_id["9.5.2"]
             lines.append("")
-            lines.append("### 12.5 Ratchet + Derive")
+            lines.append("### 9.5 Ratchet + Derive")
             lines.append("")
             lines.append(_quote_ops(v1["description"]) + " " + _quote_ops(v2["description"]))
         elif vid == "9.9.1":
             lines.append("")
-            lines.append("### 12.9 Multiple Seals in Sequence")
+            lines.append("### 9.9 Multiple Seals in Sequence")
             lines.append("")
             lines.append(_quote_ops(vec["description"]))
         else:

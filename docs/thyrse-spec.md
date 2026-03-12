@@ -1248,7 +1248,7 @@ ct_tag = p.seal(b"authenticated", b"seal this data")
 | Mask output (ct) | `dc27b27d7d5bd93935ef35f9f3e1` |
 | Seal output (ct ‖ tag) | `c32f614cad9498d547fec901f492d41977e4a507e454ecc6e648a6b5acec3bedd8359e4b4008bf8720f0d18c7de9` |
 
-### 12.5 Ratchet + Derive
+### 9.5 Ratchet + Derive
 
 Baseline `Derive` output without `Ratchet`, for comparison with the `Ratchet` case below. `Derive` output changes after `Ratchet`, demonstrating forward secrecy.
 
@@ -1350,7 +1350,7 @@ receiver_after = receiver.derive(b"after", 32)
 | Seal output (ct ‖ tag) | `104ba934631d8ff29731c4046aa6838924074bcd1e2d096b079c7ed031ea2f3f67a453e389e1292c813ea2fc0e` |
 | Open result | ⊥ (authentication failed) |
 
-### 12.9 Multiple Seals in Sequence
+### 9.9 Multiple Seals in Sequence
 
 First of three sequential Seals. Each derives a different key because the transcript advances via tag absorption.
 
