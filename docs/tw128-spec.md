@@ -954,9 +954,12 @@ random key:
 An IND-CCA2 adversary has access to both an encryption oracle and a decryption oracle. By INT-CTXT, the decryption
 oracle rejects all adversary-crafted queries (except with probability
 $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}}`$), so it provides no useful information beyond what the
-encryption oracle already reveals. Removing the decryption oracle reduces the game to IND-CPA. The factor of 2
-arises because the forgery probability (a raw event probability) is scaled when converting to the IND-CCA2 advantage
-(defined as $`2\Pr[\mathsf{game} \Rightarrow 1] - 1`$).
+encryption oracle already reveals. Removing the decryption oracle reduces the game to IND-CPA. BN00's proof bounds
+$`\Pr[\mathrm{IND\text{-}CCA2} \Rightarrow 1]`$ in terms of $`\Pr[\mathrm{IND\text{-}CPA} \Rightarrow 1]`$ and
+$`\Pr[\mathrm{forge}]`$ without any factor of 2. The factor appears when converting to advantages because IND-CCA2
+and IND-CPA advantages are both defined as $`2\Pr[\mathsf{game} \Rightarrow 1] - 1`$, so the factor of 2 cancels
+between them, but INT-CTXT advantage is defined as the raw probability $`\Pr[\mathrm{forge}]`$, so the factor of 2
+survives on that term.
 
 **Step 2: Substitute bare bounds.** From Sections 6.7 and 6.8:
 $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$ and
