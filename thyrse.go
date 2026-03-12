@@ -12,7 +12,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/codahale/thyrse/internal/k12"
+	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/internal/mem"
 	"github.com/codahale/thyrse/internal/treewrap"
 )
@@ -29,14 +29,14 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 // Operations append TKDF frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal)
 // evaluate KT128 over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
-	h          *k12.KT128
+	h          *kt128.KT128
 	frameStart uint64
 }
 
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	p := &Protocol{h: k12.New()}
+	p := &Protocol{h: kt128.New()}
 	p.beginFrame(opInit, label)
 	p.endFrame()
 	return p
@@ -305,7 +305,7 @@ func (p *Protocol) Clear() {
 
 // finalize performs KT128 finalization.
 //
-// For Derive, Mask, and Seal: two KT128 evaluations via [k12.KT128.Chain]
+// For Derive, Mask, and Seal: two KT128 evaluations via [kt128.KT128.Chain]
 // produce the chain value (dsChain) and the output (outputDS) in parallel.
 //
 // For Ratchet: a single KT128 evaluation produces the chain value (dsRatchet).

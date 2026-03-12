@@ -1,9 +1,9 @@
-// Package k12 implements KT128 (KangarooTwelve) as specified in RFC 9861.
+// Package kt128 implements KT128 (KangarooTwelve) as specified in RFC 9861.
 //
 // KT128 is a tree-hash eXtendable-Output Function (XOF) built on TurboSHAKE128.
 // For messages larger than 8192 bytes, it splits input into chunks and computes
 // leaf chain values in parallel using SIMD-accelerated Keccak permutations.
-package k12
+package kt128
 
 import (
 	"crypto/subtle"
