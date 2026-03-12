@@ -1,93 +1,9 @@
 {
   "version": 1,
-  "bare": {
-    "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-    "vectors": [
-      {
-        "id": "10.1.1",
-        "title": "Empty Plaintext (MAC-only, n = 1)",
-        "message": {
-          "mode": "seq_mod256",
-          "len": 0
-        },
-        "mutations": {},
-        "expected": {
-          "tag_hex": "4a06dd2e8c2280eb2a4cb54ff4bbcd16e26809d6e1d10ae9b03ddd81dba1f70c",
-          "ct_hex": ""
-        }
-      },
-      {
-        "id": "10.1.2",
-        "title": "One-Byte Plaintext (n = 1)",
-        "message": {
-          "mode": "seq_mod256",
-          "len": 1
-        },
-        "mutations": {
-          "flip_first_bit": true
-        },
-        "expected": {
-          "tag_hex": "636744e19511873009bbee34794c6d013b71834fc3ed46e0c758c8bc1655164d",
-          "ct_hex": "b9",
-          "flip_tag_hex": "3ec75c7e58e68df6fa8b50e538fd365e8fde86ee533b569dbec6fa259d3f8546"
-        }
-      },
-      {
-        "id": "10.1.3",
-        "title": "B-Byte Plaintext (exactly one chunk, n = 1)",
-        "message": {
-          "mode": "seq_mod256",
-          "len": 8192
-        },
-        "mutations": {
-          "flip_first_bit": true
-        },
-        "expected": {
-          "tag_hex": "fc2ea76078fe107a4c0a29a1bcb7670ba59ff8477a93388c12405c0f45e6ee23",
-          "ct_prefix32_hex": "b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707",
-          "flip_tag_hex": "4a781a4ec6ada1db7bea9e4968f5634073e18df476f52d0c62ee9e0aa816d142"
-        }
-      },
-      {
-        "id": "10.1.4",
-        "title": "B+1-Byte Plaintext (two chunks, minimal second, n = 2)",
-        "message": {
-          "mode": "seq_mod256",
-          "len": 8193
-        },
-        "mutations": {
-          "flip_first_bit": true
-        },
-        "expected": {
-          "tag_hex": "0e14c22b6f47418cde0bf107f875f9e19fe73c533d6871c5f89fb9fda1dfa852",
-          "ct_prefix32_hex": "b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707",
-          "flip_tag_hex": "b0702f781638349e5cc1fd81b60b1b2ae813b8bfba7ddfddbe330659d3ae1c96"
-        }
-      },
-      {
-        "id": "10.1.5",
-        "title": "4B-Byte Plaintext (four full chunks, n = 4)",
-        "message": {
-          "mode": "seq_mod256",
-          "len": 32768
-        },
-        "mutations": {
-          "flip_first_bit": true,
-          "swap_chunk_0_1": true
-        },
-        "expected": {
-          "tag_hex": "b1034d073f7106ec836388823827a050bbbe2cfbccb29a79d704b4d37a0fbc75",
-          "ct_prefix32_hex": "b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707",
-          "flip_tag_hex": "684dbca2392dc17928b19943a368d630075d56fb754c15457d85d413abbca22a",
-          "swap_tag_hex": "39032e2280f25c78fe72143f9c94bc5f8694834b8d8528aae0e07d035a8aba7c"
-        }
-      }
-    ]
-  },
   "aead": {
     "vectors": [
       {
-        "id": "10.2.1",
+        "id": "10.1.1",
         "title": "Empty Message",
         "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
         "nonce_hex": "000102030405060708090a0b",
@@ -102,11 +18,11 @@
           "bad_tag": true
         },
         "expected": {
-          "ct_tag_hex": "1b581c73ae9475f3fe9a3695cbcb97d5fa6bf4fe50d5077c05307ee93333f585"
+          "ct_tag_hex": "3b662f3b0a8bf7b6e12ea98994d962640912a92e2ec3352f975b5ddbe2585ea9"
         }
       },
       {
-        "id": "10.2.2",
+        "id": "10.1.2",
         "title": "33-Byte Message With 5-Byte AD",
         "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
         "nonce_hex": "a0a1a2a3a4a5a6a7a8a9aaab",
@@ -121,11 +37,11 @@
           "bad_tag": true
         },
         "expected": {
-          "ct_tag_hex": "ad06981fb8996d3a370fdff698dde70799641537c999562e9da3cc315998790f90079f24283c57e81120e7d5c3cc5c122b32c96b41769a24c1b4bffbff76f7b92d"
+          "ct_tag_hex": "2c7f7e2fb779fbf32ee81092375c0066941447c8422cdf2e08cf8f4468fd5c1e0fc8c3ab1ba8815222909e95724a5b51e7cc7a78032f11d674ed57e1dbf6e2224d"
         }
       },
       {
-        "id": "10.2.3",
+        "id": "10.1.3",
         "title": "Multi-Chunk Message (8193 Bytes)",
         "key_hex": "42434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061",
         "nonce_hex": "c0c1c2c3c4c5c6c7c8c9cacb",
@@ -140,12 +56,12 @@
           "bad_tag": true
         },
         "expected": {
-          "ct_prefix32_hex": "c865e59fbaee05479be69b2e5d321fb917c03358e7ea3ab4f5a83157ebfc0ace",
-          "tag_hex": "be9035c011815da2706dc38f548a019165ebec1987c574913e4e4f18255c7b7f"
+          "ct_prefix32_hex": "6ca83b65fe7b65c024d5a1401dd204ead42c857b9b677bd7ae017882c7324f8a",
+          "tag_hex": "f1e5165ef20a9f8900cbeda6d1accf0cfd0a14cbdc25e872f35ee8d6a94cd3a6"
         }
       },
       {
-        "id": "10.2.4",
+        "id": "10.1.4",
         "title": "Nonce Reuse Behavior (Equal-Length Messages)",
         "key_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
         "nonce_hex": "ffeeddccbbaa998877665544",
@@ -165,12 +81,12 @@
           "nonce_reuse_xor_leak": true
         },
         "expected": {
-          "ct_tag_hex": "5105314ef74b22ad003d53ee853ad28d8eeaf3cc0e20244911d96597cf4bb37ca74cffa7ea574705198f81c0e80c3766aea6e0ef2ba1dfc92009606ac220af91b5e9fdad578dd16ab44e58fd5e8f7e58ea586dbd7a7382fe09d715e7c22eb14e",
-          "reuse_ct_tag_hex": "5104334df34e24aa083459e58937dc829efbe1df1a35325e09c07f8cd356ad63876ddd84ce72612231a6abebc42119499e97d2dc1f94e9fe18305a51fe1d91aed120989da8fb07247dd37c58b6ace3f9f4cc1fcbeabe5531c8e1d052fa3167bf"
+          "ct_tag_hex": "c19a715ad243929a38b3f51b10de301df567433d96345510dddb7efd8b236b02942868d594c5ca42cc13607013cf7317c4f0072ad46b96992b9c73549cb61051b37473c3f60887fe099f6c876694cca7f7674b0a18e7545eb8a2d2471ca6971e",
+          "reuse_ct_tag_hex": "c19b7359d646949d30baff101cd33e12e576512e82214307c5c264e6973e751db4094af6b0e0ec65e43a4a5b3fe25d38f4c13519e05ea0ae13a5496fa08b2e6e5c0250a895ac93dc3d6c6e58c6d4bfa1a842ca37afe796e0266d12d80fc53389"
         }
       },
       {
-        "id": "10.2.5",
+        "id": "10.1.5",
         "title": "Swapped Nonce and AD Domains",
         "key_hex": "0f0e0d0c0b0a09080706050403020100112233445566778899aabbccddeeff00",
         "nonce_hex": "000102030405060708090a0b",
@@ -186,12 +102,12 @@
           "swap_nonce_ad": true
         },
         "expected": {
-          "ct_tag_hex": "d6c8e417669baeb1b6acb530dfef004efe1c7422c7e09821d03e9bf7e44a6d9808fb2d2c8c3466de4dc973c7c70a7692650495153855f4627b136e9da82ab591bc9762113b9b3a66f5fd507168950081",
-          "swap_nonce_ad_ct_tag_hex": "933d4f21d1dda3a2a4b9b6ca8141aef7eb4f952c1283bb6087135a93948b587e14b84cdec3606c73d3e6f75262131444b65d7b064c4e784135cfc2ee0cafeccf872c8e341fa298255074d42b60e58886"
+          "ct_tag_hex": "a9e740ce990470fcc4fc6d121db72f8052c8f4f664c673016b45a777985d88fb743a7976632702f82aa94c6070eca321b3581bee292825c369932ae30c8aac538c71110b52459c7170c65af30a7520d8",
+          "swap_nonce_ad_ct_tag_hex": "2a04f8a32d84aed7ea1a6cc6d0effb815f765c78ab1f0278547369d201203fb2f02096fafd10bf5fd4c3eca966acd167bda71b34fad2a1512df2a1627ab16b777da17c74b7e4a054db966f7e004917be"
         }
       },
       {
-        "id": "10.2.6",
+        "id": "10.1.6",
         "title": "Empty AD vs One-Byte AD 00",
         "key_hex": "8899aabbccddeeff001122334455667700112233445566778899aabbccddeeff",
         "nonce_hex": "0c0d0e0f1011121314151617",
@@ -208,12 +124,12 @@
           "ad_empty_vs_zero_byte": true
         },
         "expected": {
-          "ct_tag_hex": "6c6842b44331dca922bce7f3073f51b350a00676b4dba240d32f04ab8df28b20a6b4e5dfe5917f4ea5d55f469ea5f9c796658dd1015025fb2e73f3d02936506a",
-          "alt_ad_ct_tag_hex": "5a914ea1c34bdec8a7ca06d76092ade5311d29bd407a82c6d20baffaef83a4493b3c52bc0b1c06a84abf55ebd0e43d73ba8b16d76ccbff4d6a1263f52b386bd3"
+          "ct_tag_hex": "ab68bc6f9adc1dffc38719986b597af6ee7e4466db073ce610ea5cc2807bc68a951d5a14852886cb10d9b45ea1310d731286618b94cbbd3d778aae9c2f1845dd",
+          "alt_ad_ct_tag_hex": "e4c338977468daff763b975c8b9432ea3ee1ef95cc957675ffdfb4ac832ce21763e4d2c0530d478f34816ca2b80d158a206d447320bd3efbdb5cf0fdd5c4114c"
         }
       },
       {
-        "id": "10.2.7",
+        "id": "10.1.7",
         "title": "Long AD (128 Bytes)",
         "key_hex": "102132435465768798a9babbdcddedef00112233445566778899aabbccddeeff",
         "nonce_hex": "ababacadaeafb0b1b2b3b4b5",
@@ -228,11 +144,11 @@
           "bad_tag": true
         },
         "expected": {
-          "ct_tag_hex": "2a590aaa049945f3306c6a4fce20538e1c2100b200d4f6009400efb3b5495a5fe9f7decb3aa27c597db789e8f280405604"
+          "ct_tag_hex": "58d9cf0a4c794672fdc1c184a21794df707aa9d1a966fa1dabd2cfad617ef3ea3ce04bbade0bdc8d19dab09182dfc032dd"
         }
       },
       {
-        "id": "10.2.8",
+        "id": "10.1.8",
         "title": "Rate-Minus-One Message (167 Bytes, R-1 Boundary)",
         "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
         "nonce_hex": "d0d1d2d3d4d5d6d7d8d9dadb",
@@ -247,12 +163,12 @@
           "bad_tag": true
         },
         "expected": {
-          "ct_prefix32_hex": "35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84",
-          "tag_hex": "32a0a6438ebd3b9bdcc76da34f9bc63fd2196b133cf6a3bef683b4b8c28dd43f"
+          "ct_prefix32_hex": "57d63a7ee7acd94a3b9ccf4bf165874eb927e4d79e139b1566a4f4492be971aa",
+          "tag_hex": "70d6a16841896e2a3ef6c61c013135444e680a268435768ff102f2a908e259c3"
         }
       },
       {
-        "id": "10.2.9",
+        "id": "10.1.9",
         "title": "Exact-Rate Message (168 Bytes, R Boundary)",
         "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
         "nonce_hex": "d0d1d2d3d4d5d6d7d8d9dadb",
@@ -267,12 +183,12 @@
           "bad_tag": true
         },
         "expected": {
-          "ct_prefix32_hex": "35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84",
-          "tag_hex": "54d3ebf2d79bacb8ca1217643a4bb71dc90bd5b5241b78f3a2e2491133047099"
+          "ct_prefix32_hex": "57d63a7ee7acd94a3b9ccf4bf165874eb927e4d79e139b1566a4f4492be971aa",
+          "tag_hex": "c6aa75963cff9c9b904c5d371da48edf8726faeaf335aea194c211add781cf33"
         }
       },
       {
-        "id": "10.2.10",
+        "id": "10.1.10",
         "title": "Large Nonce (32 Bytes)",
         "key_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
         "nonce_hex": "e0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
@@ -287,7 +203,7 @@
           "bad_tag": true
         },
         "expected": {
-          "ct_tag_hex": "77431d80e360764438411dca0d9d76598d097b9fbfecb7e4e805532c5f4fff46bb3834e3df28209cb07413f531d104ed6b0d2f132c775cfd6a556b1f75f4769555751936ccab6d1a0f5cddfd3f608f0f"
+          "ct_tag_hex": "3cd4a0518201c7a9312d2d2aa42e5cf968319042017e67329a6e90f80f695ab104992d1a5f9dc6ca6729034efec0d8238fac2fa4f514b4f93f5641a78f92dfe0183357a99c2875dd406208fc1b91daf3"
         }
       }
     ]

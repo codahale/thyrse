@@ -14,11 +14,11 @@ import (
 
 	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/internal/mem"
-	"github.com/codahale/thyrse/internal/treewrap"
+	"github.com/codahale/thyrse/internal/tw128"
 )
 
 // TagSize is the tag size appended by Seal.
-const TagSize = treewrap.TagSize
+const TagSize = tw128.TagSize
 
 // ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. After a failed Open, the
 // protocol's transcript has diverged from the sender's because the CHAIN frame absorbed a different tag.
@@ -128,14 +128,17 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 	p.beginFrame(opMask, label)
 	p.endFrame()
 
-	var twKey [treewrap.KeySize]byte
+	var twKey [tw128.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
 
-	ciphertext, tag := treewrap.EncryptAndMAC(dst, &twKey, plaintext)
+	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
+	e := tw128.NewEncryptor(twKey[:], nil, nil)
+	e.XORKeyStream(ciphertext, plaintext)
+	tag := e.Finalize()
 	clear(twKey[:])
 
 	p.resetChain(opMask, cv[:], tag[:])
-	return ciphertext
+	return ret
 }
 
 // Unmask decrypts ciphertext encrypted with [Protocol.Mask]. Both sides must have identical transcript state at the
@@ -144,14 +147,17 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	p.beginFrame(opMask, label)
 	p.endFrame()
 
-	var twKey [treewrap.KeySize]byte
+	var twKey [tw128.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
 
-	plaintext, tag := treewrap.DecryptAndMAC(dst, &twKey, ciphertext)
+	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
+	d := tw128.NewDecryptor(twKey[:], nil, nil)
+	d.XORKeyStream(plaintext, ciphertext)
+	tag := d.Finalize()
 	clear(twKey[:])
 
 	p.resetChain(opMask, cv[:], tag[:])
-	return plaintext
+	return ret
 }
 
 // MaskStream returns a [MaskStream] for incrementally encrypting data without authentication. Write ciphertext by
@@ -163,13 +169,13 @@ func (p *Protocol) MaskStream(label string) *MaskStream {
 	p.beginFrame(opMask, label)
 	p.endFrame()
 
-	var twKey [treewrap.KeySize]byte
+	var twKey [tw128.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
 
 	ms := &MaskStream{
 		p:  p,
 		cv: cv,
-		e:  treewrap.NewEncryptor(&twKey),
+		e:  tw128.NewEncryptor(twKey[:], nil, nil),
 	}
 	clear(twKey[:])
 
@@ -181,7 +187,7 @@ func (p *Protocol) MaskStream(label string) *MaskStream {
 type MaskStream struct {
 	p  *Protocol
 	cv [chainValueSize]byte
-	e  treewrap.Encryptor
+	e  tw128.Encryptor
 }
 
 // XORKeyStream encrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
@@ -205,13 +211,13 @@ func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
 	p.beginFrame(opMask, label)
 	p.endFrame()
 
-	var twKey [treewrap.KeySize]byte
+	var twKey [tw128.KeySize]byte
 	cv := p.finalize(dsMask, twKey[:])
 
 	us := &UnmaskStream{
 		p:  p,
 		cv: cv,
-		d:  treewrap.NewDecryptor(&twKey),
+		d:  tw128.NewDecryptor(twKey[:], nil, nil),
 	}
 	clear(twKey[:])
 
@@ -223,7 +229,7 @@ func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
 type UnmaskStream struct {
 	p  *Protocol
 	cv [chainValueSize]byte
-	d  treewrap.Decryptor
+	d  tw128.Decryptor
 }
 
 // XORKeyStream decrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
@@ -242,20 +248,22 @@ func (us *UnmaskStream) Close() error {
 // requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
 func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	ret, out := mem.SliceForAppend(dst, len(plaintext)+TagSize)
-	ciphertext, tag := out[:len(plaintext)], out[len(plaintext):]
+	ciphertext, tagDst := out[:len(plaintext)], out[len(plaintext):]
 
 	p.beginFrame(opSeal, label)
 	p.endFrame()
 
-	var twKey [treewrap.KeySize]byte
+	var twKey [tw128.KeySize]byte
 	cv := p.finalize(dsSeal, twKey[:])
 
-	_, fullTag := treewrap.EncryptAndMAC(ciphertext[:0], &twKey, plaintext)
+	e := tw128.NewEncryptor(twKey[:], nil, nil)
+	e.XORKeyStream(ciphertext, plaintext)
+	fullTag := e.Finalize()
 	clear(twKey[:])
 
 	p.resetChain(opSeal, cv[:], fullTag[:])
 
-	copy(tag, fullTag[:])
+	copy(tagDst, fullTag[:])
 	return ret
 }
 
@@ -275,10 +283,13 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	p.beginFrame(opSeal, label)
 	p.endFrame()
 
-	var twKey [treewrap.KeySize]byte
+	var twKey [tw128.KeySize]byte
 	cv := p.finalize(dsSeal, twKey[:])
 
-	plaintext, fullTag := treewrap.DecryptAndMAC(dst, &twKey, ct)
+	ret, plaintext := mem.SliceForAppend(dst, len(ct))
+	d := tw128.NewDecryptor(twKey[:], nil, nil)
+	d.XORKeyStream(plaintext, ct)
+	fullTag := d.Finalize()
 	clear(twKey[:])
 
 	p.resetChain(opSeal, cv[:], fullTag[:])
@@ -288,7 +299,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 		return nil, ErrInvalidCiphertext
 	}
 
-	return plaintext, nil
+	return ret, nil
 }
 
 // Clone returns an independent copy of the protocol state. The original and clone evolve independently.
@@ -350,7 +361,7 @@ func (p *Protocol) endFrame() {
 }
 
 // resetChain resets the transcript with a CHAIN frame. The chain value is always chainValueSize bytes and the tag, when
-// present, is always treewrap.TagSize bytes.
+// present, is always tw128.TagSize bytes.
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset()
 	p.beginFrame(opChain, "")

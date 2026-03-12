@@ -1,38 +1,21 @@
-// Package treewrap implements TW128, a tree-parallel authenticated encryption algorithm that uses a Sakura flat-tree
+// Package tw128 implements TW128, a tree-parallel authenticated encryption algorithm that uses a Sakura flat-tree
 // topology with kangaroo hopping to enable SIMD acceleration on large inputs.
+//
+// Each tree node absorbs encode_string(K) || encode_string(N) || encode_string(AD) || LEU64(i) into a duplex,
+// pad-permutes with 0x08, and encrypts. The context prefix is absorbed once into a "base" duplex state, then
+// cloned per node.
 //
 // The final node (index 0) encrypts chunk 0 directly (the "message hop"). For multi-chunk messages, independent leaves
 // (indices 1..n-1) encrypt subsequent chunks and produce chain values that are absorbed into the final node (the
 // "chaining hop"). All leaf operations are independent and executed in parallel using SIMD-accelerated permutations.
-//
-// This package provides both stateful incremental types ([Encryptor] and [Decryptor]) and stateless convenience functions
-// ([EncryptAndMAC] and [DecryptAndMAC]). It is intended as a building block for duplex-based protocols, where key
-// uniqueness and associated data are managed by the caller. The key MUST be unique per invocation.
-package treewrap
+package tw128
 
 import (
 	"encoding/binary"
 
 	"github.com/codahale/thyrse/internal/enc"
 	"github.com/codahale/thyrse/internal/keccak"
-	"github.com/codahale/thyrse/internal/mem"
 )
-
-// leafPadBuf builds the leaf init data (key || LE64(index)) for AbsorbFinal.
-func leafPadBuf(key *[KeySize]byte, index uint64) [KeySize + 8]byte {
-	var buf [KeySize + 8]byte
-	copy(buf[:KeySize], key[:])
-	binary.LittleEndian.PutUint64(buf[KeySize:], index)
-	return buf
-}
-
-// initDuplex initializes a duplex (absorb key||index, pad, permute).
-func initDuplex(d *keccak.Duplex, key *[KeySize]byte, index uint64) {
-	d.Reset()
-	buf := leafPadBuf(key, index)
-	d.Absorb(buf[:])
-	d.PadPermute(initDS)
-}
 
 const (
 	// KeySize is the size of the key in bytes.
@@ -44,7 +27,7 @@ const (
 	// ChunkSize is the size of each leaf chunk in bytes.
 	ChunkSize = 8 * 1024
 
-	initDS       = 0x08 // Domain separation byte for duplex init (key/index absorption).
+	initDS       = 0x08 // Domain separation byte for duplex init (prefix+index absorption).
 	chainValueDS = 0x0B // Domain separation byte for chain value (Sakura inner node '110').
 	tagSingleDS  = 0x07 // Domain separation byte for tag, n=1 (Sakura single-node final '11').
 	tagChainDS   = 0x06 // Domain separation byte for tag, n>1 (Sakura chaining-hop final '01').
@@ -53,8 +36,36 @@ const (
 // hopFrame is the Sakura message-hop / chaining-hop framing: '110^{62}' packed LSB-first (8 bytes).
 var hopFrame = [8]byte{0x03}
 
+// initBase absorbs encode_string(key) || encode_string(nonce) || encode_string(ad) into a fresh duplex.
+// AD is absorbed as header+body to avoid copying large AD.
+func initBase(base *keccak.Duplex, key, nonce, ad []byte) {
+	base.Reset()
+
+	// K and N are small, so batch them.
+	var buf [128]byte
+	b := buf[:0]
+	b = enc.EncodeString(b, key)
+	b = enc.EncodeString(b, nonce)
+	base.Absorb(b)
+
+	// AD may be large — encode header separately, then stream AD data.
+	b = buf[:0]
+	b = enc.LeftEncode(b, uint64(len(ad))*8)
+	base.Absorb(b)
+	base.Absorb(ad)
+}
+
+// initNode clones base, absorbs LEU64(index), and pad-permutes with initDS.
+func initNode(d *keccak.Duplex, base *keccak.Duplex, index uint64) {
+	*d = base.Clone()
+	var idx [8]byte
+	binary.LittleEndian.PutUint64(idx[:], index)
+	d.Absorb(idx[:])
+	d.PadPermute(initDS)
+}
+
 type cryptor struct {
-	key       [KeySize]byte
+	base      keccak.Duplex // base duplex state with prefix absorbed
 	leaf      keccak.Duplex // current leaf's duplex (for chunks 1+)
 	final     keccak.Duplex // final node duplex (encrypts chunk 0, absorbs CVs)
 	finalized bool
@@ -82,7 +93,7 @@ func (c *cryptor) transitionToLeafMode() {
 
 func (c *cryptor) finalizeInternal() [TagSize]byte {
 	if c.finalized {
-		panic("treewrap: Finalize called more than once")
+		panic("tw128: Finalize called more than once")
 	}
 	c.finalized = true
 
@@ -118,10 +129,11 @@ type Encryptor struct {
 	cryptor
 }
 
-// NewEncryptor returns a new Encryptor initialized with the given key.
-func NewEncryptor(key *[KeySize]byte) Encryptor {
-	e := Encryptor{cryptor: cryptor{key: *key}}
-	initDuplex(&e.final, key, 0)
+// NewEncryptor returns a new Encryptor initialized with the given key, nonce, and associated data.
+func NewEncryptor(key, nonce, ad []byte) Encryptor {
+	var e Encryptor
+	initBase(&e.base, key, nonce, ad)
+	initNode(&e.final, &e.base, 0)
 	return e
 }
 
@@ -172,7 +184,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial leaf chunk with remaining bytes.
 	if len(src) > 0 {
-		initDuplex(&e.leaf, &e.key, uint64(e.nLeaves+1))
+		initNode(&e.leaf, &e.base, uint64(e.nLeaves+1))
 		e.chunkOff = 0
 		e.leaf.Encrypt(dst[:len(src)], src)
 		e.chunkOff += len(src)
@@ -186,7 +198,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	var s8 keccak.State8
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		encryptX8(&e.key, uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &s8)
+		encryptX8(&e.base, uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &s8)
 		e.final.AbsorbCVx8(&s8)
 		e.nLeaves += 8
 		idx += 8
@@ -199,7 +211,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		encryptX8(&e.key, uint64(e.nLeaves+1), padSrc[:], padDst[:], &s8)
+		encryptX8(&e.base, uint64(e.nLeaves+1), padSrc[:], padDst[:], &s8)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
 		e.final.AbsorbCVx8N(&s8, rem)
 		e.nLeaves += rem
@@ -210,7 +222,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		var s1 keccak.State1
-		encryptX1(&e.key, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
+		encryptX1(&e.base, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
 		e.final.AbsorbCV(&s1)
 		e.nLeaves++
 		idx++
@@ -231,10 +243,11 @@ type Decryptor struct {
 	cryptor
 }
 
-// NewDecryptor returns a new Decryptor initialized with the given key.
-func NewDecryptor(key *[KeySize]byte) Decryptor {
-	d := Decryptor{cryptor: cryptor{key: *key}}
-	initDuplex(&d.final, key, 0)
+// NewDecryptor returns a new Decryptor initialized with the given key, nonce, and associated data.
+func NewDecryptor(key, nonce, ad []byte) Decryptor {
+	var d Decryptor
+	initBase(&d.base, key, nonce, ad)
+	initNode(&d.final, &d.base, 0)
 	return d
 }
 
@@ -285,7 +298,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial leaf chunk with remaining bytes.
 	if len(src) > 0 {
-		initDuplex(&d.leaf, &d.key, uint64(d.nLeaves+1))
+		initNode(&d.leaf, &d.base, uint64(d.nLeaves+1))
 		d.chunkOff = 0
 		d.leaf.Decrypt(dst[:len(src)], src)
 		d.chunkOff += len(src)
@@ -299,7 +312,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	var s8 keccak.State8
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		decryptX8(&d.key, uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &s8)
+		decryptX8(&d.base, uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &s8)
 		d.final.AbsorbCVx8(&s8)
 		d.nLeaves += 8
 		idx += 8
@@ -312,7 +325,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		decryptX8(&d.key, uint64(d.nLeaves+1), padSrc[:], padDst[:], &s8)
+		decryptX8(&d.base, uint64(d.nLeaves+1), padSrc[:], padDst[:], &s8)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
 		d.final.AbsorbCVx8N(&s8, rem)
 		d.nLeaves += rem
@@ -323,7 +336,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		var s1 keccak.State1
-		decryptX1(&d.key, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
+		decryptX1(&d.base, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
 		d.final.AbsorbCV(&s1)
 		d.nLeaves++
 		idx++
@@ -335,31 +348,6 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 // plaintext.
 func (d *Decryptor) Finalize() [TagSize]byte {
 	return d.finalizeInternal()
-}
-
-// EncryptAndMAC encrypts plaintext, appends the ciphertext to dst, and returns the resulting slice along with a
-// TagSize-byte authentication tag. The key MUST be unique per invocation.
-//
-// To reuse plaintext's storage for the encrypted output, use plaintext[:0] as dst. Otherwise, the remaining capacity
-// of dst must not overlap plaintext.
-func EncryptAndMAC(dst []byte, key *[KeySize]byte, plaintext []byte) ([]byte, [TagSize]byte) {
-	ret, ct := mem.SliceForAppend(dst, len(plaintext))
-	e := NewEncryptor(key)
-	e.XORKeyStream(ct, plaintext)
-	return ret, e.Finalize()
-}
-
-// DecryptAndMAC decrypts ciphertext, appends the plaintext to dst, and returns the resulting slice along with the
-// expected TagSize-byte authentication tag. The caller MUST verify the tag using constant-time comparison before using
-// the plaintext.
-//
-// To reuse ciphertext's storage for the decrypted output, use ciphertext[:0] as dst. Otherwise, the remaining capacity
-// of dst must not overlap ciphertext.
-func DecryptAndMAC(dst []byte, key *[KeySize]byte, ciphertext []byte) ([]byte, [TagSize]byte) {
-	ret, pt := mem.SliceForAppend(dst, len(ciphertext))
-	d := NewDecryptor(key)
-	d.XORKeyStream(pt, ciphertext)
-	return ret, d.Finalize()
 }
 
 // finalPos returns the duplex position after encrypting/decrypting chunkLen bytes.
@@ -374,11 +362,10 @@ func finalPos(chunkLen int) int {
 	return p
 }
 
-func encryptX1(key *[KeySize]byte, index uint64, pt, ct []byte, s *keccak.State1) {
-	s.Reset()
-	initBuf := leafPadBuf(key, index)
-	s.AbsorbFinal(initBuf[:], initDS)
-	s.Permute12()
+func encryptX1(base *keccak.Duplex, index uint64, pt, ct []byte, s *keccak.State1) {
+	var d keccak.Duplex
+	initNode(&d, base, index)
+	*s = d.CopyState()
 
 	done := s.FastLoopEncrypt168(pt, ct)
 	s.EncryptBytesAt(0, pt[done:], ct[done:])
@@ -386,14 +373,14 @@ func encryptX1(key *[KeySize]byte, index uint64, pt, ct []byte, s *keccak.State1
 	s.PadPermute(finalPos(len(pt)), chainValueDS)
 }
 
-func encryptX8(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, s *keccak.State8) {
-	s.Reset()
-	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
-	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
-	b4, b5 := leafPadBuf(key, baseIndex+4), leafPadBuf(key, baseIndex+5)
-	b6, b7 := leafPadBuf(key, baseIndex+6), leafPadBuf(key, baseIndex+7)
-	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], b4[:], b5[:], b6[:], b7[:], initDS)
-	s.Permute12()
+func encryptX8(base *keccak.Duplex, baseIndex uint64, pt, ct []byte, s *keccak.State8) {
+	baseState := base.CopyState()
+	basePos := base.Pos()
+	suffixes := [8]uint64{
+		baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3,
+		baseIndex + 4, baseIndex + 5, baseIndex + 6, baseIndex + 7,
+	}
+	s.TW128Init(&baseState, basePos, suffixes, initDS)
 
 	done := s.FastLoopEncrypt168(pt, ct, ChunkSize)
 	tail := ChunkSize - done
@@ -404,11 +391,10 @@ func encryptX8(key *[KeySize]byte, baseIndex uint64, pt, ct []byte, s *keccak.St
 	s.PadPermute(finalPos(ChunkSize), chainValueDS)
 }
 
-func decryptX1(key *[KeySize]byte, index uint64, ct, pt []byte, s *keccak.State1) {
-	s.Reset()
-	initBuf := leafPadBuf(key, index)
-	s.AbsorbFinal(initBuf[:], initDS)
-	s.Permute12()
+func decryptX1(base *keccak.Duplex, index uint64, ct, pt []byte, s *keccak.State1) {
+	var d keccak.Duplex
+	initNode(&d, base, index)
+	*s = d.CopyState()
 
 	done := s.FastLoopDecrypt168(ct, pt)
 	s.DecryptBytesAt(0, ct[done:], pt[done:])
@@ -416,14 +402,14 @@ func decryptX1(key *[KeySize]byte, index uint64, ct, pt []byte, s *keccak.State1
 	s.PadPermute(finalPos(len(ct)), chainValueDS)
 }
 
-func decryptX8(key *[KeySize]byte, baseIndex uint64, ct, pt []byte, s *keccak.State8) {
-	s.Reset()
-	b0, b1 := leafPadBuf(key, baseIndex), leafPadBuf(key, baseIndex+1)
-	b2, b3 := leafPadBuf(key, baseIndex+2), leafPadBuf(key, baseIndex+3)
-	b4, b5 := leafPadBuf(key, baseIndex+4), leafPadBuf(key, baseIndex+5)
-	b6, b7 := leafPadBuf(key, baseIndex+6), leafPadBuf(key, baseIndex+7)
-	s.AbsorbFinal(b0[:], b1[:], b2[:], b3[:], b4[:], b5[:], b6[:], b7[:], initDS)
-	s.Permute12()
+func decryptX8(base *keccak.Duplex, baseIndex uint64, ct, pt []byte, s *keccak.State8) {
+	baseState := base.CopyState()
+	basePos := base.Pos()
+	suffixes := [8]uint64{
+		baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3,
+		baseIndex + 4, baseIndex + 5, baseIndex + 6, baseIndex + 7,
+	}
+	s.TW128Init(&baseState, basePos, suffixes, initDS)
 
 	done := s.FastLoopDecrypt168(ct, pt, ChunkSize)
 	tail := ChunkSize - done

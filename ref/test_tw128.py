@@ -1,10 +1,10 @@
-"""Test TW128 bare and AEAD modes against the canonical test vectors."""
+"""Test TW128 AEAD mode against the canonical test vectors."""
 
 import json
 import unittest
 from pathlib import Path
 
-from .tw128 import encrypt_and_mac, decrypt_and_mac, tw128_encrypt, tw128_decrypt, B, TAU
+from .tw128 import tw128_encrypt, tw128_decrypt, TAU
 
 VECTORS_PATH = Path(__file__).resolve().parent.parent / "docs" / "tw128-test-vectors.json"
 
@@ -17,50 +17,6 @@ def make_message(msg_def):
     if mode == "hex":
         return bytes.fromhex(msg_def.get("hex", ""))
     raise ValueError(f"Unsupported message mode: {mode}")
-
-
-class TestBareVectors(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        with open(VECTORS_PATH) as f:
-            doc = json.load(f)
-        bare = doc["bare"]
-        cls.key = bytes.fromhex(bare["key_hex"])
-        cls.vectors = bare["vectors"]
-
-    def test_vectors(self):
-        for case in self.vectors:
-            with self.subTest(id=case["id"]):
-                msg = make_message(case["message"])
-                exp = case["expected"]
-                mutations = case.get("mutations", {})
-
-                ct, tag = encrypt_and_mac(self.key, msg)
-
-                if "ct_hex" in exp:
-                    self.assertEqual(ct.hex(), exp["ct_hex"])
-                if "ct_prefix32_hex" in exp:
-                    self.assertEqual(ct[:32].hex(), exp["ct_prefix32_hex"])
-                self.assertEqual(tag.hex(), exp["tag_hex"])
-
-                # Round-trip
-                pt2, tag2 = decrypt_and_mac(self.key, ct)
-                self.assertEqual(pt2, msg)
-                self.assertEqual(tag2, tag)
-
-                # Mutation: flip first bit
-                if mutations.get("flip_first_bit") and len(ct) > 0:
-                    ct_mut = bytearray(ct)
-                    ct_mut[0] ^= 0x01
-                    _, flip_tag = decrypt_and_mac(self.key, bytes(ct_mut))
-                    self.assertEqual(flip_tag.hex(), exp["flip_tag_hex"])
-
-                # Mutation: swap chunk 0 and 1
-                if mutations.get("swap_chunk_0_1") and len(ct) >= 2 * B:
-                    ct_mut = bytearray(ct)
-                    ct_mut[:B], ct_mut[B:2*B] = ct_mut[B:2*B], ct_mut[:B]
-                    _, swap_tag = decrypt_and_mac(self.key, bytes(ct_mut))
-                    self.assertEqual(swap_tag.hex(), exp["swap_tag_hex"])
 
 
 class TestAEADVectors(unittest.TestCase):

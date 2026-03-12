@@ -17,6 +17,13 @@ type Duplex struct {
 // Pos returns the current byte position within the rate.
 func (d *Duplex) Pos() int { return d.pos }
 
+// Clone returns a copy of the duplex state. State1 is a value type ([25]uint64),
+// so the struct copy is a deep copy.
+func (d *Duplex) Clone() Duplex { return *d }
+
+// CopyState returns a copy of the internal State1.
+func (d *Duplex) CopyState() State1 { return d.s }
+
 // Reset zeros the state and resets the position to 0.
 func (d *Duplex) Reset() {
 	d.s.Reset()

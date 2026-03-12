@@ -397,6 +397,50 @@ func (s *State2) DecryptBytes(inst int, src, dst []byte) {
 
 func (s *State8) Reset() { clear(s.a[:]) }
 
+// TW128Init broadcasts base into all 8 lanes, XORs each suffixes[i] as an
+// 8-byte LE value at byte position basePos, applies pad10*1 with ds at
+// basePos+8, and permutes. This initializes 8 tree nodes in parallel from
+// a shared base duplex state.
+func (s *State8) TW128Init(base *State1, basePos int, suffixes [8]uint64, ds byte) {
+	// Broadcast base into all 8 instances.
+	for lane := range Lanes {
+		for inst := range 8 {
+			s.a[lane][inst] = base.a[lane]
+		}
+	}
+
+	// XOR each suffix (8-byte LE) at basePos.
+	byteInLane := basePos & 7
+	laneIdx := basePos >> 3
+	if byteInLane == 0 {
+		// Lane-aligned: suffix fits in one lane.
+		for inst := range 8 {
+			s.a[laneIdx][inst] ^= suffixes[inst]
+		}
+	} else {
+		// Split across two lanes.
+		shift := uint(byteInLane) * 8
+		for inst := range 8 {
+			s.a[laneIdx][inst] ^= suffixes[inst] << shift
+			s.a[laneIdx+1][inst] ^= suffixes[inst] >> (64 - shift)
+		}
+	}
+
+	// PadPermute at basePos+8 with ds.
+	padPos := basePos + 8
+	padShift := uint((padPos & 7) << 3)
+	padLane := padPos >> 3
+	dsMask := uint64(ds) << padShift
+	endShift := uint(((Rate - 1) & 7) << 3)
+	endMask := uint64(0x80) << endShift
+	endLane := (Rate - 1) >> 3
+	for inst := range 8 {
+		s.a[padLane][inst] ^= dsMask
+		s.a[endLane][inst] ^= endMask
+	}
+	s.Permute12()
+}
+
 // FastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 // Instance i reads from in[i*stride:]. Returns bytes absorbed per instance.
 func (s *State8) FastLoopAbsorb168(in []byte, stride int) int {

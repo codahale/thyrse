@@ -116,71 +116,15 @@ def _make_message(msg_def: dict) -> bytes:
 # TW128 vector renderers
 # ---------------------------------------------------------------------------
 
-def render_bare_vectors(data: dict) -> str:
-    """Render bare (internal function) vectors as Markdown matching spec \u00a710.1."""
-    bare = data["bare"]
-    lines: list[str] = []
-
-    lines.append("### 10.1 Internal Function Vectors")
-    lines.append("")
-
-    key = bytes.fromhex(bare["key_hex"])
-    lines.append("All internal function vectors use:")
-    lines.append("")
-    lines.append(f"- **Key:** 32 bytes `{_fmt_bytes_short(key)}`")
-    lines.append("- **Plaintext:** `len` bytes `00 01 02 ... (len-1) mod 256`")
-    lines.append("")
-    lines.append("Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. All values are hexadecimal.")
-    lines.append("")
-
-    for case in bare["vectors"]:
-        cid = case["id"]
-        title = case["title"]
-        msg = _make_message(case["message"])
-        exp = case["expected"]
-
-        lines.append(f"#### {cid} {title}")
-        lines.append("")
-        lines.append("| Field | Value |")
-        lines.append("|-------|-------|")
-        lines.append(f"| len | {len(msg)} |")
-        if "ct_hex" in exp:
-            lines.append(f"| ct | {('`' + exp['ct_hex'] + '`') if exp['ct_hex'] else '(empty)'} |")
-        else:
-            lines.append(f"| ct[:32] | `{exp['ct_prefix32_hex']}` |")
-        lines.append(f"| tag | `{exp['tag_hex']}` |")
-        lines.append("")
-
-        if "flip_tag_hex" in exp:
-            if len(msg) == 1:
-                lines.append("Flipping bit 0 of the ciphertext (`f0`) yields tag")
-            else:
-                lines.append("Flipping bit 0 of `ct[0]` yields tag")
-            lines.append(f"`{exp['flip_tag_hex']}`.")
-            lines.append("")
-
-        if "swap_tag_hex" in exp:
-            lines.append("Swapping chunks 1 and 2 (bytes 0\u20138,191 and 8,192\u201316,383) yields tag")
-            lines.append(f"`{exp['swap_tag_hex']}`.")
-            lines.append("")
-
-    lines.append("#### 10.1.6 Round-Trip Consistency")
-    lines.append("")
-    lines.append("For all internal function vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as")
-    lines.append("`EncryptAndMAC`.")
-
-    return "\n".join(lines)
-
-
 def render_aead_vectors(data: dict) -> str:
-    """Render AEAD vectors as Markdown matching spec \u00a710.2."""
+    """Render AEAD vectors as Markdown matching spec \u00a710.1."""
     aead = data["aead"]
     lines: list[str] = []
 
-    lines.append("### 10.2 TW128 Vectors")
+    lines.append("### 10.1 TW128 Vectors")
     lines.append("")
     lines.append("These vectors validate `tw128_encrypt` / `tw128_decrypt` (the TW128 instantiation),")
-    lines.append("including SP 800-185 `encode_string` key derivation.")
+    lines.append("including SP 800-185 `encode_string` context encoding.")
     lines.append("")
 
     for case in aead["vectors"]:
@@ -456,7 +400,6 @@ VECTORS_MARKER = re.compile(
 )
 
 _VECTOR_RENDERERS = {
-    "bare": render_bare_vectors,
     "aead": render_aead_vectors,
     "thyrse": render_thyrse_vectors,
 }

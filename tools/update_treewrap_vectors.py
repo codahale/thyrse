@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ref.tw128 import encrypt_and_mac, decrypt_and_mac, tw128_encrypt, B, TAU
+from ref.tw128 import tw128_encrypt, TAU
 
 
 def make_message(msg_def: dict) -> bytes:
@@ -19,37 +19,6 @@ def make_message(msg_def: dict) -> bytes:
     if mode == "hex":
         return bytes.fromhex(msg_def.get("hex", ""))
     raise ValueError(f"Unsupported message mode: {mode}")
-
-
-def update_bare(section: dict) -> None:
-    key = bytes.fromhex(section["key_hex"])
-    for vec in section["vectors"]:
-        msg = make_message(vec["message"])
-        mutations = vec.get("mutations", {})
-
-        ct, tag = encrypt_and_mac(key, msg)
-
-        expected: dict = {}
-        expected["tag_hex"] = tag.hex()
-
-        if len(ct) <= 32:
-            expected["ct_hex"] = ct.hex()
-        else:
-            expected["ct_prefix32_hex"] = ct[:32].hex()
-
-        if mutations.get("flip_first_bit") and len(ct) > 0:
-            flipped = bytearray(ct)
-            flipped[0] ^= 0x01
-            _, flip_tag = decrypt_and_mac(key, bytes(flipped))
-            expected["flip_tag_hex"] = flip_tag.hex()
-
-        if mutations.get("swap_chunk_0_1") and len(ct) >= 2 * B:
-            swapped = bytearray(ct)
-            swapped[:B], swapped[B : 2 * B] = swapped[B : 2 * B], swapped[:B]
-            _, swap_tag = decrypt_and_mac(key, bytes(swapped))
-            expected["swap_tag_hex"] = swap_tag.hex()
-
-        vec["expected"] = expected
 
 
 def update_aead(section: dict) -> None:
@@ -94,8 +63,6 @@ def main() -> None:
     path = Path(sys.argv[1])
     data = json.loads(path.read_text())
 
-    if "bare" in data:
-        update_bare(data["bare"])
     if "aead" in data:
         update_aead(data["aead"])
 

@@ -10,11 +10,11 @@
 ## 1. Introduction
 
 TW128 is an authenticated-encryption scheme with associated data (AEAD) built on a duplex-based Sakura flat-tree
-topology, using Keccak-p[1600,12] as the underlying permutation and TurboSHAKE128 for key derivation, targeting
-128-bit security. It is a member of the TreeWrap design family. The construction enables SIMD acceleration (NEON,
-AVX-512) on large inputs: the final node encrypts the first chunk directly, then absorbs chain values from parallel
-leaves that process subsequent chunks, producing a single MAC tag. A TurboSHAKE128-based key derivation produces a
-per-invocation key from the master key, nonce, and associated data.
+topology, using Keccak-p[1600,12] as the underlying permutation, targeting 128-bit security. The construction enables
+SIMD acceleration (NEON, AVX-512) on large inputs: the final node encrypts the first chunk directly, then absorbs chain
+values from parallel leaves that process subsequent chunks, producing a single MAC tag. The master key, nonce, and
+associated data are absorbed into a shared base duplex state via `encode_string` encoding; each tree node clones this
+base state with a distinct index.
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED",
 "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in
@@ -30,25 +30,25 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 | $`\tau`$ | 32                | Tag size (bytes); equal to C for this instantiation |
 | $`K_L`$  | 32                | Key length (bytes)                                  |
 | B        | 8192              | Chunk size (bytes), matching KangarooTwelve         |
-| KDF      | TurboSHAKE128     | per RFC 9861, 32-byte capacity                      |
 
 **Constraint verification.** $`C + 8 = 40 \leq 167 = R - 1`$. $`\max(\tau, C) = 32 < 168 = R`$.
 
 ## 3. Dependencies
 
-TW128 uses TurboSHAKE128 as its KDF to derive per-invocation keys from the master key, nonce, and associated data.
+TW128 depends on the Keccak-p[1600,12] permutation and the NIST SP 800-185 encoding functions
+(`encode_string`, `left_encode`).
 
 **`Keccak-p[1600,12]`:** The 12-round Keccak permutation on a 1600-bit state, as defined in RFC 9861. This is the
-underlying permutation for both the TurboSHAKE128 KDF and the TW128 duplex.
+underlying permutation for the TW128 duplex.
 
-**`TurboSHAKE128(M, D, l)`:** As specified in RFC 9861. Takes a message `M`, a domain separation byte `D` (0x01 - 0x7F),
-and an output length `l` in bytes.
+**`encode_string(x)`:** As defined in NIST SP 800-185: `left_encode(len(x) * 8) || x`. Used to encode the master key,
+nonce, and associated data into the base duplex state with injective, self-delimiting framing.
 
 ## 4. Duplex
 
 The duplex operates on a standard Keccak sponge with the same permutation and rate/capacity parameters as
 TurboSHAKE128. The `domain_byte` parameter to `_duplex_pad_permute` is supplied by the caller; Section 5 defines
-the five domain separation bytes used by TW128.
+the four domain separation bytes used by TW128.
 
 TW128 is a duplex-based authenticated encryption construction (BDPVA11 §4) using overwrite-mode absorption
 (BDPVA11 §6.2, Algorithm 5; Theorem 2). Encryption and authentication share a single duplex state, with the tag
@@ -59,7 +59,7 @@ Bellare and Namprempre (BN00).
 The `encrypt` and `decrypt` operations write ciphertext directly into the rate, yielding identical state evolution
 under both directions (Section 6.2). Intermediate (non-final) encrypt/decrypt blocks fill the
 full R = 168 byte rate and permute without padding; only terminal operations (initialization, chain value finalization, and the tag
-`_duplex_pad_permute` in `EncryptAndMAC`/`DecryptAndMAC`) apply multi-rate padding via `pad_permute`. For full-rate
+`_duplex_pad_permute` in the AEAD construction) apply multi-rate padding via `pad_permute`. For full-rate
 blocks, a write-only state update is also faster than read-XOR-write on most architectures.
 
 > **Rate distinction.** Initialization absorbs at effective rate R-1 = 167 bytes: padding (domain byte at `pos`,
@@ -68,7 +68,7 @@ blocks, a write-only state update is also faster than read-XOR-write on most arc
 > via raw `keccak_p1600` when `pos` reaches R. Terminal operations (chain value finalization and the tag `_duplex_pad_permute`) call
 > `pad_permute` at whatever `pos` the final partial block leaves, accommodating both full and partial final blocks.
 
-The duplex is defined by the following reference implementation. `keccak_p1600` and `turboshake128` are defined in
+The duplex is defined by the following reference implementation. `keccak_p1600` is defined in
 Appendix B.
 
 <!-- begin:code:ref/duplex.py:duplex_all -->
@@ -133,7 +133,7 @@ def _duplex_absorb(D: _DuplexState, data: bytes) -> _DuplexState:
 > [!NOTE]
 > `_duplex_pad_permute` applies standard TurboSHAKE padding (domain byte at `pos`, `0x80` at $`R-1`$). Initialization
 > uses domain byte `0x08`; chain value finalization uses `0x0B`; the tag `_duplex_pad_permute` in
-> `EncryptAndMAC`/`DecryptAndMAC` uses `0x07` (n=1) or `0x06` (n>1). Intermediate encrypt/decrypt blocks use the full
+> `_tree_process` uses `0x07` (n=1) or `0x06` (n>1). Intermediate encrypt/decrypt blocks use the full
 > $`R = 168`$ byte rate and permute without padding (`keccak_p1600` directly), matching standard unpadded sponge absorb
 > for non-final blocks. Both `_duplex_encrypt` and `_duplex_decrypt` overwrite the rate with ciphertext, so state
 > evolution is identical regardless of direction. `_duplex_absorb` XOR-absorbs data into the rate without padding,
@@ -161,7 +161,7 @@ bits are: message hop `'1'` + final `'1'` = `'11'`, yielding domain byte `0x07` 
 
 For $`n > 1`$, the final node is a duplex that:
 
-1. Inits with `key || LEU64(0)` via `pad_permute(0x08)`.
+1. Clones the base state, absorbs `LEU64(0)`, and calls `pad_permute(0x08)`.
 2. Encrypts chunk 0 (the message hop).
 3. Absorbs `HOP_FRAME` (`0x03 || 0x00^7`), the Sakura message-hop / chaining-hop framing.
 4. Absorbs chain values $`\mathit{cv}_1 \;\|\; \cdots \;\|\; \mathit{cv}_{n-1}`$.
@@ -191,7 +191,7 @@ Final-node separability follows directly from the last suffix bit.
 
 The `0xFF || 0xFF` suffix is defined as `SAKURA_SUFFIX` in the reference code (Section 5.1).
 
-The following table lists the five domain separation bytes with their Sakura suffix encodings:
+The following table lists the four domain separation bytes with their Sakura suffix encodings:
 
 | Byte   | Usage                           | Sakura suffix | Node type |
 |--------|---------------------------------|---------------|-----------|
@@ -199,10 +199,10 @@ The following table lists the five domain separation bytes with their Sakura suf
 | `0x06` | Tag, n>1 (chaining final)       | `01`          | final     |
 | `0x0B` | Leaf chain value                | `110`         | inner     |
 | `0x08` | Init (key/index absorption)     | `000`         | inner     |
-| `0x09` | AEAD key derivation             | `100`         | inner     |
 
-**Domain separation.** The key is in the duplex state via `init` (domain byte `0x08`), not prepended to an input
-string. Both the final node and every leaf call `init(key, index)` with distinct indices: the final node uses index 0,
+**Domain separation.** The master key, nonce, and AD are absorbed into a shared base duplex state via
+`encode_string(K) || encode_string(N) || encode_string(AD)`. Each tree node clones this base state,
+absorbs a distinct `LEU64(index)`, and calls `pad_permute(0x08)`: the final node uses index 0,
 while leaves use indices $`1, \ldots, n-1`$. The final node's tag domain byte (`0x06` or `0x07`) is distinct from all
 leaf domain bytes (`0x08`, `0x0B`), providing an additional layer of separation.
 
@@ -211,28 +211,31 @@ cannot be a valid `length_encode` byte-count (chain-value counts fit in at most 
 size bytes are unambiguously terminal, and the byte immediately preceding them gives the byte-count of $`n-1`$. Given
 $`n-1`$, the chain values are parsed as $`n-1`$ consecutive $`C`$-byte blocks following the `HOP_FRAME`.
 
-### 5.1 Internal Functions: EncryptAndMAC / DecryptAndMAC
+### 5.1 Tree Processing
 
-The internal encrypt-and-MAC functions take a per-invocation key and plaintext (or ciphertext), and return the processed
-data and a MAC tag. These functions are not intended to be called directly; TW128 (Section 5.2) wraps them with key
-derivation and tag verification.
+The `_tree_process` function is the core of TW128. It takes the master key, nonce, associated data, plaintext (or
+ciphertext), and a direction flag, and returns the processed data and a MAC tag.
 
-**`EncryptAndMAC(key, plaintext) -> (ciphertext, tag)`**\
-**`DecryptAndMAC(key, ciphertext) -> (plaintext, tag)`**
+**`_tree_process(key, nonce, ad, data, direction) -> (output, tag)`**
 
 *Inputs:*
 
-- `key`: A C-byte key. MUST be pseudorandom (computationally indistinguishable from uniform) and unique per invocation
-  (no two calls share a key).
-- `plaintext` / `ciphertext`: Data of any length (may be empty). Maximum length is $`(2^{64} - 1) \cdot B`$ bytes, since
-  leaf indices are encoded as 8-byte little-endian integers.
+- `key`: A C-byte master key. MUST be uniformly random.
+- `nonce`: A byte string of at least 16 bytes. MUST be unique per `(key, ad)` pair.
+- `ad`: Associated data of any length (may be empty).
+- `data`: Plaintext (direction = "E") or ciphertext (direction = "D") of any length (may be empty). Maximum length is
+  $`(2^{64} - 1) \cdot B`$ bytes, since leaf indices are encoded as 8-byte little-endian integers.
+- `direction`: `"E"` for encryption, `"D"` for decryption.
 
 *Outputs:*
 
-- `ciphertext` / `plaintext`: Same length as the input data.
+- `output`: Ciphertext or plaintext. Same length as `data`.
 - `tag`: A $`\tau`$-byte MAC tag.
 
-*Procedure:*
+*Procedure.* The context prefix `encode_string(K) || encode_string(N) || encode_string(AD)` is absorbed into a
+fresh duplex state to form the **base state**. Each tree node clones this base state, absorbs `LEU64(index)`,
+and calls `pad_permute(0x08)` to produce the node's keyed init state. This design absorbs the key, nonce,
+and AD exactly once, then reuses the result across all nodes via cloning.
 
 <!-- begin:code:ref/tw128.py:internal_functions -->
 ```python
@@ -242,16 +245,20 @@ HOP_FRAME = bytes([0x03]) + bytes(7)
 # Sakura interleaving block size for I = infinity (Section 5, Tree Topology).
 SAKURA_SUFFIX = b"\xff\xff"
 
-def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes]:
-    """Shared logic for EncryptAndMAC / DecryptAndMAC."""
+def _tree_process(key: bytes, nonce: bytes, ad: bytes, data: bytes, direction: str) -> tuple[bytes, bytes]:
+    """Shared logic for TW128 encrypt/decrypt."""
     n = max(1, -(-len(data) // B))
     chunks = [data[i * B : (i + 1) * B] for i in range(n)]
 
     op = _duplex_encrypt if direction == "E" else _duplex_decrypt
 
-    # Final node: absorb key || LEU64(0) and pad to key the duplex.
-    F = _DuplexState(bytearray(200), 0)
-    F = _duplex_absorb(F, key + (0).to_bytes(8, "little"))
+    # Build base state: absorb encode_string(K) || encode_string(N) || encode_string(AD).
+    prefix = encode_string(key) + encode_string(nonce) + encode_string(ad)
+    base = _duplex_absorb(_DuplexState(bytearray(200), 0), prefix)
+
+    # Final node: clone base, absorb LEU64(0), pad_permute 0x08.
+    F = _DuplexState(bytearray(base.S), base.pos)
+    F = _duplex_absorb(F, (0).to_bytes(8, "little"))
     F = _duplex_pad_permute(F, 0x08)
     F, ct0 = op(F, chunks[0])
     out_parts = [ct0]
@@ -267,9 +274,9 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
     # Leaves 1..n-1: independent, parallel.
     cvs = []
     for i, chunk in enumerate(chunks[1:], start=1):
-        # Absorb key || LEU64(i) and pad to key the leaf duplex.
-        L = _DuplexState(bytearray(200), 0)
-        L = _duplex_absorb(L, key + i.to_bytes(8, "little"))
+        # Clone base, absorb LEU64(i), pad_permute 0x08.
+        L = _DuplexState(bytearray(base.S), base.pos)
+        L = _duplex_absorb(L, i.to_bytes(8, "little"))
         L = _duplex_pad_permute(L, 0x08)
         L, ct_i = op(L, chunk)
         out_parts.append(ct_i)
@@ -286,18 +293,12 @@ def _tree_process(key: bytes, data: bytes, direction: str) -> tuple[bytes, bytes
     # Chaining hop '01' -> 0x06
     F = _duplex_pad_permute(F, 0x06)
     return b"".join(out_parts), bytes(F.S[:TAU])
-
-def encrypt_and_mac(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
-    return _tree_process(key, plaintext, "E")
-
-def decrypt_and_mac(key: bytes, ciphertext: bytes) -> tuple[bytes, bytes]:
-    return _tree_process(key, ciphertext, "D")
 ```
 <!-- end:code:ref/tw128.py:internal_functions -->
 
 The final node (index 0) always encrypts chunk 0. Leaf operations for chunks 1 through $`n-1`$ are independent and may
-execute in parallel. Tag computation begins as soon as all chain values are available. `decrypt_and_mac` produces the
-same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write ciphertext into the duplex rate (Section 4).
+execute in parallel. Tag computation begins as soon as all chain values are available. Decryption produces the
+same tag as encryption because both `encrypt` and `decrypt` write ciphertext into the duplex rate (Section 4).
 
 > [!CAUTION]
 > For production implementations, avoid repeated byte-string concatenation (`final_input += ...`) when building the
@@ -305,24 +306,16 @@ same tag as `encrypt_and_mac` because both `encrypt` and `decrypt` write ciphert
 
 ### 5.2 Encrypt / Decrypt
 
-TW128 derives a per-invocation key from `(K, N, AD)` using the KDF, then delegates to
-`EncryptAndMAC`/`DecryptAndMAC`.
-
 **`TW128.Encrypt(K, N, AD, M) -> ct || tag`**\
 **`TW128.Decrypt(K, N, AD, ct || tag) -> M | None`**
 
 **Master-key requirement.** `K` MUST be a uniformly random key of exactly 32 bytes (256 bits).
 
-**Key derivation:**
-
-```
-tw_key <- KDF(encode_string(K) || encode_string(N) || encode_string(AD), 0x09, C)
-```
-
-The `encode_string` encoding (NIST SP 800-185) makes the concatenation injective:
+**Context encoding injectivity.** The `encode_string` encoding (NIST SP 800-185) makes the concatenation
+`encode_string(K) || encode_string(N) || encode_string(AD)` injective:
 each field is prefixed with its `left_encode`d bit-length (`left_encode(8*len(x))`), so no `(K, N, AD)` triple can
-produce the same KDF input as a different triple. Domain byte `0x09` separates key derivation from all other TW128
-domain bytes (`0x08`, `0x0B`, `0x07`, `0x06`).
+produce the same absorption stream as a different triple. This guarantees that distinct contexts produce distinct
+base states (and therefore distinct per-node init inputs).
 
 <!-- begin:code:ref/tw128.py:aead_functions -->
 ```python
@@ -330,17 +323,15 @@ import hmac
 
 def tw128_encrypt(K: bytes, N: bytes, AD: bytes, M: bytes) -> bytes:
     assert len(K) == C, "K must be exactly 32 bytes"
-    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
-    ct, tag = encrypt_and_mac(tw_key, M)
+    ct, tag = _tree_process(K, N, AD, M, "E")
     return ct + tag
 
 def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
     assert len(K) == C, "K must be exactly 32 bytes"
     if len(ct_tag) < TAU:
         return None
-    tw_key = turboshake128(encode_string(K) + encode_string(N) + encode_string(AD), 0x09, C)
     ct, tag_expected = ct_tag[:-TAU], ct_tag[-TAU:]
-    pt, tag = decrypt_and_mac(tw_key, ct)
+    pt, tag = _tree_process(K, N, AD, ct, "D")
     return pt if hmac.compare_digest(tag, tag_expected) else None
 ```
 <!-- end:code:ref/tw128.py:aead_functions -->
@@ -348,13 +339,16 @@ def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
 ## 6. Security Properties
 
 This section gives a complete reduction from TW128 AEAD security to the ideal-permutation assumption on
-Keccak-p[1600,12]. The argument has two layers:
+Keccak-p[1600,12]. The argument proceeds in three stages:
 
-- **Layer A (Section 6.4).** A single game hop replaces the TurboSHAKE128 KDF with a lazy random function, using the
-  MRV15 keyed-sponge PRF framework (FKS, Section 6.2) to bound the distinguishing advantage.
-- **Layer B (Sections 6.6–6.9).** Under random keys, each fixed-key AEAD goal (IND-CPA, INT-CTXT, IND-CCA2) decomposes
-  into keyed-duplex PRF properties of the leaf ciphers (FKD, Section 6.2): pseudorandomness of rate outputs,
-  structural state equivalence, and fixed-key bijection.
+1. **Context-prefix injectivity (Section 6.4).** `encode_string` injectivity ensures distinct `(K, N, AD)` triples
+   produce distinct absorption streams. Each node clones the base state and appends a distinct `LEU64(index)`, so every
+   node's init π-input is distinct across both contexts and indices. By the outer-keyed sponge result (ADMV15),
+   init outputs are pseudorandom.
+2. **Per-node PRF (Section 6.2).** MRV15 FKD covers each node's duplex operations.
+3. **AEAD goals (Sections 6.6–6.9).** Under pseudorandom init states, each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2)
+   reduces to keyed-duplex PRF properties of the leaf ciphers: pseudorandomness of rate outputs,
+   structural state equivalence, and fixed-key bijection.
 
 All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $`c = 256`$ bits and $`\tau = 32`$
 tag bytes. Nonce-misuse resistance is explicitly out of scope: all IND-CPA and IND-CCA2 claims assume a nonce-respecting
@@ -365,7 +359,7 @@ independent of any other keys in the system.
 > **Nonce reuse is catastrophic.** Reusing the same $`(K, N, AD)`$ triple with different equal-length
 > messages produces identical keystreams, leaking the XOR of all plaintexts (two-time pad). This
 > enables full plaintext recovery given one known plaintext. Nonce uniqueness per $`(K, AD)`$ pair is a
-> hard security requirement (Section 7.4), not a quality-of-implementation concern.
+> hard security requirement (Section 7.3), not a quality-of-implementation concern.
 
 **Length leakage.** TW128 ciphertexts reveal the exact plaintext length: `|ct| = |M|` (plus the
 fixed $`\tau`$-byte tag). This is inherent to any stream-cipher-based AEAD and is not mitigated by this
@@ -397,9 +391,9 @@ Concrete numerical evaluations in this section use TW128 parameters.
 Let:
 
 - $`\sigma`$: total online Keccak-p calls performed by the construction across all oracle queries
-  (including KDF, leaf-duplex, and chaining-hop tag permutation calls).
+  (including base-state prefix absorption, leaf-duplex, and chaining-hop tag permutation calls).
 - $`t`$: adversary offline Keccak-p calls — direct evaluations of $`\pi`$ and $`\pi^{-1}`$ in the
-  ideal-permutation model. This is an analysis parameter, not a deployment-controlled quantity; Section 7.4
+  ideal-permutation model. This is an analysis parameter, not a deployment-controlled quantity; Section 7.3
   provides guidance on choosing $`t`$ for bound evaluation.
 - $`S`$: total number of decryption/verification forgery attempts in one security experiment (per key epoch).
 - $`q_{\mathrm{ctx}}`$: number of distinct contexts (one per distinct $`(K, N, AD)`$ triple; the context encoding
@@ -446,12 +440,10 @@ uniform 1600-bit output — not merely computationally pseudorandom. Freshness h
    | Init ($`\mathcal{I}`$) | Key in rate | $`\le 1/2^k`$ |
    | Intermediate | Capacity from prior $`\pi`$-output | $`\le 1/2^c`$ |
 
-   The total freshness-failure probability is at most $`\mu_{\mathrm{duplex}}\, t / 2^{\min(k,c)}`$, where
-   $`\mu_{\mathrm{duplex}}`$ is the total duplexing calls across all leaf and final-node evaluations. This cost is charged
-   as part of the online-vs-offline term in the decomposition (Section 6.5). The KDF sponge's $`\pi`$-calls follow the
-   same pattern (init from zero capacity with the master key in the rate, then intermediate calls with inherited
-   capacity) and are accounted for separately through the bridge theorem's $`\varepsilon_{\mathrm{ks}}`$ term
-   (Section 6.4).
+   The total freshness-failure probability is at most $`\mu\, t / 2^{\min(k,c)}`$, where
+   $`\mu`$ is the total duplexing calls across all base-state absorption, leaf, and final-node evaluations. This cost is charged
+   as part of the online-vs-offline term in the decomposition (Section 6.5). The base-state absorption π-calls
+   (absorbing the `encode_string` prefix) are accounted for in σ and the $`\mu\, t / 2^k`$ term.
 
 Conditioned on both $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and adversary-query freshness, all construction $`\pi`$-outputs
 are exactly uniform. This principle is the engine for the bare-bound analyses in Sections 6.7–6.9: once both conditions
@@ -504,13 +496,7 @@ The parameters are $`b = 1600`$, $`c = 256`$, $`k = c = 256`$. Each
 leaf is a single duplex evaluation ($`q = 1`$), so at the per-leaf level the FKD
 bound simplifies to $`\ell^2/2^b + \ell^2/2^c + \mu N/2^k`$, and
 $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$ captures the advantage for leaf $`i`$
-with $`l_i`$ duplexing calls. With $`q = 1`$, the FKD capacity term is
-$`\ell^2/2^c`$ while the FKS capacity term is $`2\ell/2^c`$ — FKD is a factor of
-$`\ell/2`$ looser. At $`\ell \approx 49`$ blocks per full chunk this is roughly
-25×, but both terms remain negligible at $`c = 256`$ ($`\approx 2^{-245}`$ vs.
-$`\approx 2^{-249}`$). The KDF sponge (Section 6.4) is a single-evaluation keyed
-sponge covered by MRV15 Theorem 1 (FKS), whose tighter $`q^2\ell`$ scaling is
-relevant in the multi-query KDF setting.
+with $`l_i`$ duplexing calls.
 
 **Term analysis.** The FKD bound has three terms:
 
@@ -521,11 +507,7 @@ relevant in the multi-query KDF setting.
    $`q^2\ell^2`$. For *leaves* with $`q = 1`$, this simplifies to
    $`\ell^2/2^{256}`$. With $`\ell \approx 49`$ blocks per full 8192-byte chunk
    ($`\lfloor 8192/168 \rfloor + 1`$), the per-leaf capacity term is
-   $`49^2 / 2^{256} \approx 2^{-244.8}`$, which is negligible. For the *KDF*
-   sponge (FKS, Theorem 1), the capacity term is instead $`2q^2\ell / 2^c`$,
-   which scales with $`q^2\ell`$ rather than $`q^2\ell^2`$ — an $`\ell`$-factor
-   improvement over the FKD form — and is the dominant online-online term in
-   the multi-query KDF setting.
+   $`49^2 / 2^{256} \approx 2^{-244.8}`$, which is negligible.
 
 3. **Online-vs-offline term** $`\frac{\mu N}{2^{256}}`$: dominant when the
    adversary's offline computation budget $`N`$ (denoted $`t`$ elsewhere in this
@@ -578,19 +560,12 @@ duplexing call. TW128's tags ($`\tau = 32`$ bytes) and chain values
 ($`C = 32`$ bytes) are single-block squeezes well within one rate block
 ($`R = 168`$ bytes). These outputs are directly covered by Theorem 2.
 
-> [!NOTE]
-> The BDPVA07 flat sponge claim gives a generic $`(\sigma + t)^2 / 2^{c+1}`$ bound for the unkeyed sponge setting.
-> MRV15 provides tighter bounds for the keyed setting that TW128 exclusively uses: the KDF benefits from FKS's
-> $`q^2\ell`$ capacity scaling (vs. $`q^2\ell^2`$), and per-leaf FKD terms reduce to $`\ell^2/2^c`$ with $`q = 1`$.
-> BDPVA07 remains valid as a fallback but is superseded here.
-
 ### 6.3 Domain Separation Lemma
 
 **Lemma (Domain separation).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ (Section 6.1), the construction's $`\pi`$-calls partition into disjoint sets by role, such that no two calls from different roles share a full 1600-bit input.
 
 | Set | Role | Domain byte | Distinguishing mechanism |
 |-----|------|-------------|--------------------------|
-| $`\mathcal{K}`$ | KDF | `0x09` | Padded, domain byte `0x09` |
 | $`\mathcal{I}`$ | Duplex init | `0x08` | Padded, domain byte `0x08` |
 | $`\mathcal{C}`$ | Chain value | `0x0B` | Padded, domain byte `0x0B` |
 | $`\mathcal{T}_s`$ | Single-node tag | `0x07` | Padded, domain byte `0x07` |
@@ -607,162 +582,120 @@ Three cases:
 
    - **(a) Same `pos`.** Both calls apply `pad_permute` at the same byte offset. The different domain bytes are XOR'd at the same rate position, so the rate content differs at that byte regardless of capacity.
 
-   - **(b) Different `pos`.** By capacity-chain separation, the calls have distinct input capacities unless both start from zero capacity. Chain value ($`\mathcal{C}`$), single-node tag ($`\mathcal{T}_s`$), and chaining-hop tag ($`\mathcal{T}_f`$) calls all inherit their capacity from prior $`\pi`$-outputs, so they never start from zero capacity. Only init ($`\mathcal{I}`$, `pos` = 40) and KDF ($`\mathcal{K}`$, `pos` = `len(X)`) calls start from zero capacity. For any init-vs-KDF pair, the init rate contains $`K_{tw} = \pi(S_{\mathrm{kdf}})[0{:}32]`$ at bytes 0–31, where $`S_{\mathrm{kdf}}`$ is the KDF's pre-permutation state. Since $`\pi`$ is a uniformly random permutation, $`\pi(S_{\mathrm{kdf}})`$ is uniformly distributed over 1600 bits for any fixed $`S_{\mathrm{kdf}}`$. The probability that bytes 0–31 of this output equal the corresponding 32 bytes of the KDF rate is at most $`2^{-c}`$ per pair; by union bound over all such pairs, the total collision probability is dominated by $`\varepsilon_{\mathrm{cap}}`$. No assumption about the KDF $`\pi`$-input's distinctness from the init $`\pi`$-input is required.
+   - **(b) Different `pos`.** By capacity-chain separation, the calls have distinct input capacities unless both start from zero capacity. Chain value ($`\mathcal{C}`$), single-node tag ($`\mathcal{T}_s`$), and chaining-hop tag ($`\mathcal{T}_f`$) calls all inherit their capacity from prior $`\pi`$-outputs, so they never start from zero capacity. Only init ($`\mathcal{I}`$) calls start from zero capacity (the base-state prefix absorption begins from a fresh state). Since all init calls use domain byte `0x08` and reach `pad_permute` at the same `pos` (after absorbing the prefix plus `LEU64(index)`), they fall under case (a) if their domain bytes match — distinct indices ensure distinct rate content at the same `pos`. The total collision probability is dominated by $`\varepsilon_{\mathrm{cap}}`$.
 
 2. **Padded vs. unpadded.** Every unpadded intermediate $`\pi`$-call (set $`\mathcal{U}`$) inherits its capacity from a prior $`\pi`$-output. Non-init padded calls (chain value finalization, tag squeeze) also inherit their capacity from prior $`\pi`$-outputs. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, these prior outputs have pairwise distinct capacities, so any unpadded call and any non-init padded call inherit from different outputs and have distinct input capacities. Init calls start from zero capacity and are distinct from any inherited capacity except with probability dominated by $`\varepsilon_{\mathrm{cap}}`$. In both sub-cases, the capacities differ, so the full 1600-bit $`\pi`$-inputs are distinct.
 
 3. **Within a set.** Calls within the same role are distinguished by one of two mechanisms:
 
-   - **Different keys or indices.** Different duplex instances have different rate content at init ($`\mathtt{key} \| \mathrm{LEU64}(i)`$ vs. $`\mathtt{key} \| \mathrm{LEU64}(j)`$), producing distinct capacity outputs that propagate through each instance's chain.
+   - **Different contexts or indices.** Different duplex instances have different absorption streams (distinct `encode_string` prefixes or distinct `LEU64(i)` vs. `LEU64(j)`), producing distinct rate content at init and therefore distinct capacity outputs that propagate through each instance's chain.
    - **Same instance, different position.** Each call inherits the previous call's capacity output, which is pairwise distinct under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$.
 
    Both mechanisms apply to unpadded intermediate blocks ($`\mathcal{U}`$): cross-instance separation comes from distinct init inputs; within-instance separation comes from the capacity chain.
 
-**Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Keccak delimited suffix (ePrint 2013/231) using the standard encoding: a variable-length suffix bit-string is stored LSB-first in the byte, with a delimiter `1` bit immediately after the last suffix bit. The inner-node bytes (`0x08`, `0x0B`, `0x09`) use 3-bit suffixes (delimiter at bit 3), while the final-node bytes (`0x07`, `0x06`) use 2-bit suffixes (delimiter at bit 2). All follow the Keccak delimited-suffix convention. The last suffix bit encodes the Sakura node type: `0` for inner/leaf, `1` for final.
+**Sakura suffix structure.** The domain bytes are not arbitrary constants. Each encodes a Keccak delimited suffix (ePrint 2013/231) using the standard encoding: a variable-length suffix bit-string is stored LSB-first in the byte, with a delimiter `1` bit immediately after the last suffix bit. The inner-node bytes (`0x08`, `0x0B`) use 3-bit suffixes (delimiter at bit 3), while the final-node bytes (`0x07`, `0x06`) use 2-bit suffixes (delimiter at bit 2). All follow the Keccak delimited-suffix convention. The last suffix bit encodes the Sakura node type: `0` for inner/leaf, `1` for final.
 
 | Domain byte | Binary | Suffix (LSB-first) | Last bit | Node type |
 |-------------|--------|-------------------|----------|-----------|
 | `0x08` | 0000 1**000** | `000` | 0 | inner (duplex init) |
 | `0x0B` | 0000 1**011** | `110` | 0 | inner (chain value) |
-| `0x09` | 0000 1**001** | `100` | 0 | inner (KDF) |
 | `0x07` | 0000 0**111** | `11` | 1 | final (tag, n=1) |
 | `0x06` | 0000 0**110** | `01` | 1 | final (tag, n>1) |
 
-Inner/final node separability follows directly from Sakura Lemma 4: the final-node bytes (`0x07`, `0x06`) have last suffix bit `1`, while all inner/leaf bytes (`0x08`, `0x0B`, `0x09`) have last suffix bit `0`. Three of the five domain bytes (`0x0B`, `0x07`, `0x06`) are reused directly from KangarooTwelve's Sakura encoding, providing established cross-protocol semantics.
+Inner/final node separability follows directly from Sakura Lemma 4: the final-node bytes (`0x07`, `0x06`) have last suffix bit `1`, while all inner/leaf bytes (`0x08`, `0x0B`) have last suffix bit `0`. Three of the four domain bytes (`0x0B`, `0x07`, `0x06`) are reused directly from KangarooTwelve's Sakura encoding, providing established cross-protocol semantics.
 
 **Design constraint.** Future modifications to domain byte assignments MUST preserve Sakura delimited-suffix encoding compliance and the node-type partition between inner and final roles.
 
-**Consequence.** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, each role's $`\pi`$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (KDF replacement in isolation), Sections 6.6–6.9 (independent leaf and tag analysis), and Section 6.10 (CMT-4 commitment analysis).
+**Consequence.** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, each role's $`\pi`$-calls are functionally independent of every other role's. This is the precondition for Section 6.4 (context independence), Sections 6.6–6.9 (independent leaf and tag analysis), and Section 6.10 (CMT-4 commitment analysis).
 
-### 6.4 Bridge Theorem: KDF to Random Key
+### 6.4 Context Independence
 
-This section executes the single game hop that replaces the TurboSHAKE128 KDF with a lazy random function, using the
-MRV15 framework (Section 6.2) and domain separation (Section 6.3).
+This section shows that distinct `(K, N, AD, index)` tuples produce independent pseudorandom node init states,
+using `encode_string` injectivity, the outer-keyed sponge result (ADMV15), and domain separation (Section 6.3).
 
-**Context encoding and derived-key map.** Each $`(K, N, AD)`$ triple defines a *context*. The context encoding is:
+**Context encoding.** Each $`(K, N, AD)`$ triple defines a *context*. The context encoding is:
 
 ```math
 X = \mathrm{encode\_string}(K)\,\|\,\mathrm{encode\_string}(N)\,\|\,\mathrm{encode\_string}(AD).
 ```
-The derived-key map is:
-
-```math
-F(X) = \mathrm{TurboSHAKE128}(X,\;\mathtt{0x09},\;C).
-```
 Distinct triples produce distinct $`X`$ values (by injectivity of `encode_string`), so $`q_{\mathrm{ctx}}`$
 (Section 6.1) equals the number of distinct triples queried.
-**Games.**
 
-```
-Game G0(A):                          Game G1(A):
-  K <-$ {0,1}^{8C}                     K <-$ {0,1}^{8C}
-  b <-$ {0,1}                          b <-$ {0,1}
-  b' <- A^{Enc,Dec}                    b' <- A^{Enc,Dec}
-  return b'                            return b'
+**Base-state construction.** The context prefix $`X`$ is absorbed into a fresh duplex state via standard XOR-absorb.
+Each tree node clones this base state, absorbs `LEU64(index)`, and calls `pad_permute(0x08)`. The full π-input
+for the init call of node $`(K, N, AD, i)`$ is therefore determined by the absorption of
+$`X \| \mathrm{LEU64}(i)`$ into a fresh state, followed by `0x08`-padding.
 
-Enc/Dec use:                         Enc/Dec use:
-  X <- ES(K)||ES(N)||ES(AD)           X <- ES(K)||ES(N)||ES(AD)
-  tw_key <- TS128(X, 0x09, C)         tw_key <- R(X)
-  [proceed with tw_key]               [proceed with tw_key]
-```
+**Argument.**
 
-Where $`\mathrm{ES} = \mathrm{encode\_string}`$, $`\mathrm{TS128} = \mathrm{TurboSHAKE128}`$, $`R`$ is a lazy random
-function $`\{0,1\}^* \to \{0,1\}^{8C}`$. The adversary's oracle access depends on the security goal (encryption oracle
-for IND-CPA, encryption + decryption oracles for IND-CCA2, encryption + forgery oracle for INT-CTXT). The game
-hop replaces only the KDF; all oracles and winning conditions are otherwise identical to the standard definitions.
-CMT-4 (Section 6.10) does not use this bridge; see that section for its standalone game definition.
+1. **`encode_string` injectivity.** Distinct `(K, N, AD)` triples produce distinct $`X`$ values.
+   Appending distinct `LEU64(i)` values within the same context, or using distinct contexts,
+   produces distinct absorption streams $`X \| \mathrm{LEU64}(i)`$. Therefore every
+   `(K, N, AD, i)` tuple yields a distinct pre-padding rate content.
 
-**Hop justification.**
+2. **Outer-keyed sponge (ADMV15).** The master key $`K`$ is secret and uniform, and appears in the rate
+   via `encode_string(K)`. By the outer-keyed sponge result (ADMV15, Theorems 5+6; see Section 6.2),
+   the init π-output is pseudorandom. The single-target advantage is bounded by the ADMV15 terms,
+   which are within a constant factor of $`\varepsilon_{\mathrm{cap}}`$ plus $`\mu\, t / 2^k`$.
 
-1. **Domain separation (Section 6.3).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the KDF's $`\pi`$-calls (set
-   $`\mathcal{K}`$, domain byte `0x09`) are on inputs disjoint from all other components' $`\pi`$-calls. The KDF sponge
-   evaluation is therefore functionally independent of the leaf ciphers and final-node duplex.
-
-2. **MRV15 keyed-sponge PRF (Section 6.2).** The KDF is a single-evaluation keyed sponge (absorb context, squeeze
-   once) with uniformly random master key $`K`$. By the outer-keyed sponge result (ADMV15; see Section 6.2), after the
-   init permutation the state is uniformly random. MRV15 Theorem 1 (FKS) applies: the KDF's output on distinct
-   context strings $`X`$ is indistinguishable from a PRF with advantage at most
-   $`\varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t)`$, where
-   $`q_{\mathrm{ctx}}`$ is the number of distinct contexts, $`\ell_{\mathrm{kdf}}`$ is the maximum number of input blocks
-   per KDF call, and $`\mu_{\mathrm{kdf}}`$ is the total KDF input blocks.
-
-3. **PRF-to-RF switching.** By the standard PRF-RF switching lemma, a PRF with $`q_{\mathrm{ctx}}`$ queries is
-   indistinguishable from a lazy random function with advantage at most
-   $`\varepsilon_{\mathrm{ctx\text{-}coll}} \le q_{\mathrm{ctx}}^2 / 2^{8C+1}`$
-   (the birthday probability among $`q_{\mathrm{ctx}}`$ values in a $`2^{8C}`$-size range).
+3. **Domain separation (Section 6.3).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, init π-calls (set
+   $`\mathcal{I}`$, domain byte `0x08`) are on inputs disjoint from all other roles' π-calls. The
+   init states are therefore functionally independent of all other construction components.
 
 **Bound:**
 
 ```math
-\left|\Pr[\mathsf{G}_0=1]-\Pr[\mathsf{G}_1=1]\right| \le \varepsilon_{\mathrm{cap}} + \varepsilon_{\mathrm{ks}}(q_{\mathrm{ctx}}, \ell_{\mathrm{kdf}}, \mu_{\mathrm{kdf}}, t) + \varepsilon_{\mathrm{ctx\text{-}coll}},
+\varepsilon_{\mathrm{ctx\text{-}ind}} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k},
 ```
-where $`\varepsilon_{\mathrm{cap}}`$ covers $`\mathsf{Bad}_{\mathrm{perm}}`$ (needed for domain separation),
-$`\varepsilon_{\mathrm{ks}}`$ is the MRV15 PRF bound for the KDF, and
-$`\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}`$ covers derived-key collisions.
+where $`\varepsilon_{\mathrm{cap}}`$ covers $`\mathsf{Bad}_{\mathrm{perm}}`$ (needed for domain separation and
+capacity-chain distinctness), and $`\mu\, t / 2^k`$ is the online-vs-offline term from the ADMV15 outer-keyed
+sponge bound. No context-collision term is needed: `encode_string` injectivity is exact (not probabilistic),
+and node-index distinctness is structural.
 
-> [!NOTE]
-> The bound includes three MRV15 terms. Two are subsumed by $`\varepsilon_{\mathrm{cap}}`$:
->
-> | MRV15 term | Status |
-> |---|---|
-> | Full-state birthday $`(q\ell)^2/2^b`$ | Negligible at $`b = 1600`$ |
-> | FKS capacity $`2q^2\ell/2^c`$ | Same order as the KDF's contribution to $`\varepsilon_{\mathrm{cap}}`$ |
-> | Online-vs-offline $`\mu_{\mathrm{kdf}}\, t / 2^k`$ | **Not subsumed**; captures key-recovery attacks outside the capacity birthday bound |
->
-> The non-redundant contribution from $`\varepsilon_{\mathrm{ks}}`$ is therefore the online-vs-offline term alone.
-
-Let $`\mathsf{CtxColl}`$ denote the event of a derived-key collision among distinct contexts. This context-collision term
-is per experiment/per key epoch.
-
-> [!NOTE]
-> The MRV15-based approach replaces the indifferentiability composition argument (MRH/CDMP) used in earlier versions of
-> this analysis. Because MRV15 is a direct PRF result in the ideal-permutation model, no composition theorem is needed,
-> and the Ristenpart-Shacham-Shrimpton (RSS11) multi-stage caveat does not arise.
-
-**Summary.** The fixed-key AEAD goals below (Sections 6.7–6.9) are analyzed in $`\mathsf{G}_1`$, conditioned on
-$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$. Section 6.5 defines the bare-game framework and the
-total-advantage decomposition used by those sections. CMT-4 (Section 6.10) is a multi-key notion with a standalone
-proof that does not use this bridge.
+**Summary.** The fixed-key AEAD goals below (Sections 6.7–6.9) are analyzed conditioned on
+$`\neg\mathsf{Bad}_{\mathrm{perm}}`$, with each node's init state treated as pseudorandom and independent.
+Section 6.5 defines the bare-game framework and the total-advantage decomposition used by those sections.
+CMT-4 (Section 6.10) is a multi-key notion with a standalone proof that does not use this argument.
 
 ### 6.5 Bare-Game Framework
 
-All analyses in Sections 6.6–6.9 work in $`\mathsf{G}_1`$ (Section 6.4) conditioned on
-$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$. The costs of these events
-($`\varepsilon_{\mathrm{cap}}`$ and $`\varepsilon_{\mathrm{ctx\text{-}coll}}`$) are charged once in the bridge theorem
-and do not recur. (CMT-4, Section 6.10, is a multi-key notion with a standalone bound.)
+All analyses in Sections 6.6–6.9 work conditioned on
+$`\neg\mathsf{Bad}_{\mathrm{perm}}`$. The cost of this event
+($`\varepsilon_{\mathrm{cap}}`$) is charged once via context independence (Section 6.4)
+and does not recur. (CMT-4, Section 6.10, is a multi-key notion with a standalone bound.)
 
-Define the **bare advantage** $`\mathrm{Adv}_{\Pi}^{\mathrm{bare}}`$ as the adversary's advantage against the internal
-functions under independent uniformly random per-context keys, conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and
+Define the **bare advantage** $`\mathrm{Adv}_{\Pi}^{\mathrm{bare}}`$ as the adversary's advantage against the
+construction under independent pseudorandom per-node init states, conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and
 adversary-query freshness (Section 6.1). Each AEAD property's total advantage decomposes as:
 
 ```math
-\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
+\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
 ```
-where $`\mu = \mu_{\mathrm{kdf}} + \mu_{\mathrm{duplex}}`$ is the total absorbed blocks across all keyed construction
-evaluations. The KDF contribution $`\mu_{\mathrm{kdf}}\, t / 2^k`$ is from the bridge theorem (Section 6.4); the duplex
-contribution $`\mu_{\mathrm{duplex}}\, t / 2^k`$ is the online-vs-offline freshness cost for leaf and final-node
-$`\pi`$-calls (Section 6.1). Under the exact uniformity principle, all bare-bound analyses reduce to structural collision
+where $`\mu`$ is the total absorbed blocks across all keyed construction
+evaluations (base-state prefix absorption plus leaf and final-node duplexing calls). The $`\mu\, t / 2^k`$ term combines
+the online-vs-offline cost from the outer-keyed sponge (Section 6.4) and per-node freshness (Section 6.1).
+Under the exact uniformity principle, all bare-bound analyses reduce to structural collision
 and forgery probabilities over truly uniform values.
 
 ### 6.6 Leaf Security Lemmas
 
-Assume a fixed, uniformly random, secret key $`K_{tw} \in \{0,1\}^{8C}`$.
+Assume a pseudorandom init state for each node, as established by context independence (Section 6.4).
 
 **Lemma 1 (Keyed-duplex pseudorandomness).**
-For any keyed duplex initialized with `K_tw || LEU64(i)` (where $`K_{tw}`$ is a uniformly random secret key and $`i`$ is a
-public index), in the ideal-permutation model, the PRF advantage distinguishing the rate outputs (keystream bytes and
+For any keyed duplex whose init state is pseudorandom (Section 6.4) and whose init π-input includes a distinct
+`LEU64(i)` index, in the ideal-permutation model, the PRF advantage distinguishing the rate outputs (keystream bytes and
 terminal squeeze bytes) from uniformly random is at most $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$, where $`l_i`$ is the
 number of duplexing calls for leaf $`i`$ and $`t`$ is the adversary offline Keccak-p budget (Section 6.1). This holds for both overwrite-mode
 absorption (used during encryption) and standard XOR-mode absorption (used during framing and chain-value absorption in the final node).
 
-*Proof.* Each leaf is a keyed duplex with uniformly random key $`K_{tw}`$ (from $`\mathsf{G}_1`$). By the Domain Separation
+*Proof.* Each leaf has a pseudorandom init state (from context independence, Section 6.4). By the Domain Separation
 Lemma (Section 6.3), under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the leaf's $`\pi`$-calls are disjoint from all other
 roles. Applying MRV15 Theorem 2 (FKD, Section 6.2) — including the outer-keyed initialization (ADMV15) and
 overwrite-mode coverage established there — the PRF advantage for leaf $`i`$ is at most
 $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$, where $`l_i`$ is the number of duplexing calls for leaf $`i`$.
 
 **Lemma 2 (State-direction equivalence).**
-For fixed $`(K_{tw}, i)`$ and any plaintext-ciphertext pair of equal length, `encrypt` and `decrypt` induce identical
+For a fixed init state (determined by context and index $`i`$) and any plaintext-ciphertext pair of equal length, `encrypt` and `decrypt` induce identical
 internal states because both write ciphertext bytes into the rate. This is structural (no probabilistic component): the overwrite rule `S[pos] = ct[j]` is executed
 identically in both directions. In `encrypt`, the ciphertext byte is computed as `pt[j] XOR S[pos]` and then written
 back via the overwrite; in `decrypt`, the ciphertext byte is already available and written directly. Either way, the
@@ -771,12 +704,12 @@ identically: both directions increment `pos` by 1 per byte and permute when `pos
 boundaries are the same. Subsequent permutation inputs -- and therefore the tag -- are identical.
 
 **Lemma 3 (Fixed-key bijection).**
-For fixed $`(K_{tw}, i)`$ and message length, the encrypt function is a deterministic, invertible map on the message
+For a fixed init state and message length, the encrypt function is a deterministic, invertible map on the message
 space. Each ciphertext byte $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ uniquely determines
 $`\mathit{pt}[j]`$ given the state, and the state evolution (overwriting $`S[\mathit{pos}]`$ with $`\mathit{ct}[j]`$) is
 identical in both directions (Lemma 2). Therefore encryption is a bijection between equal-length plaintexts and
 ciphertexts. Invertibility is witnessed by the decrypt function, which reverses each byte-level XOR step given
-the same state evolution (Lemma 2). Because each chunk is processed by an independent leaf with its own $`(K_{tw}, i)`$,
+the same state evolution (Lemma 2). Because each chunk is processed by an independent leaf with its own init state (determined by context and index $`i`$),
 and each leaf's encrypt is individually a bijection, the full $`n`$-leaf encrypt function (which concatenates the
 per-leaf outputs) is also a bijection between equal-length plaintexts and ciphertexts for a fixed key and chunking.
 Chunking is determined solely by total message length (ceiling division by $`B`$), so equal-length messages always have
@@ -785,13 +718,13 @@ identical chunking.
 This bijection is used in Section 6.10 (CMT-4) to rule out two different plaintexts opening the same ciphertext under
 one key.
 
-**Final-node tag (n = 1).** For single-chunk messages, the final node is a single duplex that inits with
-$`(K_{tw}, 0)`$ via `pad_permute(0x08)`, encrypts the entire message (overwrite mode, covered by Lemma 2), and squeezes
+**Final-node tag (n = 1).** For single-chunk messages, the final node is a single duplex that clones the base state,
+absorbs `LEU64(0)`, and calls `pad_permute(0x08)`, then encrypts the entire message (overwrite mode, covered by Lemma 2), and squeezes
 the tag via `pad_permute(0x07)`. This is one continuous FKD evaluation.
 
 **Final-node tag (n > 1).** For multi-chunk messages, the final node is a single duplex that:
 
-1. Inits with $`(K_{tw}, 0)`$ via `pad_permute(0x08)`.
+1. Clones the base state, absorbs `LEU64(0)`, and calls `pad_permute(0x08)`.
 2. Encrypts chunk 0 (overwrite mode, covered by Lemma 2).
 3. XOR-absorbs HOP_FRAME and chain values.
 4. Applies `pad_permute(0x06)` and squeezes the tag.
@@ -801,7 +734,7 @@ standard XOR-absorb covers framing and chain-value absorption.
 
 **Tag pseudorandomness (both cases).** MRV15 Theorem 2 (FKD) applies to the entire final-node sequence, with
 outer-keyed initialization covered by ADMV15 (Section 6.2). By domain separation (Section 6.3, sets
-$`\mathcal{T}_s`$ and $`\mathcal{T}_f`$), the tag-squeeze $`\pi`$-call is disjoint from all leaf and KDF calls.
+$`\mathcal{T}_s`$ and $`\mathcal{T}_f`$), the tag-squeeze $`\pi`$-call is disjoint from all other construction calls.
 The tag is therefore pseudorandom with advantage at most $`\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)`$, where
 $`\ell_f`$ is the total duplexing calls in the final node.
 
@@ -822,26 +755,26 @@ Oracle Enc_b(N, AD, M0, M1):
   return TW128.Encrypt(K, N, AD, M_b)
 ```
 
-By the bridge theorem (Section 6.4), it suffices to bound
-$`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}}`$ -- the IND-CPA advantage of the internal functions under
-independent uniformly random per-context keys.
+By context independence (Section 6.4), it suffices to bound
+$`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}}`$ -- the IND-CPA advantage of the construction under
+independent pseudorandom per-node init states.
 
-**Claim.** Within $`\mathsf{G}_1`$ conditioned on
-$`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$:
+**Claim.** Conditioned on
+$`\neg\mathsf{Bad}_{\mathrm{perm}}`$:
 $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
 
-*Justification.* In $`\mathsf{G}_1`$ conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$:
+*Justification.* Conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$:
 
 - Each encryption query uses a fresh nonce (nonce-respecting), so each context is distinct (Section 6.4).
-- Distinct contexts map to independent uniformly random keys in $`\mathsf{G}_1`$.
-- Under a truly random key $`K_{tw}`$ (from the lazy RF in $`\mathsf{G}_1`$) and the ideal permutation conditioned on
+- Distinct contexts produce independent pseudorandom init states (Section 6.4).
+- Under a pseudorandom init state and the ideal permutation conditioned on
   $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the ciphertext distribution is independent of the adversary's plaintext choice.
   The argument proceeds by induction over rate blocks. The overwrite rule ensures plaintext-independence propagates
   across blocks: because ciphertext bytes (not plaintext bytes) are written into the state, the duplex state after
   each block depends only on the ciphertext and the inherited capacity.
 
-  - *Block 0:* The `init` step absorbs the truly random key $`K_{tw}`$ and applies $`\pi`$ via `pad_permute`.
-    The secret uniform key ensures no other call shares this rate content, and domain separation ensures no
+  - *Block 0:* The `init` step clones the base state, absorbs `LEU64(index)`, and applies $`\pi`$ via `pad_permute`.
+    The secret context prefix ensures no other call shares this rate content, and domain separation ensures no
     cross-role collision, so the $`\pi`$-input is novel and the resulting state is truly uniform by the exact
     uniformity principle of Section 6.1. Each ciphertext byte
     $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is uniform because XOR with a uniform value is uniform.
@@ -858,7 +791,7 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
     bytes followed by `pad_permute`), the $`k`$ ciphertext bytes are uniform by the same argument, and the
     `pad_permute` $`\pi`$-call is on a fresh input (distinct capacity), so the squeeze output is also uniform.
 
-  - *Multi-chunk ($`n > 1`$):* Distinct leaf indices (same $`K_{tw}`$, different `LEU64(i)`) produce distinct init
+  - *Multi-chunk ($`n > 1`$):* Distinct leaf indices (same base state, different `LEU64(i)`) produce distinct init
     $`\pi`$-inputs. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the resulting capacity chains remain disjoint, so
     each leaf's $`\pi`$-calls are independent of every other leaf's. Applying the single-duplex induction to each
     leaf, every leaf's ciphertext chunk is independently uniform. The chain values squeezed from leaves
@@ -889,8 +822,8 @@ Oracle Forge(N, AD, C):
 
 **Claim.** $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.`$
 
-*Justification.* In $`\mathsf{G}_1`$ conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}} \wedge \neg\mathsf{CtxColl}`$, each
-forgery attempt targets a context with a uniformly random key. By the exact uniformity principle (Section 6.1), the tag-squeeze $`\pi`$-call has a fresh input
+*Justification.* Conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, each
+forgery attempt targets a context with a pseudorandom init state (Section 6.4). By the exact uniformity principle (Section 6.1), the tag-squeeze $`\pi`$-call has a fresh input
 (distinct capacity state under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$), so the tag is a truly uniform $`\tau`$-byte value. Each forgery attempt — i.e., a (ciphertext, tag) pair not previously output by the
 encryption oracle (standard INT-CTXT definition) — must guess the correct $`\tau`$-byte tag value, succeeding with
 probability at most $`2^{-8\tau}`$.
@@ -933,7 +866,7 @@ For different-length forgeries, the mechanism depends on where the length differ
 In all sub-cases, the tag-squeeze $`\pi`$-input is distinct from any legitimate computation's, so the tag is uniform.
 
 If the forgery targets a different context
-$`(N', AD')`$, the derived key differs, producing a different init $`\pi`$-input and hence an independent state chain
+$`(N', AD')`$, the init state differs (Section 6.4), producing a different init $`\pi`$-input and hence an independent state chain
 (no capacity collision under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$). Across $`S`$ attempts (union bound):
 
 ```math
@@ -941,7 +874,7 @@ $`(N', AD')`$, the derived key differs, producing a different init $`\pi`$-input
 ```
 The total bound follows from the decomposition in Section 6.5.
 
-If tags are truncated to $`T<\tau`$ bytes, replace $`S/2^{8\tau}`$ with $`S/2^{8T}`$. Truncation below $`\tau/2 = 16`$ bytes reduces the INT-CTXT bound below the 128-bit security target at the Section 7.4 baseline forgery budget.
+If tags are truncated to $`T<\tau`$ bytes, replace $`S/2^{8\tau}`$ with $`S/2^{8T}`$. Truncation below $`\tau/2 = 16`$ bytes reduces the INT-CTXT bound below the 128-bit security target at the Section 7.3 baseline forgery budget.
 
 ### 6.9 IND-CCA2 (Nonce-Respecting)
 
@@ -987,7 +920,7 @@ IND-CCA2 formulations.
 This theorem follows the Bellare–Hoang CMT-4 committing-security notion [BH22, §3]: a ciphertext should not admit
 two distinct valid openings under any choice of keys. Unlike the fixed-key properties in Sections 6.7–6.9, this is a
 multi-key notion — the adversary controls all inputs including the master keys — and the proof does not flow through
-the bridge theorem (Section 6.4).
+context independence (Section 6.4).
 
 ```
 Game CMT-4(A):
@@ -999,22 +932,22 @@ Game CMT-4(A):
 ```
 
 The adversary has direct access to the ideal permutation $`\pi`$ and its inverse (no encryption oracle is needed since the
-scheme is deterministic and the adversary knows the keys). Define $`L = \mathrm{KDF}(K, N, AD)`$ and
-$`L' = \mathrm{KDF}(K', N', AD')`$.
+scheme is deterministic and the adversary knows the keys). Define $`L`$ and $`L'`$ as the base states after absorbing the
+`encode_string` prefix for each context.
 
 - **Case 1: same context, different message.** $`(K,N,AD)=(K',N',AD')`$, so $`M \neq M'`$ (since
-  full tuples are distinct). Both openings use the same derived key $`L = L'`$ and the same chunking
+  full tuples are distinct). Both openings use the same base state and the same chunking
   (equal-length messages). By Lemma 3 (fixed-key bijection, Section 6.6), the encrypt function is a
-  bijection on equal-length messages for a fixed key. Two different messages cannot produce the same
+  bijection on equal-length messages for a fixed init state. Two different messages cannot produce the same
   ciphertext. This case is **impossible**.
-- **Case 2: different context, KDF collision.** $`(K,N,AD)\neq(K',N',AD')`$ but $`L = L'`$. The
+- **Case 2: different context, base-state collision.** $`(K,N,AD)\neq(K',N',AD')`$ but $`L = L'`$. The
   $`\mathrm{encode\_string}`$ encoding is injective and self-delimiting, so distinct $`(K,N,AD)`$ triples produce
-  distinct KDF input strings. A collision $`L = L'`$ on distinct inputs is a collision in TurboSHAKE128.
+  distinct absorption streams. A collision $`L = L'`$ on distinct inputs is a state collision in the sponge.
   In the ideal-permutation model, sponge collision resistance gives
   $`\Pr[\text{Case 2}] \leq (t + \sigma_v)^2 / 2^{c+1}`$,
   where $`t`$ is the adversary's offline $`\pi`$-query budget and $`\sigma_v`$ is the $`\pi`$-calls for the two
   verification encryptions in the game.
-- **Case 3: different context, different derived keys.** $`L \neq L'`$. Both encryptions must produce the
+- **Case 3: different context, different base states.** $`L \neq L'`$. Both encryptions must produce the
   same $`C^\star = \mathit{ct}^\star \| T^\star`$. Fix the first opening $`(L, M)`$ and its full evaluation
   under $`\pi`$, which determines $`C^\star`$ and in particular the tag $`T^\star`$. For each candidate
   $`L' \neq L`$, the second opening's init $`\pi`$-input differs in the rate ($`L \neq L'`$ at the same
@@ -1040,17 +973,17 @@ Tag truncation degrades the second term to $`(t + \sigma_v)/2^{8T}`$; for $`T < 
 
 ### 6.11 Summary of Bounds
 
-Each property's total advantage combines the bridge-hop cost (Section 6.4) with the bare advantage
+Each property's total advantage combines the context-independence cost (Section 6.4) with the bare advantage
 (Sections 6.7–6.9):
 
 ```math
-\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
+\mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
 ```
 | Property | $`\mathrm{Adv}^{\mathrm{bare}}`$ | Total |
 |----------|-------------------------------|-------|
-| IND-CPA  | $`0`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}}`$ |
-| INT-CTXT | $`S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + S / 2^{8\tau}`$ |
-| IND-CCA2 | $`2S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + \varepsilon_{\mathrm{ctx\text{-}coll}} + 2S / 2^{8\tau}`$ |
+| IND-CPA  | $`0`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k`$ |
+| INT-CTXT | $`S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + S / 2^{8\tau}`$ |
+| IND-CCA2 | $`2S / 2^{8\tau}`$ | $`\varepsilon_{\mathrm{cap}} + \mu\, t / 2^k + 2S / 2^{8\tau}`$ |
 
 CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the bridge decomposition:
 
@@ -1060,37 +993,20 @@ CMT-4 (Section 6.10) has a standalone multi-key bound that does not use the brid
 Where:
 
 - $`\varepsilon_{\mathrm{cap}} = (\sigma + t)^2 / 2^{c+1}`$ is the capacity birthday bound.
-- $`\mu\, t / 2^k`$ is the combined online-vs-offline term: $`\mu_{\mathrm{kdf}}\, t / 2^k`$ from the KDF (Section 6.4) plus $`\mu_{\mathrm{duplex}}\, t / 2^k`$ from leaf and final-node freshness (Section 6.1).
-- $`\varepsilon_{\mathrm{ctx\text{-}coll}} = q_{\mathrm{ctx}}^2 / 2^{8C+1}`$ is the PRF-RF switching cost.
+- $`\mu\, t / 2^k`$ is the online-vs-offline term covering base-state prefix absorption and per-node duplexing calls (Sections 6.1 and 6.4).
 
 MRV15 capacity terms are within a constant factor of $`\varepsilon_{\mathrm{cap}}`$: the per-leaf FKD capacity terms sum to $`\sum \ell_i^2 / 2^c \leq (\sum \ell_i)^2 / 2^c`$; since each $`\ell_i`$ counts duplexing calls that are a subset of the total online $`\pi`$-calls $`\sigma`$, we have $`\sum \ell_i \leq \sigma \leq \sigma + t`$, giving $`(\sum \ell_i)^2 / 2^c \leq 2\varepsilon_{\mathrm{cap}}`$.
 Parameters are defined in Section 6.1.
 
 ## 7. Operational Security
 
-### 7.1 Bare Usage (EncryptAndMAC / DecryptAndMAC)
+### 7.1 Chunk Reordering, Length Changes, and Empty Input
 
-The internal `EncryptAndMAC`/`DecryptAndMAC` functions (Section 5.1) may be used directly by callers that manage
-per-invocation key uniqueness and tag verification externally. This is an advanced interface.
-
-> [!WARNING]
-> Bare usage bypasses the TW128 key derivation and tag verification. The following caller obligations are
-> **mandatory** for security; failure to enforce any of them voids the security properties of Section 6.
-
-| Property target              | Caller obligation                                                                             |
-|------------------------------|-----------------------------------------------------------------------------------------------|
-| IND-CPA-like confidentiality | Ensure keys are unique and computationally indistinguishable from uniform per invocation. Keys derived from low-entropy sources or non-injective mappings degrade the IND-CPA bound by the key's min-entropy deficit: the bridge theorem (Section 6.4) assumes each per-invocation key is an independent draw from a uniform distribution. |
-| INT-CTXT-like authenticity   | Compare tags in constant time; reject plaintext on mismatch.                                  |
-| IND-CCA2-like behavior       | Do not release/act on plaintext before successful tag verification.                           |
-| CMT-4                        | Derive `EncryptAndMAC` keys via a collision-resistant mapping from caller-level inputs. The CMT-4 bound for the caller's scheme is $`\varepsilon_{\mathrm{cr}}(\text{KDF}) + (t + \sigma_v)/2^{8\tau}`$; see Section 6.10 Cases 2–3. |
-
-### 7.2 Chunk Reordering, Length Changes, and Empty Input
-
-- Reordering chunks changes leaf-index binding (`key || LEU64(index)`), so recomputed tag changes.
+- Reordering chunks changes leaf-index binding (base-state clone + `LEU64(index)`), so recomputed tag changes.
 - Truncation/extension changes chunk count $`n`$, changing `length_encode(n-1)` in the chaining-hop suffix.
 - Empty plaintext uses $`n=1`$: the final node encrypts the empty message and produces the tag via `pad_permute(0x07)`.
 
-### 7.3 Side Channels
+### 7.2 Side Channels
 
 Implementations MUST be constant-time with respect to secret-dependent control flow and memory access.
 
@@ -1098,7 +1014,7 @@ Implementations MUST be constant-time with respect to secret-dependent control f
 - Tag verification MUST use constant-time equality.
 - Partial-block logic may branch on public length, not on secret data.
 
-### 7.4 Operational Usage Limits (Normative)
+### 7.3 Operational Usage Limits (Normative)
 
 To claim the 128-bit security target in this specification, deployments MUST enforce per-master-key usage limits (a key
 epoch) and rotate to a fresh master key before exceeding them.
@@ -1140,11 +1056,11 @@ parameter $`t`$ treated as an analysis parameter (not an operationally measurabl
 **Multi-user security.** For deployments spanning $`U`$ independent master keys, the
 $`\mathsf{Bad}_{\mathrm{perm}}`$ event is global (a capacity collision among *any* pair of the system-wide
 $`\sigma + t`$ evaluations), so $`\varepsilon_{\mathrm{cap}}`$ is charged once with $`\sigma = \sum_u \sigma_u`$.
-The remaining per-key terms (online-vs-offline key recovery, context collisions, and bare advantages)
+The remaining per-key terms (online-vs-offline key recovery and bare advantages)
 are independent across keys and summed via union bound. The total multi-user advantage is:
 
 ```math
-\mathrm{Adv}_{\mathrm{multi}} \le \varepsilon_{\mathrm{cap}}(\sigma_{\mathrm{global}}, t) + U \cdot \left(\frac{\mu\, t}{2^k} + \varepsilon_{\mathrm{ctx\text{-}coll}} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\right).
+\mathrm{Adv}_{\mathrm{multi}} \le \varepsilon_{\mathrm{cap}}(\sigma_{\mathrm{global}}, t) + U \cdot \left(\frac{\mu\, t}{2^k} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}\right).
 ```
 Non-normative sensitivity profiles for reviewers:
 
@@ -1159,7 +1075,7 @@ requirements, or interoperability.
 
 Appendix C remains non-normative operational guidance for instrumentation and budgeting workflows.
 
-### 7.5 Implementation Design Callouts (Non-Normative)
+### 7.4 Implementation Design Callouts (Non-Normative)
 
 TW128's tree topology exists to exploit data-level parallelism: independent leaf chunks can be encrypted or
 decrypted simultaneously using SIMD permutation kernels. A scalar implementation that processes leaves one at a time
@@ -1176,8 +1092,8 @@ techniques that make this possible, progressing from data layout through schedul
   message hop). Single-chunk messages never enter the tree machinery.
 - **Share one scheduling pipeline for encrypt and decrypt.** Both directions use the same chunk batching, index
   binding, and chain-value accumulation logic; only the XOR direction differs.
-- **Keep domain bytes and index mapping exact.** The constants `0x08`, `0x0B`, `0x09`, `0x07`, `0x06` and the
-  `key ‖ LEU64(index)` binding (index 0 for the final node, 1 through $`n-1`$ for leaves) are structural for
+- **Keep domain bytes and index mapping exact.** The constants `0x08`, `0x0B`, `0x07`, `0x06` and the
+  base-state cloning pattern (clone the shared prefix state, absorb `LEU64(index)`, `pad_permute(0x08)` — index 0 for the final node, 1 through $`n-1`$ for leaves) are structural for
   interoperability and security analysis.
 - **No misuse resistance (MRAE).** TW128 is not SIV-style: nonce reuse leaks plaintext XOR (Section 6.7).
   Applications requiring nonce-misuse resistance should use a dedicated MRAE construction.
@@ -1238,8 +1154,9 @@ as they dominate latency-sensitive workloads.
 
 TW128 differs from traditional AEAD in several respects.
 
-**Nonce-free internal primitive.** The internal encrypt-and-MAC functions take only a key and data. Nonces are consumed
-by the TurboSHAKE128-based KDF to derive a unique internal key, not passed to the encrypt/MAC layer itself.
+**Integrated context absorption.** The master key, nonce, and AD are absorbed directly into the duplex base state
+via `encode_string` encoding. There is no separate KDF or nonce-processing layer; the context is part of the
+duplex initialization.
 
 **Tag is a PRF output, not just a MAC.** Traditional AEAD tags are MACs -- they prove authenticity but are not
 necessarily pseudorandom. TW128's tag is a full PRF: under a random key, the tag is indistinguishable from a random
@@ -1248,12 +1165,11 @@ string (Section 6.6). This stronger property is useful for protocols that derive
 ### 8.1 Operational Safety Limits
 
 Operational planning assumptions used in this section: $`p = 2^{-50}`$, 1500-byte messages, TW128 cost
-$`\approx 11`$ Keccak-p calls/message (1 KDF + 10 leaf calls), $`\ell \approx 49`$ max input blocks per keyed-duplex
+$`\approx 10`$ Keccak-p calls/message (10 duplex calls), $`\ell \approx 49`$ max input blocks per keyed-duplex
 evaluation, and per-key accounting (single key / key epoch). Figures are conditional on the Section 6 model assumptions
 for Keccak-p[1600,12] and the selected offline-work profile.
 
-Under the MRV15 keyed-sponge PRF framework (Section 6.2), the dominant online-online term across the construction is
-the KDF's FKS capacity term $`2q^2\ell / 2^c`$ (Theorem 1). Per-leaf FKD capacity terms (Theorem 2) are negligible since
+Under the MRV15 keyed-sponge PRF framework (Section 6.2), per-leaf FKD capacity terms (Theorem 2) are negligible since
 each leaf has $`q = 1`$. For a conservative estimate, set $`q`$ to the number of TW128 encryptions and $`\ell = 49`$
 (worst-case blocks absorbed per message, which overstates the per-evaluation input length and is therefore safe). With $`c = 256`$ and target
 $`p = 2^{-50}`$: $`q^2 \le 2^{256-50} / (2 \cdot 49) \approx 2^{199}`$, so $`q \lesssim 2^{99.5}`$ messages. At 1500
@@ -1285,7 +1201,7 @@ Example planning table (collision target $`p = 2^{-50}`$, record size = 1500 byt
 For a different record size, scale the nonce-collision-limited rows linearly with bytes/record and then apply the same
 minimum rule against the proof-bound volume.
 
-Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (Section 7.4), not by the asymptotic
+Configured usage limits SHOULD be driven by nonce policy and key-epoch rotation controls (Section 7.3), not by the asymptotic
 proof-bound figure alone.
 
 ## 9. References
@@ -1310,7 +1226,8 @@ proof-bound figure alone.
   "KangarooTwelve: fast hashing based on Keccak-p." IACR ePrint 2016/770. Security and design context for the
   Sakura-based tree structure.
 - **[BDPVAVK23]** Bertoni, G., Daemen, J., Hoffert, S., Peeters, M., Van Assche, G., Van Keer, R., and Viguier, B.
-  "TurboSHAKE." IACR ePrint 2023/342. Primary specification and design rationale for TurboSHAKE.
+  "TurboSHAKE." IACR ePrint 2023/342. Primary specification and design rationale for TurboSHAKE. Referenced in
+  Appendix C for system-wide Keccak budgeting; not a TW128 dependency.
 - **[BH22]** Bellare, M. and Hoang, V. T. "Efficient schemes for committing authenticated encryption." EUROCRYPT 2022.
   Defines the CMT-4 committing security notion (§3, E-notion with $`\ell = 4`$). Section 6.10 uses this game directly.
 - **[BN00]** Bellare, M. and Namprempre, C. "Authenticated Encryption: Relations among Notions and Analysis of the
@@ -1329,8 +1246,8 @@ proof-bound figure alone.
 - **[MRV15]** Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex:
   Applications to Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Primary security framework for
   TW128. Proves beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state
-  keyed duplex (Theorem 2, FKD) in the ideal-permutation model. Theorem 2 (FKD) is used for leaf ciphers; Theorem 1
-  (FKS) is used for the KDF sponge. Used throughout Section 6.
+  keyed duplex (Theorem 2, FKD) in the ideal-permutation model. Theorem 2 (FKD) is used for leaf ciphers.
+  Used throughout Section 6.
 - **[RFC 9861]** KangarooTwelve and TurboSHAKE.
 - **[RSS11]** Ristenpart, T., Shacham, H., and Shrimpton, T. "Careful with Composition: Limitations of the
   Indifferentiability Framework." Eurocrypt 2011 (ePrint 2011/339 as "Careful with Composition: Limitations of
@@ -1346,84 +1263,13 @@ proof-bound figure alone.
 
 All test vectors in this section are for TW128.
 
-<!-- begin:vectors:docs/tw128-test-vectors.json:bare -->
-### 10.1 Internal Function Vectors
-
-All internal function vectors use:
-
-- **Key:** 32 bytes `00 01 02 ... 1f`
-- **Plaintext:** `len` bytes `00 01 02 ... (len-1) mod 256`
-
-Ciphertext prefix shows the first `min(32, len)` bytes. Tags are full 32 bytes. All values are hexadecimal.
-
-#### 10.1.1 Empty Plaintext (MAC-only, n = 1)
-
-| Field | Value |
-|-------|-------|
-| len | 0 |
-| ct | (empty) |
-| tag | `4a06dd2e8c2280eb2a4cb54ff4bbcd16e26809d6e1d10ae9b03ddd81dba1f70c` |
-
-#### 10.1.2 One-Byte Plaintext (n = 1)
-
-| Field | Value |
-|-------|-------|
-| len | 1 |
-| ct | `b9` |
-| tag | `636744e19511873009bbee34794c6d013b71834fc3ed46e0c758c8bc1655164d` |
-
-Flipping bit 0 of the ciphertext (`f0`) yields tag
-`3ec75c7e58e68df6fa8b50e538fd365e8fde86ee533b569dbec6fa259d3f8546`.
-
-#### 10.1.3 B-Byte Plaintext (exactly one chunk, n = 1)
-
-| Field | Value |
-|-------|-------|
-| len | 8192 |
-| ct[:32] | `b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707` |
-| tag | `fc2ea76078fe107a4c0a29a1bcb7670ba59ff8477a93388c12405c0f45e6ee23` |
-
-Flipping bit 0 of `ct[0]` yields tag
-`4a781a4ec6ada1db7bea9e4968f5634073e18df476f52d0c62ee9e0aa816d142`.
-
-#### 10.1.4 B+1-Byte Plaintext (two chunks, minimal second, n = 2)
-
-| Field | Value |
-|-------|-------|
-| len | 8193 |
-| ct[:32] | `b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707` |
-| tag | `0e14c22b6f47418cde0bf107f875f9e19fe73c533d6871c5f89fb9fda1dfa852` |
-
-Flipping bit 0 of `ct[0]` yields tag
-`b0702f781638349e5cc1fd81b60b1b2ae813b8bfba7ddfddbe330659d3ae1c96`.
-
-#### 10.1.5 4B-Byte Plaintext (four full chunks, n = 4)
-
-| Field | Value |
-|-------|-------|
-| len | 32768 |
-| ct[:32] | `b94305614cdb24d7f83c521bf1b137e5c018aa198896607f526299d7d35c1707` |
-| tag | `b1034d073f7106ec836388823827a050bbbe2cfbccb29a79d704b4d37a0fbc75` |
-
-Flipping bit 0 of `ct[0]` yields tag
-`684dbca2392dc17928b19943a368d630075d56fb754c15457d85d413abbca22a`.
-
-Swapping chunks 1 and 2 (bytes 0–8,191 and 8,192–16,383) yields tag
-`39032e2280f25c78fe72143f9c94bc5f8694834b8d8528aae0e07d035a8aba7c`.
-
-#### 10.1.6 Round-Trip Consistency
-
-For all internal function vectors above, `DecryptAndMAC(key, ct)` returns the original plaintext and the same tag as
-`EncryptAndMAC`.
-<!-- end:vectors:docs/tw128-test-vectors.json:bare -->
-
 <!-- begin:vectors:docs/tw128-test-vectors.json:aead -->
-### 10.2 TW128 Vectors
+### 10.1 TW128 Vectors
 
 These vectors validate `tw128_encrypt` / `tw128_decrypt` (the TW128 instantiation),
-including SP 800-185 `encode_string` key derivation.
+including SP 800-185 `encode_string` context encoding.
 
-#### 10.2.1 Empty Message
+#### 10.1.1 Empty Message
 
 | Field | Value |
 |-------|-------|
@@ -1431,12 +1277,12 @@ including SP 800-185 `encode_string` key derivation.
 | N | 12 bytes `00 01 02 ... 0b` |
 | AD | (empty) |
 | M len | 0 |
-| ct‖tag | `1b581c73ae9475f3fe9a3695cbcb97d5fa6bf4fe50d5077c05307ee93333f585` |
+| ct‖tag | `3b662f3b0a8bf7b6e12ea98994d962640912a92e2ec3352f975b5ddbe2585ea9` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 10.2.2 33-Byte Message With 5-Byte AD
+#### 10.1.2 33-Byte Message With 5-Byte AD
 
 | Field | Value |
 |-------|-------|
@@ -1444,12 +1290,12 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `a0 a1 a2 ... ab` |
 | AD | 10 11 12 ... 14 |
 | M len | 33 (`00 01 02 ... mod 256`) |
-| ct‖tag | `ad06981fb8996d3a370fdff698dde70799641537c999562e9da3cc315998790f90079f24283c57e81120e7d5c3cc5c122b32c96b41769a24c1b4bffbff76f7b92d` |
+| ct‖tag | `2c7f7e2fb779fbf32ee81092375c0066941447c8422cdf2e08cf8f4468fd5c1e0fc8c3ab1ba8815222909e95724a5b51e7cc7a78032f11d674ed57e1dbf6e2224d` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 10.2.3 Multi-Chunk Message (8193 Bytes)
+#### 10.1.3 Multi-Chunk Message (8193 Bytes)
 
 | Field | Value |
 |-------|-------|
@@ -1457,13 +1303,13 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `c0 c1 c2 ... cb` |
 | AD | 00 01 02 ... 10 |
 | M len | 8193 (`00 01 02 ... mod 256`) |
-| ct[:32] | `c865e59fbaee05479be69b2e5d321fb917c03358e7ea3ab4f5a83157ebfc0ace` |
-| tag | `be9035c011815da2706dc38f548a019165ebec1987c574913e4e4f18255c7b7f` |
+| ct[:32] | `6ca83b65fe7b65c024d5a1401dd204ead42c857b9b677bd7ae017882c7324f8a` |
+| tag | `f1e5165ef20a9f8900cbeda6d1accf0cfd0a14cbdc25e872f35ee8d6a94cd3a6` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 10.2.4 Nonce Reuse Behavior (Equal-Length Messages)
+#### 10.1.4 Nonce Reuse Behavior (Equal-Length Messages)
 
 | Field | Value |
 |-------|-------|
@@ -1471,7 +1317,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `ff ee dd cc bb aa 99 88 77 66 55 44` |
 | AD | a1 a2 a3 ... a4 |
 | M len | 64 (`00 01 02 ... mod 256`) |
-| ct‖tag | `5105314ef74b22ad003d53ee853ad28d8eeaf3cc0e20244911d96597cf4bb37ca74cffa7ea574705198f81c0e80c3766aea6e0ef2ba1dfc92009606ac220af91b5e9fdad578dd16ab44e58fd5e8f7e58ea586dbd7a7382fe09d715e7c22eb14e` |
+| ct‖tag | `c19a715ad243929a38b3f51b10de301df567433d96345510dddb7efd8b236b02942868d594c5ca42cc13607013cf7317c4f0072ad46b96992b9c73549cb61051b37473c3f60887fe099f6c876694cca7f7674b0a18e7545eb8a2d2471ca6971e` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1480,7 +1326,7 @@ Reusing the same `(K, N, AD)` with a different message is deterministic and yiel
 keystream divergence at subsequent block boundaries (validated by this vector).
 Nonce reuse is out of scope for Section 6 nonce-respecting claims.
 
-#### 10.2.5 Swapped Nonce and AD Domains
+#### 10.1.5 Swapped Nonce and AD Domains
 
 | Field | Value |
 |-------|-------|
@@ -1488,14 +1334,14 @@ Nonce reuse is out of scope for Section 6 nonce-respecting claims.
 | N | 12 bytes `00 01 02 ... 0b` |
 | AD | 10 11 12 ... 1b |
 | M len | 48 (`00 01 02 ... mod 256`) |
-| ct‖tag | `d6c8e417669baeb1b6acb530dfef004efe1c7422c7e09821d03e9bf7e44a6d9808fb2d2c8c3466de4dc973c7c70a7692650495153855f4627b136e9da82ab591bc9762113b9b3a66f5fd507168950081` |
+| ct‖tag | `a9e740ce990470fcc4fc6d121db72f8052c8f4f664c673016b45a777985d88fb743a7976632702f82aa94c6070eca321b3581bee292825c369932ae30c8aac538c71110b52459c7170c65af30a7520d8` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Swapping `N` and `AD` (same byte length) yields a different `ct‖tag` and does not
 validate the original `ct‖tag`.
 
-#### 10.2.6 Empty AD vs One-Byte AD 00
+#### 10.1.6 Empty AD vs One-Byte AD 00
 
 | Field | Value |
 |-------|-------|
@@ -1503,13 +1349,13 @@ validate the original `ct‖tag`.
 | N | 12 bytes `0c 0d 0e ... 17` |
 | AD | (empty) |
 | M len | 32 (`00 01 02 ... 1f`) |
-| ct‖tag | `6c6842b44331dca922bce7f3073f51b350a00676b4dba240d32f04ab8df28b20a6b4e5dfe5917f4ea5d55f469ea5f9c796658dd1015025fb2e73f3d02936506a` |
+| ct‖tag | `ab68bc6f9adc1dffc38719986b597af6ee7e4466db073ce610ea5cc2807bc68a951d5a14852886cb10d9b45ea1310d731286618b94cbbd3d778aae9c2f1845dd` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖tag`.
 
-#### 10.2.7 Long AD (128 Bytes)
+#### 10.1.7 Long AD (128 Bytes)
 
 | Field | Value |
 |-------|-------|
@@ -1517,12 +1363,12 @@ Empty AD and one-byte AD `00` are distinct contexts and produce different `ct‖
 | N | 12 bytes `ab ab ac ad ae af b0 b1 b2 b3 b4 b5` |
 | AD | ab ab ab ... ab |
 | M len | 17 (`00 01 02 ... 10`) |
-| ct‖tag | `2a590aaa049945f3306c6a4fce20538e1c2100b200d4f6009400efb3b5495a5fe9f7decb3aa27c597db789e8f280405604` |
+| ct‖tag | `58d9cf0a4c794672fdc1c184a21794df707aa9d1a966fa1dabd2cfad617ef3ea3ce04bbade0bdc8d19dab09182dfc032dd` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 10.2.8 Rate-Minus-One Message (167 Bytes, R-1 Boundary)
+#### 10.1.8 Rate-Minus-One Message (167 Bytes, R-1 Boundary)
 
 | Field | Value |
 |-------|-------|
@@ -1530,13 +1376,13 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `d0 d1 d2 ... db` |
 | AD | 20 21 22 |
 | M len | 167 (`00 01 02 ... mod 256`) |
-| ct[:32] | `35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84` |
-| tag | `32a0a6438ebd3b9bdcc76da34f9bc63fd2196b133cf6a3bef683b4b8c28dd43f` |
+| ct[:32] | `57d63a7ee7acd94a3b9ccf4bf165874eb927e4d79e139b1566a4f4492be971aa` |
+| tag | `70d6a16841896e2a3ef6c61c013135444e680a268435768ff102f2a908e259c3` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 10.2.9 Exact-Rate Message (168 Bytes, R Boundary)
+#### 10.1.9 Exact-Rate Message (168 Bytes, R Boundary)
 
 | Field | Value |
 |-------|-------|
@@ -1544,13 +1390,13 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 12 bytes `d0 d1 d2 ... db` |
 | AD | 20 21 22 |
 | M len | 168 (`00 01 02 ... mod 256`) |
-| ct[:32] | `35eb85e8659508b92d2f7ad3714991cc40510a454493a98e471c3344ddd20c84` |
-| tag | `54d3ebf2d79bacb8ca1217643a4bb71dc90bd5b5241b78f3a2e2491133047099` |
+| ct[:32] | `57d63a7ee7acd94a3b9ccf4bf165874eb927e4d79e139b1566a4f4492be971aa` |
+| tag | `c6aa75963cff9c9b904c5d371da48edf8726faeaf335aea194c211add781cf33` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 
-#### 10.2.10 Large Nonce (32 Bytes)
+#### 10.1.10 Large Nonce (32 Bytes)
 
 | Field | Value |
 |-------|-------|
@@ -1558,7 +1404,7 @@ Changing `N`, `AD`, or `tag` causes decryption to return `None`.
 | N | 32 bytes `e0 e1 e2 ... ff` |
 | AD | 20 21 22 |
 | M len | 48 (`00 01 02 ... mod 256`) |
-| ct‖tag | `77431d80e360764438411dca0d9d76598d097b9fbfecb7e4e805532c5f4fff46bb3834e3df28209cb07413f531d104ed6b0d2f132c775cfd6a556b1f75f4769555751936ccab6d1a0f5cddfd3f608f0f` |
+| ct‖tag | `3cd4a0518201c7a9312d2d2aa42e5cf968319042017e67329a6e90f80f695ab104992d1a5f9dc6ca6729034efec0d8238fac2fa4f514b4f93f5641a78f92dfe0183357a99c2875dd406208fc1b91daf3` |
 
 `tw128_decrypt(K, N, AD, ct‖tag)` returns the original plaintext.
 Changing `N`, `AD`, or `tag` causes decryption to return `None`.
@@ -1571,7 +1417,7 @@ $`n = \max(1, \lceil L / B \rceil)`$ chunks of sizes $`\ell_0, \ldots, \ell_{n-1
 $`\sigma`$ is:
 
 ```math
-\sigma_{\mathrm{query}} = \underbrace{\left(\left\lfloor \frac{|\mathit{kdf\_input}|}{R} \right\rfloor + 1\right)}_{\text{KDF}} + \underbrace{\left(1 + \left\lfloor \frac{\ell_0}{R} \right\rfloor + d_f\right)}_{\text{final node}} + \underbrace{\sum_{i=1}^{n-1}\left(2 + \left\lfloor \frac{\ell_i}{R} \right\rfloor\right)}_{\text{leaves}}
+\sigma_{\mathrm{query}} = \underbrace{\left\lfloor \frac{|\mathit{prefix}|}{R} \right\rfloor}_{\text{base-state prefix}} + \underbrace{\left(1 + \left\lfloor \frac{\ell_0}{R} \right\rfloor + d_f\right)}_{\text{final node}} + \underbrace{\sum_{i=1}^{n-1}\left(2 + \left\lfloor \frac{\ell_i}{R} \right\rfloor\right)}_{\text{leaves}}
 ```
 
 where $`d_f`$ is the number of permutation calls during the final node's tag phase (1 for the tag `pad_permute`, plus
@@ -1579,12 +1425,12 @@ any additional calls from absorbing HOP_FRAME, chain values, and the chaining-ho
 
 More precisely:
 
-- **KDF term.** $`|\mathit{kdf\_input}|`$ is the byte length of
+- **Base-state prefix term.** $`|\mathit{prefix}|`$ is the byte length of
   `encode_string(K) || encode_string(N) || encode_string(AD)`.
   Each `encode_string` contributes `left_encode(8|x|)` (2-3 bytes for practical lengths) plus the field itself. For a
-  32-byte key, 12-byte nonce, and empty AD, $`|\mathit{kdf\_input}| = (3+32) + (2+12) + (2+0) = 51`$ bytes, giving
-  $`\lfloor 51 / 168 \rfloor + 1 = 1`$ Keccak-p call.
-  (The `+1` accounts for TurboSHAKE's pad+permute step even when the absorb phase ends exactly on a rate boundary.)
+  32-byte key, 12-byte nonce, and empty AD, $`|\mathit{prefix}| = (3+32) + (2+12) + (2+0) = 51`$ bytes, giving
+  $`\lfloor 51 / 168 \rfloor = 0`$ Keccak-p calls (the prefix fits within a single rate block and the permutation
+  occurs at the subsequent `pad_permute`, which is counted in the final-node or leaf init).
 - **Final node term.** The final node (index 0) costs $`1`$ (init `pad_permute`) $`+`$
   $`\lfloor \ell_0 / R \rfloor`$ (unpadded intermediate permutations during chunk-0 encryption) $`+`$ $`d_f`$ (tag phase).
   For $`n = 1`$: $`d_f = 1`$ (one `pad_permute(0x07)`). For $`n > 1`$: $`d_f`$ accounts for absorbing the 8-byte HOP_FRAME,
@@ -1595,11 +1441,11 @@ More precisely:
   `chain_value`) $`+`$ $`\lfloor \ell_i / R \rfloor`$ (unpadded intermediate permutations on full-rate blocks). For a
   full $`B = 8192`$-byte chunk: $`2 + \lfloor 8192 / 168 \rfloor = 2 + 48 = 50`$. The leaf sum is empty when $`n = 1`$.
 
-## Appendix B. Reference Implementation of Keccak-p[1600,12] and TurboSHAKE128
+## Appendix B. Reference Implementation of Keccak-p[1600,12] and Encoding Functions
 
-This appendix provides a reference Python implementation of the cryptographic primitives used by TW128. It
-is intended for specification clarity and test-vector generation; production implementations should use
-platform-optimized Keccak libraries.
+This appendix provides a reference Python implementation of the Keccak-p[1600,12] permutation and encoding
+functions used by TW128. It is intended for specification clarity and test-vector generation; production
+implementations should use platform-optimized Keccak libraries.
 
 ### Keccak-p[1600,12]
 
@@ -1645,40 +1491,6 @@ def keccak_p1600(state: bytearray, rounds: int = 12):
         state[8 * i : 8 * i + 8] = A[i].to_bytes(8, "little")
 ```
 <!-- end:code:ref/keccak.py:keccak_p1600 -->
-
-### TurboSHAKE128
-
-<!-- begin:code:ref/turboshake.py:turboshake128 -->
-```python
-def turboshake128(msg: bytes, domain_byte: int, output_len: int) -> bytes:
-    """TurboSHAKE128(M, D, ell) as specified in RFC 9861."""
-    S = bytearray(200)
-    # Absorb.
-    pos = 0
-    for i in range(0, len(msg), R):
-        block = msg[i : i + R]
-        for j, b in enumerate(block):
-            S[pos + j] ^= b
-        pos += len(block)
-        if pos == R:
-            keccak_p1600(S)
-            pos = 0
-    # Pad and switch to squeezing.
-    S[pos] ^= domain_byte
-    S[R - 1] ^= 0x80
-    keccak_p1600(S)
-    # Squeeze.
-    out, pos = bytearray(), 0
-    while len(out) < output_len:
-        if pos == R:
-            keccak_p1600(S)
-            pos = 0
-        n = min(R - pos, output_len - len(out))
-        out.extend(S[pos : pos + n])
-        pos += n
-    return bytes(out)
-```
-<!-- end:code:ref/turboshake.py:turboshake128 -->
 
 ### Integer and String Encodings
 
@@ -1743,7 +1555,7 @@ sigma_total = sigma_tw128 + sigma_turboshake + sigma_k12 + sigma_other_keccak
 ```
 
 where each term is the count of online Keccak-p[1600,12] calls made by that component in the window.
-This is the same $`\sigma_{\mathrm{total}}`$ counter model used normatively in Section 7.4.
+This is the same $`\sigma_{\mathrm{total}}`$ counter model used normatively in Section 7.3.
 
 Then evaluate:
 

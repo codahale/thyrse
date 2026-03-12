@@ -3,7 +3,7 @@
 import hmac
 from .encodings import left_encode, right_encode, encode_string
 from .kt128 import kt128
-from .tw128 import encrypt_and_mac, decrypt_and_mac
+from .tw128 import _tree_process
 
 # region: constants
 C = 32   # TW128 key and tag size (bytes).
@@ -96,7 +96,7 @@ class Protocol:
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
-        ct, tag = encrypt_and_mac(mask_key, plaintext)
+        ct, tag = _tree_process(mask_key, b"", b"", plaintext, "E")
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return ct
 
@@ -106,7 +106,7 @@ class Protocol:
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
-        pt, tag = decrypt_and_mac(mask_key, ciphertext)
+        pt, tag = _tree_process(mask_key, b"", b"", ciphertext, "D")
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return pt
     # endregion
@@ -118,7 +118,7 @@ class Protocol:
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
-        ct, tag = encrypt_and_mac(seal_key, plaintext)
+        ct, tag = _tree_process(seal_key, b"", b"", plaintext, "E")
         self.transcript = _encode_chain(OP_SEAL, chain, tag)
         return ct + tag
 
@@ -128,7 +128,7 @@ class Protocol:
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
         seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
-        pt, computed_tag = decrypt_and_mac(seal_key, ciphertext)
+        pt, computed_tag = _tree_process(seal_key, b"", b"", ciphertext, "D")
         self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
         if not hmac.compare_digest(computed_tag, tag):
             return None
