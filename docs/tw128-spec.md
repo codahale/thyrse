@@ -344,7 +344,6 @@ Let:
 - $`\sigma`$: total online Keccak-p calls by the construction across all queries.
 - $`t`$: adversary offline Keccak-p calls ($`\pi`$ and $`\pi^{-1}`$ evaluations in the ideal-permutation model).
 - $`S`$: total number of decryption/verification forgery attempts.
-- $`q_{\mathrm{ctx}}`$: number of distinct contexts (one per distinct $`(K, N, AD)`$ triple).
 - $`n = \max(1, \lceil |M|/B \rceil)`$: number of chunks for a message of length $`|M|`$.
 - Throughout Section 6, $`c = 8C = 256`$ denotes the capacity in bits.
 
