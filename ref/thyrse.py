@@ -6,8 +6,8 @@ from .kt128 import kt128
 from .tw128 import encrypt_and_mac, decrypt_and_mac
 
 # region: constants
-C = 32   # TW128 key and tag size (bytes).
-H = 64   # Chain value size (bytes).
+KL = 32  # TW128 key and tag size (bytes); K_L in the TW128 spec.
+H  = 64  # Chain value size (bytes).
 
 # Operation codes.
 OP_INIT    = 0x01
@@ -25,13 +25,15 @@ CS_DERIVE      = 0x21
 CS_MASK_KEY    = 0x22
 CS_SEAL_KEY    = 0x23
 CS_RATCHET     = 0x24
+# endregion
 
 
+# region: encoding_helpers
 def _encode_frame(start: int, op: int, label: bytes, value: bytes = b"") -> bytes:
-    """Encode a TKDF frame: op ‖ encode_string(label) ‖ value ‖ right_encode(start).
+    """Encode a frame: op ‖ encode_string(label) ‖ value ‖ right_encode(start).
 
     Each frame records its own start position via right_encode, making the
-    transcript recoverable (§5).
+    transcript recoverable (§4.3).
     """
     return bytes([op]) + encode_string(label) + value + right_encode(start)
 
@@ -95,7 +97,7 @@ class Protocol:
             len(self.transcript), OP_MASK, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
+        mask_key = kt128(T, bytes([CS_MASK_KEY]), KL)
         ct, tag = encrypt_and_mac(mask_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return ct
@@ -105,7 +107,7 @@ class Protocol:
             len(self.transcript), OP_MASK, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
+        mask_key = kt128(T, bytes([CS_MASK_KEY]), KL)
         pt, tag = decrypt_and_mac(mask_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return pt
@@ -117,7 +119,7 @@ class Protocol:
             len(self.transcript), OP_SEAL, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
+        seal_key = kt128(T, bytes([CS_SEAL_KEY]), KL)
         ct, tag = encrypt_and_mac(seal_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_SEAL, chain, tag)
         return ct + tag
@@ -127,7 +129,7 @@ class Protocol:
             len(self.transcript), OP_SEAL, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
+        seal_key = kt128(T, bytes([CS_SEAL_KEY]), KL)
         pt, computed_tag = decrypt_and_mac(seal_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
         if not hmac.compare_digest(computed_tag, tag):

@@ -9,57 +9,106 @@
 
 ## 1. Introduction
 
-Thyrse is a protocol framework that sequences cryptographic operations as frames appended to a transcript. At each
-finalizing operation, KT128 (KangarooTwelve) is evaluated over the transcript to derive two independent outputs: a
-**chain value** that seeds the next transcript instance, and an **operational output** (a key, pseudorandom bytes, or
-both). Bulk encryption is delegated to TW128 when authenticated or unauthenticated ciphertext is needed.
-
-This structure forms a **KDF chain**: each finalization consumes the current transcript and produces a chain value that
-carries unpredictability forward into the next instance. If at least one input to a transcript instance is
-unpredictable to the adversary, they learn nothing about the chain value or operational output, and therefore nothing
-about any subsequent link in the chain. Unpredictability propagates forward indefinitely through finalizations. This is the framework's
-central security guarantee.
+Thyrse is a framework for building cryptographic protocols — AEAD, key derivation, ratcheting sessions, key exchange — by composing a small set of operations. Each operation appends a frame to a transcript; the transcript encoding (§4) is injective, so distinct operation sequences always produce distinct inputs to the hash function. Finalizing operations evaluate KT128 (KangarooTwelve) over the transcript to produce cryptographic output; bulk encryption is handled by TW128.
 
 The framework provides the following operations:
 
 - **`Init`**: Establish a protocol identity.
 - **`Mix`**: Absorb key material, nonces, or associated data. Data may be streamed without knowing its length in
   advance.
+- **`Fork`**: Clone the protocol state into independent branches with distinct identities.
 - **`Derive`**: Produce pseudorandom output that is a function of the full transcript.
 - **`Ratchet`**: Irreversibly advance the protocol state for forward secrecy.
 - **`Mask`** / **`Unmask`**: Encrypt or decrypt without authentication. The caller is responsible for authenticating the
   ciphertext through external mechanisms.
 - **`Seal`** / **`Open`**: Encrypt or decrypt with authentication. A failed `Open` causes the protocol state to
   diverge from the sender's.
-- **`Fork`**: Clone the protocol state into independent branches with distinct identities.
 
-## 2. Parameters
+As a concrete example, a standard AEAD encrypt-then-decrypt round-trip:
 
-| Symbol | Value | Description                          |
-|--------|-------|--------------------------------------|
-| C      | 32    | TW128 key and tag size (bytes)    |
-| H      | 64    | Chain value size (bytes); oversized for birthday-bound margin (§8.5) |
+<!-- begin:code:ref/thyrse.py:usage_aead -->
+```python
+def _example_aead(key_material, nonce, associated_data, plaintext):
+    p = Protocol()
+    p.init(b"com.example.myprotocol")
+    p.mix(b"key", key_material)
+    p.mix(b"nonce", nonce)
+    p.mix(b"ad", associated_data)
+    ciphertext_tag = p.seal(b"message", plaintext)
+```
+<!-- end:code:ref/thyrse.py:usage_aead -->
 
-## 3. Dependencies
+<!-- begin:code:ref/thyrse.py:usage_aead_decrypt -->
+```python
+def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag):
+    p = Protocol()
+    p.init(b"com.example.myprotocol")
+    p.mix(b"key", key_material)
+    p.mix(b"nonce", nonce)
+    p.mix(b"ad", associated_data)
+    plaintext = p.open(b"message", ciphertext, tag)
+```
+<!-- end:code:ref/thyrse.py:usage_aead_decrypt -->
+
+Each finalizing operation (Derive, Ratchet, Mask, Seal) produces two independent outputs from KT128: an **operational output** (a key, pseudorandom bytes, or both) and a **chain value** that seeds the next transcript instance. This forms a **KDF chain**: if at least one input to a transcript instance is unpredictable to the adversary, they learn nothing about the chain value or operational output, and therefore nothing about any subsequent link in the chain. Unpredictability propagates forward indefinitely through finalizations. This is the framework's central security guarantee.
+
+The remainder of this document defines the dependencies (§2), constants (§3), transcript encoding (§4), operations (§5), and security properties (§6), followed by implementation guidance (§7), references (§8), and test vectors (§9).
+
+## 2. Dependencies
 
 **`KT128(M, S, ℓ)`:** KangarooTwelve as specified in RFC 9861. Takes a message `M`, a customization string `S`, and
 an output length `ℓ` in bytes.
 
 **`TW128.EncryptAndMAC(K, N, AD, M) → (ciphertext, tag)`:** As specified in the TW128 specification (§5.6). Takes a
-`C`-byte key `K`, a nonce `N`, associated data `AD`, and arbitrary-length plaintext `M`; returns same-length ciphertext
-and a `C`-byte tag. Thyrse passes `b""` for both `N` and `AD`.
+32-byte key `K`, a nonce `N`, associated data `AD`, and arbitrary-length plaintext `M`; returns same-length ciphertext
+and a 32-byte tag.
 
-**`TW128.DecryptAndMAC(K, N, AD, ct) → (plaintext, tag)`:** Takes a `C`-byte key `K`, a nonce `N`, associated data
-`AD`, and arbitrary-length ciphertext `ct`; returns same-length plaintext and a `C`-byte tag. TW128 does not perform tag
-verification; the caller is responsible for comparing the returned tag against an expected value. Thyrse passes `b""`
-for both `N` and `AD`.
+**`TW128.DecryptAndMAC(K, N, AD, ct) → (plaintext, tag)`:** Takes a 32-byte key `K`, a nonce `N`, associated data
+`AD`, and arbitrary-length ciphertext `ct`; returns same-length plaintext and a 32-byte tag. `DecryptAndMAC` does not perform tag verification; the caller is responsible for comparing the
+returned tag against an expected value.
 
-### 3.1 Integer and String Encoding
+## 3. Constants and Parameters
+
+| Symbol | Value | Description                          |
+|--------|-------|--------------------------------------|
+| H      | 64    | Chain value size (bytes); oversized for birthday-bound margin (§6.4) |
+
+### 3.1 Operation Codes
+
+| Code | Operation | Finalizing |
+|------|-----------|------------|
+| 0x01 | INIT      | No         |
+| 0x02 | MIX       | No         |
+| 0x03 | FORK      | No         |
+| 0x04 | DERIVE    | Yes        |
+| 0x05 | RATCHET   | Yes        |
+| 0x06 | MASK      | Yes        |
+| 0x07 | SEAL      | Yes        |
+| 0x08 | CHAIN     | No         |
+
+### 3.2 Customization Strings
+
+Each KT128 evaluation uses a 1-byte customization string that identifies the purpose of the output:
+
+| Byte | Purpose                        | Used by             |
+|------|--------------------------------|---------------------|
+| 0x20 | Chain value derivation (non-Ratchet) | Derive, Mask, Seal  |
+| 0x21 | Derive output                  | Derive              |
+| 0x22 | Mask key derivation            | Mask / Unmask       |
+| 0x23 | Seal key derivation            | Seal / Open         |
+| 0x24 | Ratchet chain derivation       | Ratchet             |
+
+## 4. Transcript Encoding
+
+Throughout this section, $`|x|`$ denotes the length of byte string $`x`$ in bytes.
+
+### 4.1 Integer and String Encoding
 
 All integer and string encodings use primitives from NIST SP 800-185.
 
-**`left_encode(x)`** encodes a non-negative integer `x` as a byte string consisting of the length of the encoding (in
-bytes) followed by the big-endian encoding of `x`. It is self-delimiting when parsed left-to-right. For example:
+**`left_encode(x)`** encodes a non-negative integer `x` as a byte string consisting of the byte length of the
+big-endian encoding of `x`, followed by that big-endian encoding. It is self-delimiting when parsed left-to-right.
+For example:
 
 - `left_encode(0)` = `0x01 0x00`
 - `left_encode(127)` = `0x01 0x7F`
@@ -78,17 +127,13 @@ determines the encoding's length, so a trailing `right_encode` value can be unam
 This is NIST SP 800-185's `encode_string`: the `left_encode` prefix encodes the bit-length of `x`, making the encoding
 self-delimiting when parsed left-to-right.
 
-## 4. Transcript Encoding
-
-Throughout this section, $`|x|`$ denotes the length of byte string $`x`$ in bytes.
-
-### 4.1 Frame Format
+### 4.2 Frame Format
 
 Each operation is encoded as a **frame**, a byte string of the form:
 
 $`\mathrm{encode\_frame}(\mathit{op}, \mathit{label}, \mathit{value}) = \mathit{op} \mathbin\| \mathrm{encode\_string}(\mathit{label}) \mathbin\| \mathit{value}`$
 
-where $`\mathit{op}`$ is a single byte identifying the operation (§5), $`\mathit{label}`$ is a byte string for domain
+where $`\mathit{op}`$ is a single byte identifying the operation (§3), $`\mathit{label}`$ is a byte string for domain
 separation, and $`\mathit{value}`$ is a byte string of arbitrary length. Every frame begins with an $`\mathit{op}`$
 byte, so $`|\mathrm{encode\_frame}(\ldots)| \geq 1`$.
 
@@ -96,7 +141,7 @@ This encoding is injective: distinct $`(\mathit{op}, \mathit{label}, \mathit{val
 byte strings, because $`\mathit{op}`$ is a fixed single byte and $`\mathrm{encode\_string}(\mathit{label})`$ is
 self-delimiting, uniquely determining where $`\mathit{label}`$ ends and $`\mathit{value}`$ begins.
 
-### 4.2 Transcript Encoding
+### 4.3 Frame Interleaving
 
 A **transcript** is a sequence of inputs $`x_0, x_1, \ldots, x_{m-1}`$, each encoded as a frame
 $`F_i = \mathrm{encode\_frame}(x_i)`$. The empty sequence ($`m = 0`$) is valid and encodes to the empty string.
@@ -123,15 +168,18 @@ The full encoding is the composition:
 ```
 
 The encoding is injective at every level: distinct $`(\mathit{op}, \mathit{label}, \mathit{value})`$ triples produce
-distinct frames (§4.1), and the position markers ensure distinct frame sequences produce distinct encoded transcripts.
+distinct frames (§4.2), and the position markers ensure distinct frame sequences produce distinct encoded transcripts.
 This means distinct operation sequences always produce distinct inputs to KT128, which is essential for the KDF security
-argument (§8). Note that the injectivity of the full encoding depends on each operation encoding its inputs into the
-$`\mathit{value}`$ field injectively. The operations (§7) define their value encodings with this requirement in mind.
+argument (§6).
+
+**Value-level injectivity.** The injectivity of the full encoding depends on each operation encoding its inputs into
+the $`\mathit{value}`$ field injectively. The operations (§5) define their value encodings with this requirement in
+mind; §6.3.3 verifies it for each operation.
 
 **Overhead.** Each frame incurs a position marker of $`|\mathrm{right\_encode}(s_i)|`$ bytes. For transcripts shorter
 than 256 bytes, each marker is 2 bytes. For transcripts shorter than 65536 bytes, each marker is 3 bytes.
 
-### 4.3 Streaming Construction
+### 4.4 Streaming Construction
 
 The encoding can be constructed incrementally:
 
@@ -141,9 +189,9 @@ The encoding can be constructed incrementally:
 
 No buffering or lookahead is required.
 
-### 4.4 Chain Frame
+### 4.5 Chain Frame
 
-Finalizing operations (§7) evaluate KT128 over the current transcript and then replace it with a single **chain frame**
+Finalizing operations (§5) evaluate KT128 over the current transcript and then replace it with a single **chain frame**
 that carries the derived values into the next transcript instance. The chain frame has the form:
 
 $`(\texttt{0x08},\; \texttt{""},\; \mathit{origin\_op} \mathbin\| \mathrm{left\_encode}(n) \mathbin\| \mathrm{encode\_string}(v_1) \mathbin\| \cdots \mathbin\| \mathrm{encode\_string}(v_n))`$
@@ -152,64 +200,13 @@ where $`\mathit{origin\_op}`$ is the operation code of the finalizing operation 
 values (1 for Derive/Ratchet, 2 for Mask/Seal). The chain frame is interleaved with a position marker at offset 0,
 forming a complete single-frame transcript.
 
-## 5. Protocol Constants
-
-### 5.1 Operation Codes
-
-| Code | Operation | Finalizing |
-|------|-----------|------------|
-| 0x01 | INIT      | No         |
-| 0x02 | MIX       | No         |
-| 0x03 | FORK      | No         |
-| 0x04 | DERIVE    | Yes        |
-| 0x05 | RATCHET   | Yes        |
-| 0x06 | MASK      | Yes        |
-| 0x07 | SEAL      | Yes        |
-| 0x08 | CHAIN     | No         |
-
-### 5.2 Customization Strings
-
-Each KT128 evaluation uses a 1-byte customization string that identifies the purpose of the output:
-
-| Byte | Purpose                        | Used by             |
-|------|--------------------------------|---------------------|
-| 0x20 | Chain value derivation (non-Ratchet) | Derive, Mask, Seal  |
-| 0x21 | Derive output                  | Derive              |
-| 0x22 | Mask key derivation            | Mask / Unmask       |
-| 0x23 | Seal key derivation            | Seal / Open         |
-| 0x24 | Ratchet chain derivation       | Ratchet             |
-
-TW128's internal domain bytes are not listed here; they are specified in the TW128 specification
-and covered by its own security analysis.
-
-<!-- begin:code:ref/thyrse.py:constants -->
+<!-- begin:code:ref/thyrse.py:encoding_helpers -->
 ```python
-C = 32   # TW128 key and tag size (bytes).
-H = 64   # Chain value size (bytes).
-
-# Operation codes.
-OP_INIT    = 0x01
-OP_MIX     = 0x02
-OP_FORK    = 0x03
-OP_DERIVE  = 0x04
-OP_RATCHET = 0x05
-OP_MASK    = 0x06
-OP_SEAL    = 0x07
-OP_CHAIN   = 0x08
-
-# KT128 customization strings.
-CS_CHAIN       = 0x20
-CS_DERIVE      = 0x21
-CS_MASK_KEY    = 0x22
-CS_SEAL_KEY    = 0x23
-CS_RATCHET     = 0x24
-
-
 def _encode_frame(start: int, op: int, label: bytes, value: bytes = b"") -> bytes:
-    """Encode a TKDF frame: op ‖ encode_string(label) ‖ value ‖ right_encode(start).
+    """Encode a frame: op ‖ encode_string(label) ‖ value ‖ right_encode(start).
 
     Each frame records its own start position via right_encode, making the
-    transcript recoverable (§5).
+    transcript recoverable (§4.3).
     """
     return bytes([op]) + encode_string(label) + value + right_encode(start)
 
@@ -228,13 +225,13 @@ def _encode_chain(origin_op: int, *values: bytes) -> bytearray:
         payload += encode_string(v)
     return bytearray(_encode_frame(0, OP_CHAIN, b"", payload))
 ```
-<!-- end:code:ref/thyrse.py:constants -->
+<!-- end:code:ref/thyrse.py:encoding_helpers -->
 
-## 6. Protocol State
+## 5. Operations
 
 The protocol state is a byte string called the **transcript**, initially empty. Operations append frames to the
 transcript (§4). Finalizing operations evaluate KT128 over the transcript and then reset it to a single chain
-frame (§4.4).
+frame (§4.5).
 
 **Transcript invariants.** By construction, a valid transcript always begins with either an `INIT` frame (`0x01`) for the
 first instance or a `CHAIN` frame (`0x08`) for subsequent instances after finalization. The first operation on a new
@@ -247,6 +244,11 @@ runtime.
 randomness. Confidentiality requires that callers absorb fresh, unpredictable values via `Mix` before any encrypting
 operation (`Mask` or `Seal`). Replaying the same operation sequence with the same inputs produces identical ciphertext.
 
+All operations append frames as $`(\mathit{op}, \mathit{label}, \mathit{value})`$ triples, encoded per §4.2 and
+interleaved with position markers per §4.3. $`T`$ denotes the encoded transcript. Where a finalizing operation
+evaluates KT128 twice (chain value and operational output), the two evaluations use different customization strings
+and are independent; they may execute in parallel.
+
 <!-- begin:code:ref/thyrse.py:protocol_core -->
 ```python
 class Protocol:
@@ -255,18 +257,11 @@ class Protocol:
 ```
 <!-- end:code:ref/thyrse.py:protocol_core -->
 
-## 7. Operations
-
-All operations append frames as $`(\mathit{op}, \mathit{label}, \mathit{value})`$ triples, encoded per §4.1 and
-interleaved with position markers per §4.2. $`T`$ denotes the encoded transcript. Where a finalizing operation
-evaluates KT128 twice (chain value and operational output), the two evaluations use different customization strings
-and are independent; they may execute in parallel.
-
-### 7.1 Init
+### 5.1 Init
 
 Establishes the protocol identity. The `Init` label provides protocol-level domain separation: two protocols using
 different `Init` labels produce cryptographically independent transcripts even if all subsequent operations are
-identical. See §6 for transcript validity requirements.
+identical. See the transcript invariants above for validity requirements.
 
 **`Init(label)`**
 
@@ -279,7 +274,7 @@ Append frame `(0x01, label, "")`.
 ```
 <!-- end:code:ref/thyrse.py:init -->
 
-### 7.2 Mix
+### 5.2 Mix
 
 Absorbs data into the protocol transcript. `Mix` is used for both secret inputs (key material, ephemeral keys) and
 public inputs (nonces, associated data, protocol messages). Data may be streamed without knowing its length in advance;
@@ -296,7 +291,7 @@ Append frame `(0x02, label, data)`.
 ```
 <!-- end:code:ref/thyrse.py:mix -->
 
-### 7.3 Fork
+### 5.3 Fork
 
 Clones the protocol state into `N` independent branches. All `N+1` states (base and clones) receive a Fork frame with
 a distinct left-encoded ordinal for domain separation. The base receives ordinal `0`; clones receive ordinals `1`
@@ -304,7 +299,8 @@ through `N`.
 
 **`Fork(label, values...) → clones[]`**
 
-Let `N = len(values)` and let `T_snap` be the current transcript.
+Let `N = len(values)` and let `T_snap` be the current transcript. `Fork` modifies the base state in place and returns
+`N` new clones.
 
 For the base (ordinal 0):
 
@@ -314,8 +310,8 @@ For each clone `i` (1 ≤ i ≤ N), create an independent protocol state from `T
 
 - Append frame `(0x03, label, left_encode(N) ‖ left_encode(i) ‖ encode_string(values[i-1]))`
 
-`Fork` does not finalize. All N+1 branches share the same transcript up to `T_snap` and diverge via their ordinals and
-values.
+`Fork` does not finalize. All `N+1` states (the modified base and N clones) share the same transcript up to `T_snap`
+and diverge via their ordinals and values.
 
 Example: `Fork("role", "prover", "verifier")` produces three protocol states. The base continues with ordinal `0` and an
 empty value. Clone 1 gets ordinal `1` with value `prover`. Clone 2 gets ordinal `2` with value `verifier`.
@@ -338,13 +334,13 @@ empty value. Clone 1 gets ordinal `1` with value `prover`. Clone 2 gets ordinal 
 ```
 <!-- end:code:ref/thyrse.py:fork -->
 
-### 7.4 Derive
+### 5.4 Derive
 
 Produces pseudorandom output that is a deterministic function of the full transcript. Finalizes the current transcript
 and begins a new one.
 
 Derive output is collision-resistant and preimage-resistant. When the transcript contains at least one unpredictable
-input, the output is additionally pseudorandom (§8.5).
+input, the output is additionally pseudorandom (§6.4).
 
 **`Derive(label, output_len) → output`**
 
@@ -377,12 +373,16 @@ Return `output`.
 ```
 <!-- end:code:ref/thyrse.py:derive -->
 
-### 7.5 Ratchet
+### 5.5 Ratchet
 
 Irreversibly advances the protocol state. No user-visible output is produced.
 
 Ratchet provides forward secrecy: an adversary who compromises the post-ratchet state cannot recover the pre-ratchet
-state, provided the implementation securely erases pre-finalization state (§8.8).
+state, provided the implementation securely erases pre-finalization state (§6.4).
+
+Ratchet uses a dedicated customization string (`0x24`) rather than the shared chain string (`0x20`) used by other
+finalizing operations. This distinguishes explicit ratchet chain values from implicit ones produced as a side effect
+of Derive, Mask, or Seal.
 
 **`Ratchet(label)`**
 
@@ -407,10 +407,12 @@ state, provided the implementation securely erases pre-finalization state (§8.8
 ```
 <!-- end:code:ref/thyrse.py:ratchet -->
 
-### 7.6 Mask / Unmask
+### 5.6 Mask / Unmask
 
 Encrypts (`Mask`) or decrypts (`Unmask`) without authentication. Use `Mask` when integrity is provided by an external
-mechanism (e.g., a signature over the transcript) or when confidentiality alone is sufficient.
+mechanism (e.g., a signature over the transcript) or when confidentiality alone is sufficient. Thyrse passes empty
+nonce and associated data to TW128; all domain separation comes from the transcript. In the following,
+$`K_L`$ denotes TW128's key and tag length (32 bytes).
 
 Callers MUST ensure that a fresh, unpredictable value (such as a nonce or ephemeral key) has been absorbed via `Mix`
 before any `Mask` operation. If two protocol runs reach the same transcript state and then `Mask` different plaintexts,
@@ -418,7 +420,7 @@ they derive the same TW128 key. This is catastrophic: TW128 with a repeated key 
 fully compromising confidentiality. This requirement is analogous to the nonce requirement of conventional AEAD schemes;
 it is the caller's responsibility and is not enforced by the framework.
 
-When the transcript contains at least one unpredictable input, Mask provides IND-CPA confidentiality (§8.6).
+When the transcript contains at least one unpredictable input, Mask provides IND-CPA confidentiality (§6.5).
 
 **`Mask(label, plaintext) → ciphertext`**
 
@@ -427,7 +429,7 @@ When the transcript contains at least one unpredictable input, Mask provides IND
 2. Evaluate KT128 twice:
 
 - `chain_value ← KT128(T, 0x20, H)`
-- `key ← KT128(T, 0x22, C)`
+- `key ← KT128(T, 0x22, K_L)`
 
 3. Encrypt:
 
@@ -441,22 +443,8 @@ Return `ciphertext`. The tag is not transmitted.
 
 **`Unmask(label, ciphertext) → plaintext`**
 
-1. Append frame (identical to `Mask`): `(0x06, label, "")`.
-
-2. Evaluate KT128 twice:
-
-- `chain_value ← KT128(T, 0x20, H)`
-- `key ← KT128(T, 0x22, C)`
-
-3. Decrypt:
-
-- `(plaintext, tag) ← TW128.DecryptAndMAC(key, b"", b"", ciphertext)`
-
-4. Reset the transcript to a single frame:
-
-- `(0x08, "", 0x06 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(tag))`
-
-Return `plaintext`.
+Identical to `Mask`, except step 3 calls `TW128.DecryptAndMAC` instead of `TW128.EncryptAndMAC`. The frame, KT128
+evaluations, and chain reset are the same.
 
 *Warning:* Callers MUST NOT act on unmasked plaintext until an external authenticating operation (such as verifying a
 signature over a subsequent `Derive` output) has succeeded. Until then, the plaintext is unauthenticated and MUST be
@@ -473,7 +461,7 @@ there is no error signal — the divergence is detectable only through a later a
             len(self.transcript), OP_MASK, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
+        mask_key = kt128(T, bytes([CS_MASK_KEY]), KL)
         ct, tag = encrypt_and_mac(mask_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return ct
@@ -483,24 +471,24 @@ there is no error signal — the divergence is detectable only through a later a
             len(self.transcript), OP_MASK, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        mask_key = kt128(T, bytes([CS_MASK_KEY]), C)
+        mask_key = kt128(T, bytes([CS_MASK_KEY]), KL)
         pt, tag = decrypt_and_mac(mask_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_MASK, chain, tag)
         return pt
 ```
 <!-- end:code:ref/thyrse.py:mask_unmask -->
 
-### 7.7 Seal / Open
+### 5.7 Seal / Open
 
 Encrypts (`Seal`) or decrypts (`Open`) with authentication. Use `Seal` when the ciphertext must be verified on receipt.
 A failed `Open` causes the receiver's protocol state to diverge from the sender's, because the CHAIN frame absorbs
 the receiver's computed tag rather than the sender's.
 
 Callers MUST ensure that a fresh, unpredictable value has been absorbed via `Mix` before any `Seal` operation. The same
-catastrophic key reuse applies as for `Mask` (§7.6).
+catastrophic key reuse applies as for `Mask` (§5.6).
 
 When the transcript contains at least one unpredictable input, Seal provides IND-CPA confidentiality, INT-CTXT
-authenticity, and CMT-4 committing security (§8.6).
+authenticity, and CMT-4 committing security (§6.5).
 
 **`Seal(label, plaintext) → ciphertext ‖ tag`**
 
@@ -509,7 +497,7 @@ authenticity, and CMT-4 committing security (§8.6).
 2. Evaluate KT128 twice:
 
 - `chain_value ← KT128(T, 0x20, H)`
-- `key ← KT128(T, 0x23, C)`
+- `key ← KT128(T, 0x23, K_L)`
 
 3. Encrypt:
 
@@ -519,35 +507,20 @@ authenticity, and CMT-4 committing security (§8.6).
 
 - `(0x08, "", 0x07 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(tag))`
 
-Return `ciphertext ‖ tag`. The ciphertext has the same length as the plaintext; the tag occupies the final $`C`$ bytes
+Return `ciphertext ‖ tag`. The ciphertext has the same length as the plaintext; the tag occupies the final $`K_L`$ bytes
 of the returned value.
 
 **`Open(label, ciphertext, tag) → plaintext or ⊥`**
 
-The `tag` parameter MUST be exactly $`C`$ bytes. The `ciphertext` has the same length as the original plaintext.
+The `tag` parameter MUST be exactly $`K_L`$ bytes. The `ciphertext` has the same length as the original plaintext.
 
-1. Append frame (identical to `Seal`): `(0x07, label, "")`.
+Identical to `Seal` through step 4, except step 3 calls `TW128.DecryptAndMAC`, yielding `(plaintext, computed_tag)`.
+The chain reset uses `computed_tag` (not the sender's `tag`), and is performed unconditionally — even if verification
+fails.
 
-2. Evaluate KT128 twice:
-
-- `chain_value ← KT128(T, 0x20, H)`
-- `key ← KT128(T, 0x23, C)`
-
-3. Decrypt:
-
-- `(plaintext, computed_tag) ← TW128.DecryptAndMAC(key, b"", b"", ciphertext)`
-
-4. Reset the transcript (unconditionally) to a single frame:
-
-- `(0x08, "", 0x07 ‖ left_encode(2) ‖ encode_string(chain_value) ‖ encode_string(computed_tag))`
-
-5. Verify:
-
-- If `computed_tag ≠ tag` (constant-time comparison), discard `plaintext` and return ⊥. The protocol state has
-  diverged from the sender's because the CHAIN frame absorbed `computed_tag`, not the sender's `tag`. All subsequent
-  outputs will differ from the sender's.
-
-Return `plaintext`.
+After the chain reset, verify: if `computed_tag ≠ tag` (constant-time comparison), discard `plaintext` and return ⊥.
+The protocol state has diverged from the sender's because the CHAIN frame absorbed `computed_tag`, not the sender's
+`tag`. All subsequent outputs will differ from the sender's.
 
 <!-- begin:code:ref/thyrse.py:seal_open -->
 ```python
@@ -556,7 +529,7 @@ Return `plaintext`.
             len(self.transcript), OP_SEAL, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
+        seal_key = kt128(T, bytes([CS_SEAL_KEY]), KL)
         ct, tag = encrypt_and_mac(seal_key, b"", b"", plaintext)
         self.transcript = _encode_chain(OP_SEAL, chain, tag)
         return ct + tag
@@ -566,7 +539,7 @@ Return `plaintext`.
             len(self.transcript), OP_SEAL, label)
         T = bytes(self.transcript)
         chain = kt128(T, bytes([CS_CHAIN]), H)
-        seal_key = kt128(T, bytes([CS_SEAL_KEY]), C)
+        seal_key = kt128(T, bytes([CS_SEAL_KEY]), KL)
         pt, computed_tag = decrypt_and_mac(seal_key, b"", b"", ciphertext)
         self.transcript = _encode_chain(OP_SEAL, chain, computed_tag)
         if not hmac.compare_digest(computed_tag, tag):
@@ -575,12 +548,12 @@ Return `plaintext`.
 ```
 <!-- end:code:ref/thyrse.py:seal_open -->
 
-### 7.8 Utility Operations
+### 5.8 Utility Operations
 
 **`Clone() → copy`**
 
-Returns an independent copy of the protocol state (transcript and, in sponge-based implementations, the full sponge
-state and `Init` label). The original and clone evolve independently. `Clone` does not append a frame to the transcript.
+Returns an independent copy of the protocol state. The original and clone evolve independently. `Clone` does not
+append a frame to the transcript.
 
 *Warning:* Because `Clone` does not append a frame, applying identical operations to the original and the clone will
 produce identical transcripts, leading to catastrophic key reuse in `Mask` or `Seal`. Callers MUST use `Fork` to create
@@ -605,17 +578,16 @@ Overwrites the protocol state with zeros and invalidates the instance. After `Cl
 ```
 <!-- end:code:ref/thyrse.py:clone_clear -->
 
-## 8. Security Argument
+## 6. Security Argument
 
 The security argument proceeds in five steps:
 
-1. The transcript encoding is recoverable (§8.2).
-2. Each finalization is KDF-secure and collision-resistant (§8.3).
-3. The chain value and operational output are independent (§8.4).
-4. Unpredictability propagates through the KDF chain (§8.5).
-5. Each operation inherits concrete security properties from the chain (§8.6).
+1. The transcript encoding is recoverable (§6.2).
+2. Each finalization is KDF-secure and collision-resistant (§6.3).
+3. The chain value and operational output are independent, and unpredictability propagates through the KDF chain (§6.4).
+4. Each operation inherits concrete security properties from the chain (§6.5).
 
-### 8.1 Assumptions
+### 6.1 Assumptions
 
 The security analysis relies on the following properties of Thyrse's underlying primitives, each conditional on
 Keccak-p[1600,12] behaving as an ideal permutation.
@@ -632,24 +604,24 @@ to $`\varepsilon_{\mathrm{indiff}} \leq 2(\sigma + t)^2 / 2^{c+1}`$. With $`c = 
 maintained.
 
 **KT128 collision resistance.** For $`\ell`$-byte digests, KT128 provides $`\min(4\ell, c/2)`$-bit collision resistance
-under the Keccak sponge claim. Chain values ($`H = 64`$ bytes) and key derivations ($`C = 32`$ bytes) both achieve
+under the Keccak sponge claim. Chain values ($`H = 64`$ bytes) and key derivations (32 bytes) both achieve
 $`\min(256, 128) = 128`$-bit collision resistance, meeting the security target.
 
 **KT128 domain separation.** KT128 accepts a customization string $`S`$ whose encoding is injective (RFC 9861, §3.2).
 Evaluations with distinct $`S`$ values therefore have disjoint input spaces and are modeled as independent random oracles.
 
 **TW128.** Thyrse uses TW128's `EncryptAndMAC` / `DecryptAndMAC` functions (TW128 spec §5.6), passing empty nonce and
-associated data. Under a uniformly random $`C`$-byte key, TW128 provides:
+associated data. Under a uniformly random 32-byte key, TW128 provides:
 
 - **IND-CPA** confidentiality (nonce-free: each key is used once).
-- **INT-CTXT** authenticity, with forgery probability at most $`S / 2^{8C}`$ for $`S`$ attempts.
+- **INT-CTXT** authenticity, with forgery probability at most $`S / 2^{256}`$ for $`S`$ attempts.
 - **CMT-4** committing security (Bellare and Hoang, EUROCRYPT 2022): a ciphertext does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs.
-- **Tag PRF:** the full $`C`$-byte tag is a pseudorandom function of $`(\mathit{key}, \mathit{ciphertext})`$.
+- **Tag PRF:** the full 32-byte tag is a pseudorandom function of $`(\mathit{key}, \mathit{ciphertext})`$.
 
 `DecryptAndMAC` does not perform tag verification; the caller (Thyrse) is responsible. See the TW128 specification
 (§5.6, Caller obligations) for the full contract.
 
-### 8.2 KDF Security and the RO-KDF Construction
+### 6.2 KDF Security and the RO-KDF Construction
 
 **KDF security.** A key derivation function is secure if its output is computationally indistinguishable from a
 uniformly random string of the same length. The adversary may observe the context surrounding the derivation (public
@@ -706,7 +678,7 @@ inspect adversarial queries.
 
 **Thyrse as an RO-KDF.** Each Thyrse finalization is a direct instance of this construction.
 
-First, KT128's domain separation (§8.1) establishes that each customization string selects an independent random oracle.
+First, KT128's domain separation (§6.1) establishes that each customization string selects an independent random oracle.
 Each finalizing operation evaluates KT128 with a fixed customization string (e.g., `0x20` for chain values, `0x21` for
 Derive output). These are independent RO-KDF instances, each with its own random oracle $`\mathrm{H_T}`$.
 
@@ -723,22 +695,22 @@ sources contribute zero to this sum, so the per-instance bound collapses to the 
 
 Since each customization string selects an independent oracle, each oracle's freshness requirement can be considered
 separately. The chain value (`0x20`), key derivation (`0x22`, `0x23`), and ratchet (`0x24`) oracles always produce
-fixed-length output ($`H`$ or $`C`$ bytes), so they are NOF (non-XOF) uses requiring only $`\mathit{req}_N`$, which has
+fixed-length output ($`H`$ or 32 bytes), so they are NOF (non-XOF) uses requiring only $`\mathit{req}_N`$, which has
 no freshness condition. Only the Derive output oracle (`0x21`) is a XOF use requiring $`\mathit{req}_X`$. The XOF
 freshness condition is satisfied because `Derive` encodes $`\mathrm{left\_encode}(\mathit{output\_len})`$ in its frame
-value (§7.4): two `Derive` calls with different output lengths produce different encoded inputs and therefore make
+value (§5.4): two `Derive` calls with different output lengths produce different encoded inputs and therefore make
 distinct random oracle queries.
 
 It remains to show that the transcript encoding is recoverable.
 
-### 8.3 Recoverability
+### 6.3 Recoverability
 
 This section proves that the Thyrse transcript encoding (§4) satisfies the recoverability requirement of the RO-KDF
-construction (§8.2). The proof has three layers: the transcript can be parsed into frames, each frame can be parsed into
+construction (§6.2). The proof has three layers: the transcript can be parsed into frames, each frame can be parsed into
 its inputs, and each operation's value encoding is itself injective. Together with Theorem 8 and KT128's collision
-resistance (§8.1), this establishes that each Thyrse finalization is KDF-secure and collision-resistant.
+resistance (§6.1), this establishes that each Thyrse finalization is KDF-secure and collision-resistant.
 
-#### 8.3.1 Transcript Recovery
+#### 6.3.1 Transcript Recovery
 
 The following algorithm recovers frame byte strings from an interleaved encoding by parsing position markers
 right-to-left. All slice notation $`X[a \,..\, b]`$ denotes the half-open interval $`[a, b)`$.
@@ -754,7 +726,7 @@ iteration reduces $`\mathrm{end}`$ by at least 3 bytes (one frame byte minimum, 
 $`\mathrm{right\_encode}`$).
 
 **Correctness (Claim 1).** For any non-empty frame byte strings $`F_0, \ldots, F_{m-1}`$ (i.e., $`|F_i| \geq 1`$,
-as required by §4.1), $`\mathrm{deinterleave}(\mathrm{interleave}(F_0, \ldots, F_{m-1}))`$ returns
+as required by §4.2), $`\mathrm{deinterleave}(\mathrm{interleave}(F_0, \ldots, F_{m-1}))`$ returns
 $`(F_0, \ldots, F_{m-1})`$.
 
 *Proof.* The empty case is immediate: $`\mathrm{interleave}()`$ is the empty string, $`|T| = 0`$, the loop does not
@@ -772,19 +744,19 @@ T = \underbrace{F_0 \mathbin\| \mathrm{right\_encode}(s_0) \mathbin\| \cdots \ma
 ```
 
 The algorithm reads $`\mathrm{right\_encode}(s_k)`$ from the right, obtains $`s_k`$, and extracts $`F_k`$. It sets
-$`\mathrm{end} \leftarrow s_k`$. By the recurrence (§4.2), $`T[0 \,..\, s_k]`$ is exactly
+$`\mathrm{end} \leftarrow s_k`$. By the recurrence (§4.3), $`T[0 \,..\, s_k]`$ is exactly
 $`\mathrm{interleave}(F_0, \ldots, F_{k-1})`$. By the inductive hypothesis, the remaining iterations recover
 $`F_0, \ldots, F_{k-1}`$. $`\square`$
 
-#### 8.3.2 Frame Recovery
+#### 6.3.2 Frame Recovery
 
-Each frame has the form $`\mathit{op} \mathbin\| \mathrm{encode\_string}(\mathit{label}) \mathbin\| \mathit{value}`$ (§4.1).
+Each frame has the form $`\mathit{op} \mathbin\| \mathrm{encode\_string}(\mathit{label}) \mathbin\| \mathit{value}`$ (§4.2).
 Given the frame byte string, the decoder reads the first byte as $`\mathit{op}`$, parses the
 $`\mathrm{encode\_string}`$ prefix to extract $`\mathit{label}`$ (the $`\mathrm{left\_encode}`$ length header is
 self-delimiting), and takes the remaining bytes as $`\mathit{value}`$. This is injective and runs in $`O(|F|)`$ time on
 all inputs.
 
-#### 8.3.3 Per-Operation Value Recovery
+#### 6.3.3 Per-Operation Value Recovery
 
 Within each frame, the $`\mathit{value}`$ field is a recoverable function of the operation's inputs:
 
@@ -800,24 +772,25 @@ Within each frame, the $`\mathit{value}`$ field is a recoverable function of the
 Since $`\mathrm{left\_encode}`$ and $`\mathrm{encode\_string}`$ are self-delimiting, the $`\mathit{op}`$ byte selects the
 value format, and each format is injective and recoverable.
 
-#### 8.3.4 Composition
+#### 6.3.4 Composition
 
 $`\mathrm{deinterleave}`$ is a left inverse of $`\mathrm{interleave}`$ (Claim 1). The frame decoder is a left inverse
 of $`\mathrm{encode\_frame}`$. The per-operation value decoder is a left inverse of each operation's value encoding. Any
 function with a left inverse is injective. By composition, the full transcript encoding is recoverable: injective, with a
 polynomial-time decoder that recovers the complete input tuple from any encoded transcript. $`\square`$
 
-By Theorem 8 (§8.2), each Thyrse finalization is therefore KDF-secure: the output is indistinguishable from random given
+By Theorem 8 (§6.2), each Thyrse finalization is therefore KDF-secure: the output is indistinguishable from random given
 at least one unpredictable input in the transcript.
 
-### 8.4 Chain Independence
+### 6.4 KDF Chain Property
 
-Each Thyrse finalization except `Ratchet` evaluates KT128 on the same transcript with two distinct customization
-strings: one for the chain value (`0x20`) and one for the operational output (`0x21`–`0x23`, depending on the
-operation). `Ratchet` evaluates only a single customization string (`0x24`) and produces no operational output. For the
-non-ratchet operations, KT128's domain separation property (§8.1) means that distinct customization strings select
-independent random oracles. The chain value and operational output are therefore independent: observing the operational
-output (or ciphertext encrypted under a key derived from it) reveals no information about the chain value.
+**Chain independence.** Each Thyrse finalization except `Ratchet` evaluates KT128 on the same transcript with two
+distinct customization strings: one for the chain value (`0x20`) and one for the operational output (`0x21`–`0x23`,
+depending on the operation). `Ratchet` evaluates only a single customization string (`0x24`) and produces no
+operational output. For the non-ratchet operations, KT128's domain separation property (§6.1) means that distinct
+customization strings select independent random oracles. The chain value and operational output are therefore
+independent: observing the operational output (or ciphertext encrypted under a key derived from it) reveals no
+information about the chain value.
 
 **Tag absorption.** For `Mask` and `Seal`, the chain frame absorbs the TW128 tag alongside the chain value. The tag
 is a deterministic function of the TW128 key and the ciphertext, and the ciphertext is itself derived from the
@@ -826,26 +799,24 @@ TW128 key and the plaintext. Since the TW128 key is derived from a different cus
 a function of quantities independent of the chain value, so absorbing the tag reveals no information about the chain
 value and the composition argument is preserved.
 
-### 8.5 KDF Chain Property
+**Chain value properties.** Each finalization produces a chain value that is:
 
-Each finalization produces a chain value that is:
-
-1. **Independent** of the operational output (§8.4).
-2. **Unpredictable** to any adversary who does not know all inputs to the current transcript instance (§8.3, via
+1. **Independent** of the operational output (chain independence, above).
+2. **Unpredictable** to any adversary who does not know all inputs to the current transcript instance (§6.3, via
    Theorem 8).
-3. **Absorbed as an input** to the next transcript instance, via the chain frame (§4.4).
+3. **Absorbed as an input** to the next transcript instance, via the chain frame (§4.5).
 
 By (2), the chain value is indistinguishable from a uniformly random $`H`$-byte string. By (3), it serves as an
 unpredictable input to the next instance, satisfying the precondition of Theorem 8 for that instance. By (1), no
 operational output from the current instance helps predict it.
 
-**Hybrid argument.** The per-instance analysis (§8.2) conservatively models chain values as adversarially known,
+**Hybrid argument.** The per-instance analysis (§6.2) conservatively models chain values as adversarially known,
 so that KDF security rests entirely on the caller's secret `Mix` inputs. The following hybrid argument refines this:
 it shows that each chain value is indistinguishable from random and therefore alone satisfies Theorem 8's
 precondition for the next instance, even if no fresh key material is mixed.
 
 Assume Instance 0 contains at least one unpredictable input, as required by the per-operation
-preconditions (§7.4, §7.6, §7.7). The composition across $`q`$ instances is formalized as a sequence of $`q`$ hybrid
+preconditions (§5.4, §5.6, §5.7). The composition across $`q`$ instances is formalized as a sequence of $`q`$ hybrid
 games. In Hybrid $`j`$ (for $`j = 0, \ldots, q`$), the chain values $`\mathit{cv}_0, \ldots, \mathit{cv}_{j-1}`$ are
 replaced with
 uniformly random strings independent of all other protocol values. Hybrid 0 is the real game; Hybrid $`q`$ replaces
@@ -856,7 +827,7 @@ $`j+1, \ldots, q-1`$ with real KT128 evaluations. An adversary distinguishing th
 against the KDF security of Instance $`j`$. The chain value $`\mathit{cv}_j`$ is the output of a random oracle
 — `0x20` for non-ratchet operations, `0x24` for `Ratchet` — on a transcript containing an unpredictable input:
 fresh key material in Instance 0, or the already-random $`\mathit{cv}_{j-1}`$ from the hybrid assumption. For `Ratchet`, only a single
-oracle is evaluated and no operational output is produced, so the chain independence condition (§8.4) is vacuously
+oracle is evaluated and no operational output is produced, so the chain independence condition is vacuously
 satisfied. The RO-KDF bound applies in all cases. By a union bound over the $`q`$
 transitions:
 
@@ -866,17 +837,17 @@ transitions:
 
 **Operational outputs.** In Hybrid $`q`$, every chain value is uniformly random, so each transcript $`T_j`$ contains
 an unpredictable input ($`\mathit{cv}_{j-1}`$ for $`j \geq 1`$, or fresh key material for Instance 0). Each
-operational output is derived from an independent oracle on that transcript (§8.4). Applying Theorem 8 to the
+operational output is derived from an independent oracle on that transcript (chain independence, above). Applying Theorem 8 to the
 operational oracle at each instance, the output is indistinguishable from random at cost
 $`\varepsilon_{\mathrm{kdf}}`$ per instance, for a total of $`q \cdot \varepsilon_{\mathrm{kdf}}`$ across all
 instances. Combined with the chain hybrid, the total cost of making both chain values and operational outputs
 pseudorandom is $`2q \cdot \varepsilon_{\mathrm{kdf}}`$.
 
 **Chain value collisions.** Each chain value is $`H = 64`$ bytes (512 bits), twice the minimum needed for 128-bit
-collision resistance (§8.1). The oversized output ensures the birthday bound for chain collisions —
+collision resistance (§6.1). The oversized output ensures the birthday bound for chain collisions —
 $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ — remains negligible relative to the indifferentiability term
 ($`2(\sigma + t)^2 / 2^{257}`$), even in multi-user settings where the total number of chain values $`Q = U \cdot q`$
-is large (§8.9.2). At $`H = 32`$, the collision term would share the same denominator as the indifferentiability term,
+is large (§6.7.2). At $`H = 32`$, the collision term would share the same denominator as the indifferentiability term,
 making chain collisions a binding constraint at large $`Q`$. For $`q \leq 2^{48}`$, the collision probability is
 $`2^{-417}`$, far below the 128-bit security target.
 
@@ -884,12 +855,18 @@ $`2^{-417}`$, far below the 128-bit security target.
 Dodis's PRF-PRNG primitive (ACD19, Definition 16), where $`\mathsf{P\text{-}Up}(\sigma, I)`$ produces a new state
 $`\sigma'`$ and an output $`R`$. Each Thyrse finalization is an instance of $`\mathsf{P\text{-}Up}`$: the transcript
 plays the role of $`I`$, the chain value the role of $`\sigma'`$, and the operational output the role of $`R`$.
-Chain independence (§8.4) is the analogue of the PRF-PRNG security game's separation between PRNG mode (state refresh)
+Chain independence is the analogue of the PRF-PRNG security game's separation between PRNG mode (state refresh)
 and PRF mode (output derivation). The proof above proceeds via BCFG25 rather than ACD19's standard-model reduction,
 which targets bidirectional messaging (CKA + FS-AEAD + PRF-PRNG). The RO-KDF route gives tighter bounds and follows
 directly from KT128's indifferentiability.
 
-### 8.6 Per-Operation Security
+**Forward secrecy.** Every finalizing operation discards the pre-finalization transcript and replaces it with a chain
+frame containing a pseudorandom chain value. An adversary targeting pre-finalization key material must do so before
+the finalization occurs. The explicit `Ratchet` operation is distinguished only by producing no operational output,
+eliminating the risk of leaking information through the output channel. Forward secrecy holds provided the
+implementation securely erases pre-finalization state.
+
+### 6.5 Per-Operation Security
 
 The following table summarizes the security properties provided by each operation. All confidentiality and
 pseudorandomness claims require that the transcript contains at least one unpredictable input.
@@ -902,61 +879,41 @@ pseudorandomness claims require that the transcript contains at least one unpred
 | Seal/Open   | IND-CCA2 + CMT-4       | Unpredictable input in transcript |
 | Fork        | Branch independence     | Always (ordinals ensure distinctness) |
 
-**Derive.** The output is produced by KT128 with customization string `0x21` on the current transcript. Collision
-resistance and preimage resistance follow directly from KT128 (§8.1), regardless of whether the transcript contains
-unpredictable inputs. When the transcript does contain an unpredictable input, KDF security (§8.3) ensures the output
-is indistinguishable from random, and injectivity of the encoding ensures that distinct transcripts produce
-independent outputs. Together these give PRF security.
+**Derive.** Collision and preimage resistance follow from KT128 (§6.1) unconditionally. With an unpredictable input,
+KDF security (§6.3) and encoding injectivity additionally give PRF security: distinct transcripts produce independent
+outputs.
 
-**Ratchet.** The chain value (customization string `0x24`) is the sole output. The pre-ratchet transcript is
-unrecoverable from the chain value by KT128 preimage resistance. Forward secrecy holds provided the implementation
-securely discards all state associated with the pre-ratchet transcript. Without secure erasure, an adversary who
-compromises the implementation's internal state may be able to recover prior keys.
+**Ratchet.** The chain value (customization string `0x24`) is the sole output. Forward secrecy holds provided the
+implementation securely discards pre-ratchet state (§6.4).
 
-**Mask / Unmask.** The TW128 key is derived via KT128 with customization string `0x22`. Under the RO-KDF argument
-(§8.3), this key is indistinguishable from a uniformly random `C`-byte string as long as the transcript contains an
-unpredictable input. By the TW128 IND-CPA assumption (§8.1), `Mask` provides IND-CPA confidentiality.
+**Mask / Unmask.** The RO-KDF argument (§6.3) ensures the TW128 key (customization string `0x22`) is
+indistinguishable from random. TW128's IND-CPA property (§6.1) then gives confidentiality. Chain independence (§6.4)
+ensures the tag reveals nothing about the chain value, preserving composition. If the ciphertext is tampered with,
+sender and receiver compute different tags, causing transcript divergence. `Mask` alone does not provide integrity;
+use `Seal` or authenticate externally.
 
-The tag is a deterministic function of the TW128 key, which is derived from a different customization string
-(`0x22`) than the chain value (`0x20`). By chain independence (§8.4), the tag reveals no information about the chain
-value, preserving composition. If the
-ciphertext is tampered with, the sender and receiver compute different tags, causing their transcripts to diverge and
-all subsequent operations to produce different results. However, `Mask` alone does not provide integrity guarantees.
-Applications requiring integrity should use `Seal` or authenticate the ciphertext externally.
+**Seal / Open.** The TW128 key (customization string `0x23`) is independently random by the same argument as Mask.
+Under the freshness precondition (§5.7), encoding injectivity ensures each Seal evaluates KT128 on a distinct input,
+so keys are independently random whether the varying input is a chain value or a caller-supplied nonce. TW128's
+IND-CPA and INT-CTXT (§6.1) together imply IND-CCA2 (Bellare and Namprempre, ASIACRYPT 2000, Theorem 3.2). Chain
+independence (§6.4) ensures later outputs reveal nothing about the Seal key.
 
-**Seal / Open.** The TW128 key is derived via customization string `0x23`, and the RO-KDF argument (§8.3) establishes
-that this key is indistinguishable from a uniformly random $`C`$-byte string. Under the precondition that the
-transcript contains a fresh unpredictable input (§7.7), encoding injectivity (§8.3) ensures distinct Seal operations
-evaluate KT128 on distinct inputs, so each derived key is independently random. This holds whether the fresh input
-comes from a chain value in a running session or from a caller-supplied nonce in a one-shot AEAD deployment (§10);
-in either case, the varying input produces a distinct transcript and therefore a distinct key. TW128's IND-CPA and INT-CTXT
-properties (§8.1) then apply directly to each operation, and together imply IND-CCA2 (Bellare and Namprempre,
-ASIACRYPT 2000, Theorem 3.2). Chain independence (§8.4) ensures that subsequent protocol
-outputs — derived from the chain value under a different customization string (`0x20`) — reveal no information about
-the Seal key, so the confidentiality and authenticity guarantees are not weakened by the adversary's view of later
-operations.
+CMT-4 at the protocol level requires two conditions. Encoding injectivity ensures distinct transcripts produce
+distinct keys (collision probability at most $`q^2 / 2^{257}`$, dominated by the indifferentiability term in §6.6),
+so a ciphertext cannot be valid under two transcript histories. Under each key, TW128's CMT-4 property (§6.1)
+prevents two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs.
 
-For Seal to achieve CMT-4 committing security at the protocol level, two conditions must hold. First, distinct
-transcripts must produce distinct keys: encoding injectivity (§8.3) ensures distinct Seal operations evaluate KT128
-on distinct inputs, so under the random oracle model the derived keys collide with probability at most
-$`q^2 / 2^{8C+1}`$, which is dominated by the indifferentiability term in §8.7. An adversary therefore cannot
-produce a single ciphertext that is valid under two distinct transcript histories. Second, under each derived key, TW128 must be CMT-4 (§8.1), so the ciphertext
-does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs. KDF security (§8.3)
-ensures each key is indistinguishable from a uniformly random string, satisfying TW128's key distribution assumption.
+`Open` advances the transcript unconditionally. On verification failure, the computed tag differs from the sender's,
+causing transcript divergence for all subsequent operations.
 
-`Open` advances the transcript unconditionally with the computed tag. On verification failure, the receiver's computed
-tag differs from the sender's, and the chain frame absorbs a different value. All subsequent operations produce
-different results from the sender's.
+**Fork.** `Fork` does not finalize. Each of the $`N + 1`$ branches receives a distinct ordinal; encoding injectivity
+(§6.3) guarantees distinct transcripts and therefore independent outputs at any subsequent finalization.
 
-**Fork.** `Fork` does not finalize. All $`N + 1`$ branches share identical transcript up to the fork point and diverge
-via their ordinals. Since each branch receives a distinct ordinal and the encoding is injective (§8.3), all N+1 branches
-produce distinct transcripts, guaranteeing independent outputs at any subsequent finalization.
-
-### 8.7 Concrete Security Bound
+### 6.6 Concrete Security Bound
 
 The reduction has three layers: replace KT128 with a random oracle (indifferentiability), apply the RO-KDF argument per
-instance with inductive composition (§§8.3–8.5), and invoke TW128's IND-CPA, INT-CTXT, and CMT-4 properties
-(§8.1).
+instance with inductive composition (§§6.3–6.4), and invoke TW128's IND-CPA, INT-CTXT, and CMT-4 properties
+(§6.1).
 
 **Domain separation.** Operation codes are embedded in the transcript (the message $`M`$ to KT128), while customization
 strings are encoded separately via KT128's input format (RFC 9861, §3.2). The two are structurally separate and cannot
@@ -990,8 +947,8 @@ where:
   (conjectured negligible).
 - $`2(\sigma + t)^2 / 2^{c+1} = 2(\sigma + t)^2 / 2^{257}`$ is the sponge indifferentiability term, covering all
   Keccak-p evaluations globally (Thyrse backbone and TW128 internals). The factor of 2 arises from the Sakura
-  composition (§8.1).
-- $`2q \cdot \varepsilon_{\mathrm{kdf}}`$ accounts for the two-stage hybrid in §8.5: $`q`$ steps to replace chain
+  composition (§6.1).
+- $`2q \cdot \varepsilon_{\mathrm{kdf}}`$ accounts for the two-stage hybrid in §6.4: $`q`$ steps to replace chain
   values with random, plus $`q`$ steps to replace operational outputs (keys and Derive values) with random. Each
   step invokes Theorem 8 on a single oracle at cost $`\varepsilon_{\mathrm{kdf}}`$. For key material with
   $`\kappa`$ bits of min-entropy,
@@ -1000,9 +957,9 @@ where:
   setting, Theorem 8's sum over sources is dominated by the caller's weakest key material: the chain value source
   contributes at most $`t / 2^{512}`$ (negligible), so the per-instance bound collapses to the weakest
   caller-supplied source.
-- $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ bounds chain value collisions (§8.5).
+- $`q^2 / 2^{8H+1} = q^2 / 2^{513}`$ bounds chain value collisions (§6.4).
 - $`\varepsilon_{\mathrm{tw}}`$ is the combined advantage against TW128's IND-CPA, INT-CTXT, and CMT-4 properties.
-  See the TW128 specification for the concrete bound; the dominant term is $`S / 2^{8C} = S / 2^{256}`$ for forgery
+  See the TW128 specification for the concrete bound; the dominant term is $`S / 2^{256}`$ for forgery
   resistance.
 
 **Numerical evaluation.** For typical parameters — $`q \leq 2^{48}`$ finalizations, $`\sigma + t \leq 2^{64}`$ total
@@ -1017,26 +974,16 @@ The indifferentiability term dominates. The 128-bit security target is met as lo
 $`\varepsilon_{\mathrm{kdf}} \leq 2^{-128}`$ (i.e., the original key material has at least 128 bits of min-entropy)
 and the total data complexity satisfies $`\sigma + t \leq 2^{64}`$.
 
-### 8.8 Forward Secrecy
+### 6.7 Multi-User Security
 
-Every finalizing operation in Thyrse discards the pre-finalization transcript and replaces it with
-a chain frame containing a 512-bit pseudorandom chain value. This means every finalization is inherently a ratchet:
-the session state after any finalization contains no algebraic structure exploitable in a multi-target search. An
-adversary targeting pre-finalization key material must do so before the finalization occurs. The explicit `Ratchet`
-operation (§8.6) is distinguished only by producing no operational output, which eliminates the risk of leaking
-information through the output channel. Forward secrecy holds provided the implementation securely erases
-pre-finalization state (§8.6).
-
-### 8.9 Multi-User Security
-
-The bound in §8.7 covers a single Thyrse instance. This section extends the analysis to a setting with $`U`$
+The bound in §6.6 covers a single Thyrse instance. This section extends the analysis to a setting with $`U`$
 independent instances. We consider two cases: one-shot instances (a single finalization, as in a standalone AEAD or
 KDF) and running sessions (a chain of finalizations).
 
-#### 8.9.1 One-Shot Instances
+#### 6.7.1 One-Shot Instances
 
 When Thyrse is used as a one-shot construction (Init, Mix key material, then a single Mask, Seal, or Derive), each instance
-evaluates exactly one KDF link. The per-instance security reduces directly to the single-instance bound in §8.7. In a
+evaluates exactly one KDF link. The per-instance security reduces directly to the single-instance bound in §6.6. In a
 multi-user setting with $`U`$ one-shot instances and an adversary making $`t`$ offline queries against key material
 with $`\kappa`$ bits of min-entropy:
 
@@ -1069,21 +1016,21 @@ For $`U = 2^{48}`$: $`2^{96} / 2^{513} = 2^{-417}`$.
 The multi-target key recovery term dominates the user-scaling terms. For 256-bit keys and $`U = 2^{48}`$ one-shot
 instances: $`\varepsilon_{\mathrm{mu\text{-}key}} = 2^{48} \cdot 2^{65} / 2^{256} = 2^{-143}`$.
 
-#### 8.9.2 Running Sessions
+#### 6.7.2 Running Sessions
 
 When Thyrse is used as a running session with multiple finalizations, every finalizing operation replaces the chain
-value (§8.8). There is no fixed per-session key that persists across evaluations. In the chain classification of
+value (§6.4). There is no fixed per-session key that persists across evaluations. In the chain classification of
 Mattsson ("Security of Symmetric Ratchets and Key Chains," 2024, §3.1), Thyrse is comparable to an ω-chain
 (randomized key chain where $`k_{i+1} = \mathrm{KDF}(k_i, r_i, n)`$) with three structural improvements:
 
 - The chain state is 512 bits rather than the output key size.
-- Each link uses a recoverable encoding (§8.3), enabling the BCFG25 multi-input KDF reduction where any single
+- Each link uses a recoverable encoding (§6.3), enabling the BCFG25 multi-input KDF reduction where any single
   unpredictable input among the transcript's frames suffices for pseudorandomness.
 - The per-link randomization comes from the full transcript rather than a single random value.
 
 **No per-session key to target.** In a standard multi-user AEAD analysis, the adversary targets $`U`$ fixed keys,
 each encrypting many messages, and the multi-user advantage scales with $`U`$ because the adversary gets multiple
-observations under each key. Thyrse's ratcheting structure (§8.8) eliminates this attack surface: the chain value
+observations under each key. Thyrse's ratcheting structure (§6.4) eliminates this attack surface: the chain value
 after each finalization is fresh and used exactly once. The multi-target surface consists only of the $`U`$ initial
 key material values, not $`U \cdot q`$ chain values. This is analogous to the observation in Collins, Riepel, and Tran
 ("On the Tight Security of the Double Ratchet," CCS 2024, Theorem 5) that for composed ratchet protocols, the
@@ -1134,9 +1081,9 @@ number of instances, reducing the effective security margin from the single-inst
 $`U = 2^{32}`$ with $`2^{80}`$ total Keccak-p calls. Callers requiring 128-bit multi-user security at this scale
 should bound $`\sigma_{\mathrm{total}} + t \leq 2^{64}`$, which constrains the per-instance data complexity.
 
-## 9. Implementation Notes
+## 7. Implementation Notes
 
-### 9.1 Incremental Hashing
+### 7.1 Incremental Hashing
 
 Although the transcript is described as a byte string that is hashed in its entirety at each finalization, an
 implementation SHOULD use an incremental KT128 implementation. Non-finalizing operations (`Init`, `Mix`, `Fork`) feed
@@ -1148,19 +1095,17 @@ finalizations, which may execute in parallel. Note that KT128 can absorb up to 1
 first expensive permutation, which is sufficient for a typical AEAD header (`Init` + `Mix(key)` + `Mix(nonce)` +
 `Mix(ad)` with a 32-byte key, 12-byte nonce, and short AD).
 
-### 9.2 Constant-Time Operation
+### 7.2 Side-Channel Protections
 
-Implementations MUST ensure constant-time processing for all secret data. KT128 and TW128 MUST not branch on any
-input values. Tag verification in `Open` MUST use constant-time comparison.
-
-### 9.3 Memory Sanitization
+**Constant-time operation.** Implementations MUST ensure constant-time processing for all secret data. KT128 and
+TW128 MUST not branch on any input values. Tag verification in `Open` MUST use constant-time comparison.
 
 **Plaintext on failed `Open`.** `Open` decrypts ciphertext before verifying the tag. If verification fails, the
 plaintext buffer contains unauthenticated data that SHOULD be zeroed before returning. Implementations that decrypt
 in-place SHOULD overwrite the buffer with zeros (not with the original ciphertext, which may itself be
 attacker-controlled). Callers MUST NOT read or act on plaintext from a failed `Open`.
 
-**Protocol state.** The `Clear` operation (§7.8) zeros the internal state, buffered key material, and stored `Init`
+**Protocol state.** The `Clear` operation (§5.8) zeros the internal state, buffered key material, and stored `Init`
 label. Implementations SHOULD also zero derived TW128 keys and intermediate chain values as soon as they are no
 longer needed. For forward secrecy to hold after any finalization, the pre-finalization state SHOULD be erased;
 retaining it in memory weakens the forward secrecy guarantee.
@@ -1172,9 +1117,9 @@ chain values, intermediate KT128 or TW128 state) before returning from operation
 to dead memory, implementations SHOULD use platform-specific secure-zeroing primitives (e.g., `explicit_bzero`,
 `SecureZeroMemory`, `volatile` writes) to ensure that sensitive data is actually erased.
 
-### 9.4 Data Limits
+### 7.3 Data Limits
 
-**Proof model limits vs. practical limits.** The indifferentiability term in §8.7
+**Proof model limits vs. practical limits.** The indifferentiability term in §6.6
 ($`2(\sigma + t)^2 / 2^{c+1}`$) is a limit of the proof technique, not a known weakness in the construction. It
 bounds the advantage of an adversary who can distinguish the Keccak-p[1600,12] sponge from a random oracle, which is
 the model under which KT128's security is proven. The $`\sigma + t \leq 2^{64}`$ threshold at which this bound reaches
@@ -1191,41 +1136,11 @@ Keccak-p calls plus absorption of the transcript. Mask and Seal additionally inv
 proportional to the plaintext length.
 
 **Thyrse-specific limits.** Within Thyrse itself, there is no per-session key lifetime concern analogous to AEAD nonce
-exhaustion. Every finalizing operation ratchets the protocol state (§8.8), and the chain collision bound
-($`q^2 / 2^{513}`$, §8.5) remains negligible for any practical number of finalizations. Implementations do not need to
+exhaustion. Every finalizing operation ratchets the protocol state (§6.4), and the chain collision bound
+($`q^2 / 2^{513}`$, §6.4) remains negligible for any practical number of finalizations. Implementations do not need to
 enforce session-level data limits or rekeying intervals.
 
-## 10. Typical Usage: AEAD
-
-A standard AEAD construction:
-
-<!-- begin:code:ref/thyrse.py:usage_aead -->
-```python
-def _example_aead(key_material, nonce, associated_data, plaintext):
-    p = Protocol()
-    p.init(b"com.example.myprotocol")
-    p.mix(b"key", key_material)
-    p.mix(b"nonce", nonce)
-    p.mix(b"ad", associated_data)
-    ciphertext_tag = p.seal(b"message", plaintext)
-```
-<!-- end:code:ref/thyrse.py:usage_aead -->
-
-Decryption:
-
-<!-- begin:code:ref/thyrse.py:usage_aead_decrypt -->
-```python
-def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag):
-    p = Protocol()
-    p.init(b"com.example.myprotocol")
-    p.mix(b"key", key_material)
-    p.mix(b"nonce", nonce)
-    p.mix(b"ad", associated_data)
-    plaintext = p.open(b"message", ciphertext, tag)
-```
-<!-- end:code:ref/thyrse.py:usage_aead_decrypt -->
-
-## 11. References
+## 8. References
 
 - Alwen, J., Coretti, S., and Dodis, Y. "The Double Ratchet: Security Notions, Proofs, and Modularization for the
   Signal Protocol." EUROCRYPT 2019. Formalizes PRF-PRNG (KDF chain) as a cryptographic primitive (Definitions 16–17).
@@ -1261,15 +1176,15 @@ def _example_aead_decrypt(key_material, nonce, associated_data, ciphertext, tag)
 - NIST SP 800-185: SHA-3 Derived Functions (`left_encode`, `right_encode`, `encode_string`).
 - RFC 9861: KangarooTwelve and TurboSHAKE.
 - TW128 specification. Defines the tree-parallel authenticated encryption scheme used by Mask and Seal. Provides
-  IND-CPA, INT-CTXT, CMT-4, and tag PRF security claims referenced in §8.1.
+  IND-CPA, INT-CTXT, CMT-4, and tag PRF security claims referenced in §6.1.
 
-## 12. Test Vectors
+## 9. Test Vectors
 
 <!-- begin:vectors:docs/thyrse-test-vectors.json:thyrse -->
 All values are hex-encoded. All test vectors use `Init` label `"test.vector"`. Byte string literals are shown in hex as
 `(hex)`.
 
-### 12.1 Init + Derive
+### 9.1 Init + Derive
 
 Minimal protocol producing output.
 
@@ -1283,7 +1198,7 @@ output = p.derive(b"output", 32)
 |-------|-------|
 | Derive output | `25feba088971a4b573101369ea1c8d83e6f102c2dc46e5cceb81a0b97fca514c` |
 
-### 12.2 Init + Mix + Mix + Derive
+### 9.2 Init + Mix + Mix + Derive
 
 Multiple non-finalizing operations before `Derive`.
 
@@ -1299,7 +1214,7 @@ output = p.derive(b"output", 32)
 |-------|-------|
 | Derive output | `0db4090efec2ba935dac63a18d88df04859d1dedf4a60f428393674520b67e39` |
 
-### 12.3 Init + Mix + Seal + Derive
+### 9.3 Init + Mix + Seal + Derive
 
 Full AEAD followed by `Derive`.
 
@@ -1316,7 +1231,7 @@ output = p.derive(b"output", 32)
 | Seal output (ct ‖ tag) | `a47534a760edf2b24077a2211900cc4db7a97036337d22bdf17fb0a285e99e7ea122e6e5bf94804371089bdb67` |
 | Derive output | `72d797a1cc50197c6c4a28c3ba9722f7ea2da5be4debe6af8e0eac3989ab1333` |
 
-### 12.4 Init + Mix + Mask + Seal
+### 9.4 Init + Mix + Mask + Seal
 
 Combined unauthenticated and authenticated encryption.
 
@@ -1357,7 +1272,7 @@ output_after_ratchet = p.derive(b"output", 32)
 | Derive (no Ratchet) | `b20333efd472bf1cafbdfcc7c4aef46ca9984b768dbf84e33006024bead07dcf` |
 | Derive (after Ratchet) | `23be92e694890a8b3d6fb5b4885b3b5a63539ad8da6fc5e8e20cf34728dbeb91` |
 
-### 12.6 Fork + Derive
+### 9.6 Fork + Derive
 
 `Fork` with two branches, each producing `Derive`. All three outputs are independent.
 
@@ -1377,7 +1292,7 @@ clone_2_output = clones[1].derive(b"output", 32)  # "verifier" (ordinal 2)
 | Clone 1 / "prover" (ordinal 1) | `329696ce84ae7aef8577db9841d82956b60f9f7ce38449d8b83092f3a46a89ad` |
 | Clone 2 / "verifier" (ordinal 2) | `19644cc5d0a5bc8f52eb647a581b85ba868ce0cb3561f8d2a58f1bf6ed1a3e82` |
 
-### 12.7 Seal + Open Round-Trip
+### 9.7 Seal + Open Round-Trip
 
 Successful authenticated encryption and decryption. Post-operation `Derive` outputs match.
 
@@ -1405,7 +1320,7 @@ confirm = receiver.derive(b"confirm", 32)
 |-------|-------|
 | Seal output (ct ‖ tag) | `9761c8e0370bf42d6a3c8e16e343276d93da7d0ec9546fda99d53d5f8319981248c2106145d10c439e2451cb31` |
 
-### 12.8 Seal + Open with Tampered Ciphertext
+### 9.8 Seal + Open with Tampered Ciphertext
 
 `Open` returns ⊥ and subsequent `Derive` outputs diverge from the sender.
 
