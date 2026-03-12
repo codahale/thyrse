@@ -613,7 +613,7 @@ Evaluations with distinct $`S`$ values therefore have disjoint input spaces and 
 **TW128.** Thyrse uses TW128's `EncryptAndMAC` / `DecryptAndMAC` functions (TW128 spec §5.6), passing empty nonce and
 associated data. Under a uniformly random 32-byte key, TW128 provides:
 
-- **IND-CPA** confidentiality (nonce-free: each key is used once).
+- **IND-CPA** confidentiality. TW128 is nonce-respecting; Thyrse satisfies this by using each key exactly once.
 - **INT-CTXT** authenticity, with forgery probability at most $`S / 2^{256}`$ for $`S`$ attempts.
 - **CMT-4** committing security (Bellare and Hoang, EUROCRYPT 2022): a ciphertext does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs.
 - **Tag PRF:** the full 32-byte tag is a pseudorandom function of $`(\mathit{key}, \mathit{ciphertext})`$.
