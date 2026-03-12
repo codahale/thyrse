@@ -815,8 +815,8 @@ so that KDF security rests entirely on the caller's secret `Mix` inputs. The fol
 it shows that each chain value is indistinguishable from random and therefore alone satisfies Theorem 8's
 precondition for the next instance, even if no fresh key material is mixed.
 
-Assume Instance 0 contains at least one unpredictable input, as required by the per-operation
-preconditions (§5.4, §5.6, §5.7). The composition across $`q`$ instances is formalized as a sequence of $`q`$ hybrid
+Assume Instance 0 contains at least one unpredictable input — the precondition under which
+pseudorandomness is claimed (§6.5). The composition across $`q`$ instances is formalized as a sequence of $`q`$ hybrid
 games. In Hybrid $`j`$ (for $`j = 0, \ldots, q`$), the chain values $`\mathit{cv}_0, \ldots, \mathit{cv}_{j-1}`$ are
 replaced with
 uniformly random strings independent of all other protocol values. Hybrid 0 is the real game; Hybrid $`q`$ replaces
