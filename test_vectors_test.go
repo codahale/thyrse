@@ -55,13 +55,13 @@ func expectHex(t *testing.T, vec testVector, key string) string {
 }
 
 // TestVectors verifies the Go implementation against the shared test vectors in
-// docs/thyrse-test-vectors.json (the single source of truth for §16).
+// docs/thyrse-test-vectors.json (the single source of truth for §12).
 
 func TestVectors(t *testing.T) {
 	f := loadVectors(t)
 
 	t.Run("InitDerive", func(t *testing.T) {
-		vec := vecByID(t, f, "16.1")
+		vec := vecByID(t, f, "12.1")
 		p := thyrse.New(vec.InitLabel)
 		derive := p.Derive("output", nil, 32)
 
@@ -71,7 +71,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("MixMixDerive", func(t *testing.T) {
-		vec := vecByID(t, f, "16.2")
+		vec := vecByID(t, f, "12.2")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		p.Mix("nonce", []byte("test-nonce-value"))
@@ -83,7 +83,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("SealDerive", func(t *testing.T) {
-		vec := vecByID(t, f, "16.3")
+		vec := vecByID(t, f, "12.3")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		seal := p.Seal("message", nil, []byte("hello, world!"))
@@ -98,7 +98,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("MaskSeal", func(t *testing.T) {
-		vec := vecByID(t, f, "16.4")
+		vec := vecByID(t, f, "12.4")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		mask := p.Mask("unauthenticated", nil, []byte("mask this data"))
@@ -113,7 +113,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("DeriveNoRatchet", func(t *testing.T) {
-		vec := vecByID(t, f, "16.5.1")
+		vec := vecByID(t, f, "12.5.1")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		derive := p.Derive("output", nil, 32)
@@ -124,7 +124,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("RatchetDerive", func(t *testing.T) {
-		vec := vecByID(t, f, "16.5.2")
+		vec := vecByID(t, f, "12.5.2")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		p.Ratchet("forward-secrecy")
@@ -136,7 +136,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("ForkDerive", func(t *testing.T) {
-		vec := vecByID(t, f, "16.6")
+		vec := vecByID(t, f, "12.6")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		left, right := p.Fork("role", []byte("prover"), []byte("verifier"))
@@ -156,7 +156,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("SealOpenRoundTrip", func(t *testing.T) {
-		vec := vecByID(t, f, "16.7")
+		vec := vecByID(t, f, "12.7")
 		key := []byte("test-key-material")
 		nonce := []byte("test-nonce-value")
 		ad := []byte("associated data")
@@ -194,7 +194,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("SealOpenTampered", func(t *testing.T) {
-		vec := vecByID(t, f, "16.8")
+		vec := vecByID(t, f, "12.8")
 		key := []byte("test-key-material")
 		nonce := []byte("test-nonce-value")
 		plaintext := []byte("hello, world!")
@@ -231,7 +231,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("MultipleSeals1", func(t *testing.T) {
-		vec := vecByID(t, f, "16.9.1")
+		vec := vecByID(t, f, "12.9.1")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		p.Mix("nonce", []byte("test-nonce-value"))
@@ -243,7 +243,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("MultipleSeals2", func(t *testing.T) {
-		vec := vecByID(t, f, "16.9.2")
+		vec := vecByID(t, f, "12.9.2")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		p.Mix("nonce", []byte("test-nonce-value"))
@@ -256,7 +256,7 @@ func TestVectors(t *testing.T) {
 	})
 
 	t.Run("MultipleSeals3", func(t *testing.T) {
-		vec := vecByID(t, f, "16.9.3")
+		vec := vecByID(t, f, "12.9.3")
 		p := thyrse.New(vec.InitLabel)
 		p.Mix("key", []byte("test-key-material"))
 		p.Mix("nonce", []byte("test-nonce-value"))
