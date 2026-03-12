@@ -195,7 +195,7 @@ def _leaf_decrypt(base: _DuplexState, index: int, chunk: bytes) -> tuple[bytes, 
 <!-- end:code:ref/tw128.py:internal_functions -->
 
 Decryption produces the same tag as encryption because both `_duplex_encrypt` and `_duplex_decrypt` overwrite
-the rate with ciphertext, yielding identical state evolution (see Section 6.4).
+the rate with ciphertext, yielding identical state evolution (see Section 6.8).
 
 ### 5.6 EncryptAndMAC / DecryptAndMAC
 
@@ -323,13 +323,13 @@ def tw128_decrypt(K: bytes, N: bytes, AD: bytes, ct_tag: bytes) -> bytes | None:
 This section gives a complete reduction from TW128 AEAD security to the ideal-permutation assumption on
 Keccak-p[1600,12]. It is organized as follows:
 
-- **Sections 6.1–6.4** establish the model, justify the ideal-permutation assumption, import the external
-  theorems (MRV15, ADMV15, PRP/PRF switching) that underpin the analysis, and verify that TW128's
-  construction satisfies their preconditions.
+- **Sections 6.1–6.4** establish the model, justify the ideal-permutation assumption, cite supporting
+  external results (MRV15, ADMV15, PRP/PRF switching), and verify that TW128's construction
+  satisfies their preconditions.
 - **Sections 6.5–6.8** prove structural lemmas: encoding injectivity, context independence, exact
-  uniformity of node init states, and per-node PRF/PRP properties.
-- **Sections 6.9–6.13** decompose TW128 into a bare-game framework and reduce each AEAD goal
-  (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) to the per-node properties established above.
+  uniformity of construction π-outputs, and per-node structural properties (bijection, state equivalence).
+- **Sections 6.9–6.13** decompose TW128 into a bare-game framework grounded in exact uniformity
+  and reduce each AEAD goal (IND-CPA, INT-CTXT, IND-CCA2, CMT-4) to structural properties.
 - **Section 6.14** collects all bounds into a summary table.
 
 All bounds are in the ideal-permutation model for Keccak-p[1600,12], with capacity $`c = 256`$ bits and $`\tau = 32`$
@@ -391,9 +391,10 @@ in Section 6.14.
 $`\sigma^2 / 2^{1601}`$, which is negligible compared to $`\varepsilon_{\mathrm{cap}}`$ for $`c = 256 \ll 1600`$. This cost
 is not repeated in individual theorem statements.
 
-**Keyed duplex and keyed sponge (MRV15).** The following two theorems provide per-node PRF/PRP bounds;
-Section 6.4 verifies that TW128 satisfies their preconditions, and Section 6.8 applies them to individual
-tree nodes.
+**Keyed duplex (MRV15).** The following theorem provides per-node PRF bounds; Section 6.4 verifies that
+TW128 satisfies its preconditions. This result is not used in the AEAD proofs (Sections 6.9–6.12), which
+derive their conclusions from exact uniformity (Section 6.7); it is used for the tag-as-PRF property
+(Section 7.3).
 
 **Theorem (MRV15, Theorem 2 — FKD).** Let $`\mathrm{FKD}^{\pi}_K`$ be the
 full-state keyed duplex instantiated with an ideal permutation $`\pi`$ on $`b`$
@@ -409,48 +410,25 @@ total duplexing calls across all evaluations, and $`N`$ offline $`\pi`$-queries:
   \;+\; \frac{\mu N}{2^k}.
 ```
 
-**Theorem (MRV15, Theorem 1 — FKS).** Let $`\mathrm{FKS}^{\pi}_K`$ be the
-full-state keyed sponge with the same parameters. For an adversary making $`q`$
-sponge evaluations of at most $`\ell`$ input blocks each, $`\mu \leq q\ell`$ total
-blocks, and $`N`$ offline $`\pi`$-queries:
+Due to Mennink, Reyhanitabar, and Vizár (Asiacrypt 2015).
 
-```math
-\mathrm{Adv}^{\mathrm{ind}}_{\mathrm{FKS}^{\pi}_K,\,\pi}(q, \ell, \mu, N)
-  \;\leq\;
-  \frac{2(q\ell)^2}{2^b}
-  \;+\; \frac{2q^2\ell}{2^c}
-  \;+\; \frac{\mu N}{2^k}.
-```
+**Outer-keyed sponge (ADMV15).** TW128 absorbs the key into the rate rather than placing it directly in the
+capacity. ADMV15 (Andreeva, Daemen, Mennink, and Van Assche, FSE 2015) proves PRF security for this
+outer-keyed sponge construction $`\mathrm{Sponge}(K \| M)`$, confirming that rate-absorbed key loading is
+sound in the ideal-permutation model. Section 6.4 verifies the applicability to TW128's key-loading.
+The quantitative cost of key secrecy is charged directly in the bare-game decomposition (Section 6.9)
+via the freshness analysis (Section 6.7), rather than through the ADMV15 composite bound.
 
-Both theorems are due to Mennink, Reyhanitabar, and Vizár (Asiacrypt 2015).
-The structural difference is in the capacity term: FKD has $`(q\ell)^2 / 2^c`$
-(scaling with $`q^2\ell^2`$), while FKS has $`2q^2\ell / 2^c`$ (scaling with
-$`q^2\ell`$). FKS thus provides a tighter capacity bound per query when $`\ell`$ is
-large.
+### 6.4 MRV15 Applicability
 
-**Outer-keyed sponge (ADMV15).** The following theorem covers base-state pseudorandomness;
-Section 6.4 bridges TW128's key-loading to the outer-keyed sponge model, and Section 6.7 applies the
-result to prove exact uniformity of node init states.
-
-**Theorem (ADMV15, Theorems 5+6 — Outer-Keyed Sponge).** Let $`\mathrm{OKS}^{\pi}_K`$ be the
-outer-keyed sponge $`\mathrm{Sponge}(K \| M)`$ instantiated with an ideal permutation $`\pi`$ on $`b`$
-bits, capacity $`c`$, key length $`k`$, and rate $`r`$. The single-target PRF advantage is:
-
-```math
-\mathrm{Adv}^{\mathrm{ind}[1]}_{\mathrm{OKS}}(\sigma,\mu,t)
-  \;\leq\; \frac{\sigma^2 + 2\mu\, t}{2^c} + \lambda(t) + \frac{2\!\left(\frac{k}{r}\right)\!t}{2^b},
-```
-
-where $`\lambda(t)`$ is a key-recovery term bounded in ADMV15 Lemma 2. Due to Andreeva, Daemen, Mennink,
-and Van Assche (FSE 2015).
-
-### 6.4 Applicability to TW128
+This section verifies that TW128 satisfies the preconditions of MRV15 Theorem 2 (FKD). This verification
+is not used in the AEAD proofs (Sections 6.9–6.12); it is used for the tag-as-PRF property (Section 7.3)
+and for per-key capacity planning (Appendix C).
 
 TW128 nodes are keyed duplexes: the overwrite encrypt/decrypt operation fuses
 a squeeze of keystream with an absorption of plaintext in a single duplexing
 call, which requires the duplex's bidirectional interface. This matches MRV15's
-Full Keyed Duplex (FKD) model rather than the single-evaluation Full Keyed
-Sponge (FKS).
+Full Keyed Duplex (FKD) model.
 
 The parameters are $`b = 1600`$, $`c = 256`$, $`k = c = 256`$. Each
 leaf is a single duplex evaluation ($`q = 1`$), so at the per-leaf level the FKD
@@ -462,12 +440,13 @@ with $`l_i`$ duplexing calls.
 directly in the capacity portion of the state: $`S \gets 0^{b-k} \| K`$. TW128
 instead absorbs the key into the rate via standard sponge absorption — the
 outer-keyed sponge construction $`\mathrm{Sponge}(K \| M)`$. ADMV15 (Section 6.3)
-establishes that this is PRF-secure, so the post-init state is pseudorandom
-over the adversary's view. This satisfies MRV15's precondition: each node's
-subsequent duplex operation proceeds from a pseudorandom state. The init call
-is accounted for in $`\mu`$.
+confirms that this construction is PRF-secure in the ideal-permutation model.
+For the bare-game analyses, the key-secrecy property is charged directly via
+the freshness analysis (Section 6.7): each init $`\pi`$-input contains the secret
+key in the rate, so an adversary's offline query matches with probability at most
+$`1/2^k`$. The init call is accounted for in $`\mu`$.
 
-**Overwrite-mode coverage.** MRV15 assumes XOR-absorb. TW128 uses overwrite mode, but the two produce
+**Overwrite-mode equivalence.** MRV15 assumes XOR-absorb. TW128 uses overwrite mode, but the two produce
 identical state evolution: $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ followed by
 $`S[\mathit{pos}] \gets \mathit{ct}[j]`$ yields the same state byte as
 $`S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]`$. Ciphertext bytes are a deterministic, invertible
@@ -499,12 +478,11 @@ duplexing call. TW128's tags ($`\tau = 32`$ bytes) and chain values
 
 3. **Within a set.** Cross-instance: distinct absorption streams (different `encode_string` prefixes or different `LEU64(index)` values) produce distinct rate content at init, propagating through the capacity chain. Within-instance: each call inherits the previous call's capacity portion, pairwise distinct under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Both mechanisms apply to $`\mathcal{U}`$.
 
-**Consequence.** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, each role's $`\pi`$-calls are functionally independent of every other role's. This is the precondition for Section 6.6 (context independence), Sections 6.8–6.12 (independent leaf and tag analysis), and Section 6.13 (CMT-4 commitment analysis).
+**Consequence.** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, each role's $`\pi`$-calls are functionally independent of every other role's. This is the precondition for Section 6.6 (context independence), Sections 6.9–6.12 (bare-game analyses), and Section 6.13 (CMT-4 commitment analysis).
 
 ### 6.6 Context Independence
 
-This section shows that distinct `(K, N, AD, index)` tuples produce independent pseudorandom node init states,
-using `encode_string` injectivity, the outer-keyed sponge result (ADMV15), and domain separation (Section 6.5).
+**Lemma (Context independence).** Distinct `(K, N, AD, index)` tuples produce distinct init $`\pi`$-inputs.
 
 **Context encoding.** Each $`(K, N, AD)`$ triple defines a *context*. The context encoding is:
 
@@ -525,27 +503,20 @@ $`X \| \mathrm{LEU64}(i)`$ into a fresh state, followed by `0x08`-padding.
    produces distinct absorption streams $`X \| \mathrm{LEU64}(i)`$. Therefore every
    `(K, N, AD, i)` tuple yields a distinct pre-padding rate content.
 
-2. **Outer-keyed sponge (ADMV15).** The master key $`K`$ is secret and uniform, and appears in the rate
-   via `encode_string(K)`. By the outer-keyed sponge result (ADMV15, Theorems 5+6; Section 6.3),
-   the init π-output is pseudorandom, with advantage bounded by the ADMV15 terms in Section 6.3.
+2. **Domain separation (Section 6.5).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, init π-calls (set
+   $`\mathcal{I}`$, domain byte `0x08`) are on inputs disjoint from all other roles' π-calls. Distinct
+   init π-inputs therefore produce distinct init π-outputs, and these outputs are functionally
+   independent of all other construction components.
 
-3. **Domain separation (Section 6.5).** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, init π-calls (set
-   $`\mathcal{I}`$, domain byte `0x08`) are on inputs disjoint from all other roles' π-calls. The
-   init states are therefore functionally independent of all other construction components.
+No context-collision term is needed: `encode_string` injectivity is exact (not probabilistic),
+and node-index distinctness is structural. The quantitative cost of key secrecy (preventing adversary
+offline queries from coinciding with init π-inputs) is charged once in the bare-game decomposition
+(Section 6.9) via the freshness analysis (Section 6.7).
 
-**Bound:**
-
-```math
-\varepsilon_{\mathrm{ctx\text{-}ind}} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k},
-```
-where $`\varepsilon_{\mathrm{cap}}`$ covers $`\mathsf{Bad}_{\mathrm{perm}}`$ (needed for domain separation and
-capacity-chain distinctness), and $`\mu\, t / 2^k`$ is the online-vs-offline term from the ADMV15 outer-keyed
-sponge bound. No context-collision term is needed: `encode_string` injectivity is exact (not probabilistic),
-and node-index distinctness is structural.
-
-**Summary.** IND-CPA (Section 6.10), INT-CTXT (Section 6.11), and IND-CCA2 (Section 6.12) are analyzed
-conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, with each node's init state treated as pseudorandom and
-independent. CMT-4 (Section 6.13) is a multi-key notion with a standalone proof that does not use this argument.
+**Consequence.** Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and adversary-query freshness, each node's init
+state is exactly uniform and independent of all other nodes' init states and of all non-init construction
+components. This is the structural precondition for the bare-game analyses in Sections 6.10–6.12.
+CMT-4 (Section 6.13) is a multi-key notion with a standalone proof that does not use this argument.
 
 ### 6.7 Exact Uniformity
 
@@ -572,54 +543,48 @@ are exactly uniform. This principle is the engine for the bare-bound analyses in
 are accounted for, the remaining advantage reduces to structural collision and forgery probabilities over truly uniform
 values.
 
-### 6.8 Per-Node Security Lemmas
+### 6.8 Per-Node Structural Lemmas
 
-Assume a pseudorandom init state for each node, as established by context independence (Section 6.6).
+**Overwrite-mode equivalence.** Overwrite mode and XOR-absorb of plaintext produce identical state evolution:
+$`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ followed by
+$`S[\mathit{pos}] \gets \mathit{ct}[j]`$ yields the same state byte as
+$`S[\mathit{pos}] \mathrel{\oplus}= \mathit{pt}[j]`$. Both lemmas below depend on this equivalence.
 
-**Lemma 1 (Keyed-duplex pseudorandomness).**
-For any node with a pseudorandom init state (Section 6.6), the PRF advantage distinguishing its rate outputs
-from uniformly random is at most $`\varepsilon_{\mathrm{ks}}(1, l_i, l_i, t)`$, where $`l_i`$ is the number of
-duplexing calls for node $`i`$.
-
-*Proof.* Pseudorandom init state (Section 6.6), domain separation (Section 6.5), and applicability (Section 6.4)
-satisfy the preconditions of MRV15 Theorem 2 (FKD). The bound follows directly.
-
-**Lemma 2 (Fixed-key bijection).**
+**Lemma 1 (Fixed-key bijection).**
 For a fixed init state and message length, encrypt is a bijection on the message space. Each ciphertext byte
 $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ uniquely determines $`\mathit{pt}[j]`$ given the state,
-and state evolution is direction-independent (overwrite mode, Section 6.4), so decrypt inverts encrypt exactly.
+and state evolution is direction-independent (overwrite-mode equivalence), so decrypt inverts encrypt exactly.
 Each chunk is processed by an independent node, so the full $`n`$-node encrypt is also a bijection between
 equal-length plaintexts and ciphertexts. This is used in Section 6.13 (CMT-4).
 
-**Tag pseudorandomness.** The final node is always one continuous FKD evaluation: for n=1 it encrypts and
-squeezes the tag; for n>1 it also absorbs the hop frame and chain values before squeezing. MRV15 Theorem 2
-applies to the entire sequence (Section 6.4). By domain separation (Section 6.5, sets $`\mathcal{T}_s`$ and
-$`\mathcal{T}_f`$), the tag-squeeze $`\pi`$-call is disjoint from all other construction calls. The tag is
-therefore pseudorandom with advantage at most $`\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)`$, where $`\ell_f`$
-is the total duplexing calls in the final node. Decrypt produces the same tag as encrypt because both write
-the same ciphertext bytes into the rate (overwrite mode, Section 6.4).
+**Lemma 2 (Encrypt/decrypt state equivalence).**
+Decrypt produces the same tag as encrypt because both write the same ciphertext bytes into the rate
+(overwrite-mode equivalence). This holds for all nodes: each leaf produces the same chain value under
+encrypt and decrypt, and the final node absorbs the same chain values and squeezes the same tag.
 
 ### 6.9 Bare-Game Framework
 
 All analyses in Sections 6.10–6.12 work conditioned on
-$`\neg\mathsf{Bad}_{\mathrm{perm}}`$ (Section 6.3). The cost of this event
-($`\varepsilon_{\mathrm{cap}}`$) is charged once and does not recur.
+$`\neg\mathsf{Bad}_{\mathrm{perm}}`$ (Section 6.3) and adversary-query freshness (Section 6.7).
+The cost of $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ ($`\varepsilon_{\mathrm{cap}}`$) and freshness failure
+($`\mu\, t / 2^c`$) are each charged once and do not recur.
 (CMT-4, Section 6.13, is a multi-key notion with a standalone bound.)
 
 Define the **bare advantage** $`\mathrm{Adv}_{\Pi}^{\mathrm{bare}}`$ as the adversary's advantage against the
-construction under independent pseudorandom per-node init states, conditioned on $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and
-adversary-query freshness (Section 6.7). Each AEAD property's total advantage decomposes as:
+construction conditioned on both $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ and adversary-query freshness. Under these
+conditions, every construction $`\pi`$-call is on a fresh input and therefore produces an exactly uniform output
+(Section 6.7).
+
+Each AEAD property's total advantage decomposes as:
 
 ```math
 \mathrm{Adv}_{\Pi} \le \varepsilon_{\mathrm{cap}} + \frac{\mu\, t}{2^k} + \mathrm{Adv}_{\Pi}^{\mathrm{bare}}.
 ```
 where $`\mu`$ is the total absorbed blocks across all keyed construction
-evaluations (base-state prefix absorption plus leaf and final-node duplexing calls). The $`\mu\, t / 2^k`$ term combines
-the online-vs-offline cost from the outer-keyed sponge (Section 6.4) and per-node freshness (Section 6.7).
-
-The per-leaf MRV15 FKD capacity terms are absorbed by $`\varepsilon_{\mathrm{cap}}`$: they sum to
-$`\sum \ell_i^2 / 2^c \leq (\sum \ell_i)^2 / 2^c`$, and since each $`\ell_i`$ counts duplexing calls
-that are a subset of the $`\sigma`$ total online $`\pi`$-calls, $`(\sum \ell_i)^2 / 2^c \leq 2\varepsilon_{\mathrm{cap}}`$.
+evaluations (base-state prefix absorption plus leaf and final-node duplexing calls). The $`\mu\, t / 2^k`$ term
+is the freshness-failure probability from Section 6.7: each of the $`\mu`$ construction $`\pi`$-inputs contains
+a secret component (key in rate for init calls, inherited capacity for intermediate calls) that an adversary
+offline query matches with probability at most $`1/2^k = 1/2^c`$, over $`t`$ offline queries.
 
 ### 6.10 IND-CPA (Nonce-Respecting)
 
@@ -636,12 +601,12 @@ Oracle Enc_b(N, AD, M0, M1):
 
 **Claim.** $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
 
-*Justification.* Each encryption query uses a fresh nonce, so each context is distinct and produces an independent
-pseudorandom init state (Section 6.6). Under a pseudorandom init, each node's rate outputs are pseudorandom
-(Lemma 1, Section 6.8). Each ciphertext byte $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is therefore
-pseudorandom and plaintext-independent — overwrite mode writes $`\mathit{ct}[j]`$ (not $`\mathit{pt}[j]`$) into the
-state, so subsequent state evolution is also plaintext-independent. For n > 1, leaves operate on independent init
-states (domain separation, Section 6.5), so the joint distribution of all ciphertext chunks and the tag is
+*Justification.* Under the bare-game conditioning (Section 6.9), every construction $`\pi`$-output is exactly
+uniform. Each ciphertext byte $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is therefore a one-time pad:
+$`S[\mathit{pos}]`$ is exactly uniform and plaintext-independent. Overwrite mode writes $`\mathit{ct}[j]`$ (not
+$`\mathit{pt}[j]`$) into the state, so subsequent state evolution depends only on the ciphertext, not the
+plaintext choice. For n > 1, leaves operate on independent init states (domain separation, Section 6.5;
+context independence, Section 6.6), so the joint distribution of all ciphertext chunks and the tag is
 independent of the adversary's plaintext choice.
 
 The total bound follows from the decomposition in Section 6.9.
@@ -666,14 +631,15 @@ Oracle Forge(N, AD, C):
 
 **Claim.** $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.`$
 
-*Justification.* The tag is pseudorandom for any given context (tag pseudorandomness, Section 6.8). A forgery
-must either target a different context — producing an independent init state (Section 6.6) and therefore an
-independent tag — or the same context with a modified ciphertext. In the latter case, any change to the
-ciphertext (whether in content, length, or chunk count) alters the input to at least one $`\pi`$-call in the
-tag's dependency chain: a different ciphertext byte changes the rate via overwrite mode; a different length
-shifts absorption boundaries or changes the `length_encode` suffix; crossing the n=1/n>1 boundary changes
-the tag domain byte (`0x07` vs `0x06`). Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, the altered $`\pi`$-input is
-fresh, and freshness cascades through the capacity chain to the tag squeeze (exact uniformity, Section 6.7).
+*Justification.* Under the bare-game conditioning (Section 6.9), every construction $`\pi`$-output is exactly
+uniform. A forgery must either target a different context — producing an independent init state (Section 6.6)
+and therefore an independent, exactly uniform tag — or the same context with a modified ciphertext. In the
+latter case, any change to the ciphertext (whether in content, length, or chunk count) alters the input to at
+least one $`\pi`$-call in the tag's dependency chain: a different ciphertext byte changes the rate via overwrite
+mode; a different length shifts absorption boundaries or changes the `length_encode` suffix; crossing the n=1/n>1
+boundary changes the tag domain byte (`0x07` vs `0x06`). The altered $`\pi`$-input is fresh (bare-game
+conditioning), and freshness cascades through the capacity chain to the tag squeeze, producing an exactly
+uniform tag (Section 6.7).
 
 Each forgery attempt therefore succeeds with probability at most $`2^{-8\tau}`$. Across $`S`$ attempts (union bound):
 
@@ -722,7 +688,7 @@ The adversary has direct access to the ideal permutation $`\pi`$ and its inverse
 
 - **Case 1: same context, different message.** $`(K,N,AD)=(K',N',AD')`$, so $`M \neq M'`$ (since
   full tuples are distinct). Both openings use the same base state and the same chunking
-  (equal-length messages). By Lemma 2 (fixed-key bijection, Section 6.8), the encrypt function is a
+  (equal-length messages). By Lemma 1 (fixed-key bijection, Section 6.8), the encrypt function is a
   bijection on equal-length messages for a fixed init state. Two different messages cannot produce the same
   ciphertext. This case is **impossible**.
 - **Case 2: different context, base-state collision.** $`(K,N,AD)\neq(K',N',AD')`$ but $`L = L'`$. The
@@ -836,14 +802,19 @@ The remaining per-key terms are independent across keys and summed via union bou
 | 192-bit    | nonce collisions | $`\approx 2^{52}`$ GiB            |
 | 256-bit    | proof bound      | $`\approx 2^{80}`$ GiB            |
 
-**Tag as PRF output.** TW128's tag is a full PRF output, not just a MAC (Section 6.8). Protocols that derive
-further keying material from the tag may rely on this property.
+**Tag as PRF output.** TW128's tag is a full PRF output, not just a MAC. The final node is a keyed duplex
+evaluation: it encrypts chunk 0, absorbs chain values (if any), and squeezes the tag — all within a single
+continuous FKD instance. Section 6.4 verifies that TW128 satisfies MRV15's preconditions (overwrite-mode
+equivalence, squeeze within one rate block, outer-keyed sponge initialization). By MRV15 Theorem 2
+(Section 6.3), the tag is therefore pseudorandom with advantage at most
+$`\varepsilon_{\mathrm{ks}}(1, \ell_f, \ell_f, t)`$, where $`\ell_f`$ is the final node's duplexing-call count.
+Protocols that derive further keying material from the tag may rely on this property.
 
 ## 8. References
 
 - **[ADMV15]** Andreeva, E., Daemen, J., Mennink, B., and Van Assche, G. "Security of Keyed Sponge Constructions Using
-  a Modular Proof Approach." FSE 2015. Proves PRF security of both inner-keyed and outer-keyed sponge variants. The
-  outer-keyed result covers TW128's rate-absorbed key initialization (Section 6.4).
+  a Modular Proof Approach." FSE 2015. Proves PRF security of the outer-keyed sponge construction, confirming that
+  TW128's rate-absorbed key loading is sound (Section 6.4).
 - **[AM09]** Aumasson, J.-P. and Meier, W. "Zero-sum distinguishers for reduced Keccak-f and for the core functions of
   Luffa and Hamsi." 2009. https://www.aumasson.jp/data/papers/AM09.pdf. Presents zero-sum distinguishers up to 16 rounds.
 - **[BDPVA11]** Bertoni, G., Daemen, J., Peeters, M., and Van Assche, G. "Duplexing the Sponge: Single-Pass
@@ -867,10 +838,9 @@ further keying material from the tag may rely on this property.
 - **[DGPW11]** Duc, A., Guo, J., Peyrin, T., and Wei, L. "Unaligned Rebound Attack - Application to Keccak." IACR
   ePrint 2011/420. Gives differential distinguishers up to 8 rounds of Keccak internal permutations.
 - **[MRV15]** Mennink, B., Reyhanitabar, R., and Vizár, D. "Security of Full-State Keyed Sponge and Duplex:
-  Applications to Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Primary security framework for
-  TW128. Proves beyond-birthday-bound PRF security for the full-state keyed sponge (Theorem 1, FKS) and full-state
-  keyed duplex (Theorem 2, FKD) in the ideal-permutation model. Theorem 2 (FKD) is used for leaf ciphers.
-  Used throughout Section 6.
+  Applications to Authenticated Encryption." Asiacrypt 2015. IACR ePrint 2015/541. Proves beyond-birthday-bound
+  PRF security for the full-state keyed duplex (Theorem 2, FKD) in the ideal-permutation model. Used for the
+  tag-as-PRF property (Section 7.3).
 - **[NIST SP 800-185]** Kelsey, J., Chang, S.-j., and Perlner, R. "SHA-3 Derived Functions: cSHAKE, KMAC, TupleHash,
   and ParallelHash." NIST SP 800-185, 2016. https://csrc.nist.gov/pubs/sp/800/185/final. Defines `left_encode`
   and `encode_string`, used by TW128 for injective context encoding.
