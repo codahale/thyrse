@@ -840,8 +840,10 @@ $`\mathrm{Adv}_{\mathrm{IND\text{-}CPA}}^{\mathrm{bare}} = 0`$.
   across blocks: because ciphertext bytes (not plaintext bytes) are written into the state, the duplex state after
   each block depends only on the ciphertext and the inherited capacity.
 
-  - *Block 0:* The `init` step absorbs the truly random key $`K_{tw}`$ and applies $`\pi`$ via `pad_permute`; the
-    resulting state is uniformly random (Lemma 1). Each ciphertext byte
+  - *Block 0:* The `init` step absorbs the truly random key $`K_{tw}`$ and applies $`\pi`$ via `pad_permute`.
+    The secret uniform key ensures no other call shares this rate content, and domain separation ensures no
+    cross-role collision, so the $`\pi`$-input is novel and the resulting state is truly uniform by the exact
+    uniformity principle of Section 6.1. Each ciphertext byte
     $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is uniform because XOR with a uniform value is uniform.
     The overwrite rule writes $`\mathit{ct}[j]`$ into the state, so the post-block state depends only on uniform
     ciphertext values and is plaintext-independent.
