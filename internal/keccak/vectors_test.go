@@ -76,7 +76,7 @@ func state1FromBytes(t *testing.T, in []byte) State1 {
 	var s State1
 	for lane := range Lanes {
 		base := lane * 8
-		s.a[lane] = binary.LittleEndian.Uint64(in[base : base+8])
+		s.A[lane] = binary.LittleEndian.Uint64(in[base : base+8])
 	}
 	return s
 }
@@ -85,7 +85,7 @@ func state1Bytes(s *State1) []byte {
 	out := make([]byte, StateBytes)
 	for lane := range Lanes {
 		base := lane * 8
-		binary.LittleEndian.PutUint64(out[base:base+8], s.a[lane])
+		binary.LittleEndian.PutUint64(out[base:base+8], s.A[lane])
 	}
 	return out
 }
@@ -214,10 +214,10 @@ func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
 func TestDuplexAbsorbCV(t *testing.T) {
 	// Build a State1 with known lane values.
 	var leaf State1
-	leaf.a[0] = 0x0102030405060708
-	leaf.a[1] = 0x090a0b0c0d0e0f10
-	leaf.a[2] = 0x1112131415161718
-	leaf.a[3] = 0x191a1b1c1d1e1f20
+	leaf.A[0] = 0x0102030405060708
+	leaf.A[1] = 0x090a0b0c0d0e0f10
+	leaf.A[2] = 0x1112131415161718
+	leaf.A[3] = 0x191a1b1c1d1e1f20
 
 	// Absorb via AbsorbCV.
 	var d1 Duplex
@@ -225,32 +225,15 @@ func TestDuplexAbsorbCV(t *testing.T) {
 
 	// Absorb via manual byte extraction + Absorb.
 	var cv [32]byte
-	leaf.ExtractBytes(cv[:])
+	binary.LittleEndian.PutUint64(cv[0:8], leaf.A[0])
+	binary.LittleEndian.PutUint64(cv[8:16], leaf.A[1])
+	binary.LittleEndian.PutUint64(cv[16:24], leaf.A[2])
+	binary.LittleEndian.PutUint64(cv[24:32], leaf.A[3])
 	var d2 Duplex
 	d2.Absorb(cv[:])
 
 	if d1.s != d2.s || d1.pos != d2.pos {
 		t.Fatal("AbsorbCV and Absorb(cv[:]) diverged")
-	}
-}
-
-func TestDuplexChain(t *testing.T) {
-	var a Duplex
-	a.Absorb([]byte("hello"))
-
-	var b Duplex
-	a.Chain(&b, 0x20, 0x21)
-
-	if a.pos != 0 || b.pos != 0 {
-		t.Fatalf("pos after Chain: a=%d b=%d", a.pos, b.pos)
-	}
-
-	outA := make([]byte, 32)
-	outB := make([]byte, 32)
-	a.Squeeze(outA)
-	b.Squeeze(outB)
-	if string(outA) == string(outB) {
-		t.Fatal("Chain with different ds produced same output")
 	}
 }
 
@@ -274,9 +257,9 @@ func TestPermuteVectorsState8(t *testing.T) {
 		ins := stateNFromHex(t, tc.In, 8)
 		wants := stateNFromHex(t, tc.Out, 8)
 		var s State8
-		stateNSetBytes(ins, 8, func(inst, lane int, v uint64) { s.a[lane][inst] = v })
+		stateNSetBytes(ins, 8, func(inst, lane int, v uint64) { s.A[lane][inst] = v })
 		s.Permute12()
-		for inst, got := range stateNBytes(8, func(i, lane int) uint64 { return s.a[lane][i] }) {
+		for inst, got := range stateNBytes(8, func(i, lane int) uint64 { return s.A[lane][i] }) {
 			if string(got) != string(wants[inst]) {
 				t.Fatalf("permute8[%d] lane %d mismatch", i, inst)
 			}

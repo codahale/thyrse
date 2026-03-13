@@ -30,17 +30,7 @@ func BenchmarkFastLoopAbsorb168(b *testing.B) {
 			b.SetBytes(int64(size.n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopAbsorb168(in)
-			}
-		})
-
-		in2 := makeInput(2 * size.n)
-		b.Run("x2/"+size.name, func(b *testing.B) {
-			var s State2
-			b.SetBytes(int64(2 * size.n))
-			for b.Loop() {
-				s.Reset()
-				s.FastLoopAbsorb168(in2, size.n)
+				s.fastLoopAbsorb168(in)
 			}
 		})
 
@@ -50,7 +40,7 @@ func BenchmarkFastLoopAbsorb168(b *testing.B) {
 			b.SetBytes(int64(8 * size.n))
 			for b.Loop() {
 				s.Reset()
-				s.FastLoopAbsorb168(in8, size.n)
+				s.fastLoopAbsorb168(in8, size.n)
 			}
 		})
 	}
@@ -64,15 +54,7 @@ func BenchmarkAbsorbFinal(b *testing.B) {
 		var s State1
 		for b.Loop() {
 			s.Reset()
-			s.AbsorbFinal(tail, 0x0B)
-		}
-	})
-
-	b.Run("x2", func(b *testing.B) {
-		var s State2
-		for b.Loop() {
-			s.Reset()
-			s.AbsorbFinal(tail, tail, 0x0B)
+			s.absorbFinal(tail, 0x0B)
 		}
 	})
 
@@ -80,7 +62,7 @@ func BenchmarkAbsorbFinal(b *testing.B) {
 		var s State8
 		for b.Loop() {
 			s.Reset()
-			s.AbsorbFinal(tail, tail, tail, tail, tail, tail, tail, tail, 0x0B)
+			s.absorbFinal(tail, tail, tail, tail, tail, tail, tail, tail, 0x0B)
 		}
 	})
 }
@@ -88,10 +70,10 @@ func BenchmarkAbsorbFinal(b *testing.B) {
 func BenchmarkAbsorbCVx8(b *testing.B) {
 	var s8 State8
 	for inst := range 8 {
-		s8.a[0][inst] = uint64(inst + 1)
-		s8.a[1][inst] = uint64(inst + 0x10)
-		s8.a[2][inst] = uint64(inst + 0x20)
-		s8.a[3][inst] = uint64(inst + 0x30)
+		s8.A[0][inst] = uint64(inst + 1)
+		s8.A[1][inst] = uint64(inst + 0x10)
+		s8.A[2][inst] = uint64(inst + 0x20)
+		s8.A[3][inst] = uint64(inst + 0x30)
 	}
 
 	b.Run("x8", func(b *testing.B) {
@@ -103,19 +85,4 @@ func BenchmarkAbsorbCVx8(b *testing.B) {
 		}
 	})
 
-	b.Run("x2", func(b *testing.B) {
-		var s2 State2
-		for inst := range 2 {
-			*s2.lane2(0, inst) = s8.a[0][inst]
-			*s2.lane2(1, inst) = s8.a[1][inst]
-			*s2.lane2(2, inst) = s8.a[2][inst]
-			*s2.lane2(3, inst) = s8.a[3][inst]
-		}
-		var d Duplex
-		b.SetBytes(2 * 32)
-		for b.Loop() {
-			d.Reset()
-			d.AbsorbCVx2(&s2)
-		}
-	})
 }

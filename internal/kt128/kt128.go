@@ -323,25 +323,11 @@ var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 // leafStateX1 computes a single KT128 leaf state.
 func leafStateX1(data []byte, s *keccak.State1) {
 	s.Reset()
-	off := s.FastLoopAbsorb168(data)
-	s.AbsorbFinal(data[off:], leafDS)
-	s.Permute12()
+	s.AbsorbAll(data, leafDS)
 }
 
 // leafStateX8 computes 8 leaf states in parallel.
 func leafStateX8(data []byte, s *keccak.State8) {
 	s.Reset()
-	off := s.FastLoopAbsorb168(data, BlockSize)
-	s.AbsorbFinal(
-		data[off:BlockSize],
-		data[BlockSize+off:2*BlockSize],
-		data[2*BlockSize+off:3*BlockSize],
-		data[3*BlockSize+off:4*BlockSize],
-		data[4*BlockSize+off:5*BlockSize],
-		data[5*BlockSize+off:6*BlockSize],
-		data[6*BlockSize+off:7*BlockSize],
-		data[7*BlockSize+off:8*BlockSize],
-		leafDS,
-	)
-	s.Permute12()
+	s.AbsorbAll(data, BlockSize, leafDS)
 }

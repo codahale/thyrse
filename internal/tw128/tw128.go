@@ -55,6 +55,50 @@ func initBase(base *keccak.Duplex, key, nonce, ad []byte) {
 	base.Absorb(ad)
 }
 
+// initX8 broadcasts base into all 8 lanes of s, XORs each suffixes[i] as an
+// 8-byte LE value at byte position basePos, applies pad10*1 with ds at
+// basePos+8, and permutes. This initializes 8 tree nodes in parallel from
+// a shared base duplex state.
+func initX8(s *keccak.State8, base *keccak.State1, basePos int, suffixes [8]uint64, ds byte) {
+	// Broadcast base into all 8 instances.
+	for lane := range keccak.Lanes {
+		for inst := range 8 {
+			s.A[lane][inst] = base.A[lane]
+		}
+	}
+
+	// XOR each suffix (8-byte LE) at basePos.
+	byteInLane := basePos & 7
+	laneIdx := basePos >> 3
+	if byteInLane == 0 {
+		// Lane-aligned: suffix fits in one lane.
+		for inst := range 8 {
+			s.A[laneIdx][inst] ^= suffixes[inst]
+		}
+	} else {
+		// Split across two lanes.
+		shift := uint(byteInLane) * 8
+		for inst := range 8 {
+			s.A[laneIdx][inst] ^= suffixes[inst] << shift
+			s.A[laneIdx+1][inst] ^= suffixes[inst] >> (64 - shift)
+		}
+	}
+
+	// Pad10*1 at basePos+8 with ds, then permute.
+	padPos := basePos + 8
+	padShift := uint((padPos & 7) << 3)
+	padLane := padPos >> 3
+	dsMask := uint64(ds) << padShift
+	endShift := uint(((keccak.Rate - 1) & 7) << 3)
+	endMask := uint64(0x80) << endShift
+	endLane := (keccak.Rate - 1) >> 3
+	for inst := range 8 {
+		s.A[padLane][inst] ^= dsMask
+		s.A[endLane][inst] ^= endMask
+	}
+	s.Permute12()
+}
+
 // initNode clones base, absorbs LEU64(index), and pad-permutes with initDS.
 func initNode(d *keccak.Duplex, base *keccak.Duplex, index uint64) {
 	*d = base.Clone()
@@ -221,9 +265,9 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	// Small remainder via x1.
 	for idx < nFlush {
 		off := idx * ChunkSize
-		var s1 keccak.State1
-		encryptX1(&e.base, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
-		e.final.AbsorbCV(&s1)
+		var d keccak.Duplex
+		encryptX1(&e.base, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &d)
+		e.final.AbsorbCV(d.State())
 		e.nLeaves++
 		idx++
 	}
@@ -335,9 +379,9 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	// Small remainder via x1.
 	for idx < nFlush {
 		off := idx * ChunkSize
-		var s1 keccak.State1
-		decryptX1(&d.base, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &s1)
-		d.final.AbsorbCV(&s1)
+		var leaf keccak.Duplex
+		decryptX1(&d.base, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &leaf)
+		d.final.AbsorbCV(leaf.State())
 		d.nLeaves++
 		idx++
 	}
@@ -350,72 +394,30 @@ func (d *Decryptor) Finalize() [TagSize]byte {
 	return d.finalizeInternal()
 }
 
-// finalPos returns the duplex position after encrypting/decrypting chunkLen bytes.
-func finalPos(chunkLen int) int {
-	if chunkLen == 0 {
-		return 0
-	}
-	p := chunkLen % keccak.Rate
-	if p == 0 {
-		return keccak.Rate
-	}
-	return p
-}
-
-func encryptX1(base *keccak.Duplex, index uint64, pt, ct []byte, s *keccak.State1) {
-	var d keccak.Duplex
-	initNode(&d, base, index)
-	*s = d.CopyState()
-
-	done := s.FastLoopEncrypt168(pt, ct)
-	s.EncryptBytesAt(0, pt[done:], ct[done:])
-
-	s.PadPermute(finalPos(len(pt)), chainValueDS)
+func encryptX1(base *keccak.Duplex, index uint64, pt, ct []byte, d *keccak.Duplex) {
+	initNode(d, base, index)
+	d.State().EncryptAll(pt, ct, chainValueDS)
 }
 
 func encryptX8(base *keccak.Duplex, baseIndex uint64, pt, ct []byte, s *keccak.State8) {
-	baseState := base.CopyState()
-	basePos := base.Pos()
 	suffixes := [8]uint64{
 		baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3,
 		baseIndex + 4, baseIndex + 5, baseIndex + 6, baseIndex + 7,
 	}
-	s.TW128Init(&baseState, basePos, suffixes, initDS)
-
-	done := s.FastLoopEncrypt168(pt, ct, ChunkSize)
-	tail := ChunkSize - done
-	for inst := range 8 {
-		s.EncryptBytes(inst, pt[inst*ChunkSize+done:inst*ChunkSize+done+tail], ct[inst*ChunkSize+done:inst*ChunkSize+done+tail])
-	}
-
-	s.PadPermute(finalPos(ChunkSize), chainValueDS)
+	initX8(s, base.State(), base.Pos(), suffixes, initDS)
+	s.EncryptAll(pt, ct, ChunkSize, chainValueDS)
 }
 
-func decryptX1(base *keccak.Duplex, index uint64, ct, pt []byte, s *keccak.State1) {
-	var d keccak.Duplex
-	initNode(&d, base, index)
-	*s = d.CopyState()
-
-	done := s.FastLoopDecrypt168(ct, pt)
-	s.DecryptBytesAt(0, ct[done:], pt[done:])
-
-	s.PadPermute(finalPos(len(ct)), chainValueDS)
+func decryptX1(base *keccak.Duplex, index uint64, ct, pt []byte, d *keccak.Duplex) {
+	initNode(d, base, index)
+	d.State().DecryptAll(ct, pt, chainValueDS)
 }
 
 func decryptX8(base *keccak.Duplex, baseIndex uint64, ct, pt []byte, s *keccak.State8) {
-	baseState := base.CopyState()
-	basePos := base.Pos()
 	suffixes := [8]uint64{
 		baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3,
 		baseIndex + 4, baseIndex + 5, baseIndex + 6, baseIndex + 7,
 	}
-	s.TW128Init(&baseState, basePos, suffixes, initDS)
-
-	done := s.FastLoopDecrypt168(ct, pt, ChunkSize)
-	tail := ChunkSize - done
-	for inst := range 8 {
-		s.DecryptBytes(inst, ct[inst*ChunkSize+done:inst*ChunkSize+done+tail], pt[inst*ChunkSize+done:inst*ChunkSize+done+tail])
-	}
-
-	s.PadPermute(finalPos(ChunkSize), chainValueDS)
+	initX8(s, base.State(), base.Pos(), suffixes, initDS)
+	s.DecryptAll(ct, pt, ChunkSize, chainValueDS)
 }

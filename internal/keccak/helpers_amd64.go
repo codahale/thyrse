@@ -25,8 +25,6 @@ func fastLoopAbsorb168x1Arch(s *State1, in []byte) bool {
 	return true
 }
 
-func fastLoopAbsorb168x2Arch(_ *State2, _ []byte, _, _ int) bool { return false }
-
 func fastLoopAbsorb168x8Arch(s *State8, in []byte, stride, n int) bool {
 	if hasAVX512 {
 		fastLoopAbsorb168x8AVX512(s, unsafe.SliceData(in), stride, n)
@@ -63,10 +61,6 @@ func fastLoopDecrypt168x1Arch(s *State1, src, dst []byte) bool {
 	fastLoopDecrypt168x1(s, unsafe.SliceData(src), unsafe.SliceData(dst), len(src))
 	return true
 }
-
-func fastLoopEncrypt168x2Arch(_ *State2, _, _ []byte, _, _ int) bool { return false }
-
-func fastLoopDecrypt168x2Arch(_ *State2, _, _ []byte, _, _ int) bool { return false }
 
 func fastLoopEncrypt168x8Arch(s *State8, src, dst []byte, stride, n int) bool {
 	if hasAVX512 {

@@ -35,23 +35,14 @@ func fuzzEncryptN(t *testing.T, nInst, nBlocks int, seed string) {
 	// Assembly path.
 	ctAsm := make([]byte, nInst*stride)
 	switch nInst {
-	case 2:
-		var s State2
-		for i := range 25 {
-			for j := range 2 {
-				seedLane(s.lane2(i, j), seeds[j], i)
-			}
-		}
-		s.FastLoopEncrypt168(pt, ctAsm, stride)
-		checkState2(t, &s, sGen[:])
 	case 8:
 		var s State8
 		for i := range 25 {
 			for j := range 8 {
-				seedLane(&s.a[i][j], seeds[j], i)
+				seedLane(&s.A[i][j], seeds[j], i)
 			}
 		}
-		s.FastLoopEncrypt168(pt, ctAsm, stride)
+		s.fastLoopEncrypt168(pt, ctAsm, stride)
 		checkState8(t, &s, sGen[:])
 	}
 
@@ -88,23 +79,14 @@ func fuzzDecryptN(t *testing.T, nInst, nBlocks int, seed string) {
 
 	ptAsm := make([]byte, nInst*stride)
 	switch nInst {
-	case 2:
-		var s State2
-		for i := range 25 {
-			for j := range 2 {
-				seedLane(s.lane2(i, j), seeds[j], i)
-			}
-		}
-		s.FastLoopDecrypt168(ct, ptAsm, stride)
-		checkState2(t, &s, sGen[:])
 	case 8:
 		var s State8
 		for i := range 25 {
 			for j := range 8 {
-				seedLane(&s.a[i][j], seeds[j], i)
+				seedLane(&s.A[i][j], seeds[j], i)
 			}
 		}
-		s.FastLoopDecrypt168(ct, ptAsm, stride)
+		s.fastLoopDecrypt168(ct, ptAsm, stride)
 		checkState8(t, &s, sGen[:])
 	}
 
@@ -124,23 +106,12 @@ func seedLane(dst *uint64, seed []byte, lane int) {
 		uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
 }
 
-func checkState2(t *testing.T, s *State2, sGen []State1) {
-	t.Helper()
-	for i := range 25 {
-		for j := range 2 {
-			if s.lane2val(i, j) != sGen[j].a[i] {
-				t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], s.lane2val(i, j))
-			}
-		}
-	}
-}
-
 func checkState8(t *testing.T, s *State8, sGen []State1) {
 	t.Helper()
 	for i := range 25 {
 		for j := range 8 {
-			if s.a[i][j] != sGen[j].a[i] {
-				t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], s.a[i][j])
+			if s.A[i][j] != sGen[j].A[i] {
+				t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].A[i], s.A[i][j])
 			}
 		}
 	}
@@ -154,7 +125,7 @@ func FuzzFastLoopEncrypt168(f *testing.F) {
 		if nBlocks < 1 || nBlocks > 200 {
 			t.Skip()
 		}
-		for _, nInst := range []int{2, 8} {
+		for _, nInst := range []int{8} {
 			t.Run(fmt.Sprintf("x%d", nInst), func(t *testing.T) {
 				fuzzEncryptN(t, nInst, nBlocks, seed)
 			})
@@ -170,7 +141,7 @@ func FuzzFastLoopDecrypt168(f *testing.F) {
 		if nBlocks < 1 || nBlocks > 200 {
 			t.Skip()
 		}
-		for _, nInst := range []int{2, 8} {
+		for _, nInst := range []int{8} {
 			t.Run(fmt.Sprintf("x%d", nInst), func(t *testing.T) {
 				fuzzDecryptN(t, nInst, nBlocks, seed)
 			})
