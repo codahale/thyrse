@@ -139,8 +139,7 @@ type Encryptor struct {
 }
 
 // NewEncryptor returns a new Encryptor initialized with the given key, nonce, and associated data.
-func NewEncryptor(key, nonce, ad []byte) Encryptor {
-	var e Encryptor
+func NewEncryptor(key, nonce, ad []byte) (e Encryptor) {
 	initBase(&e.base, key, nonce, ad)
 	initNode(&e.final, &e.base, 0)
 	return e
@@ -253,8 +252,7 @@ type Decryptor struct {
 }
 
 // NewDecryptor returns a new Decryptor initialized with the given key, nonce, and associated data.
-func NewDecryptor(key, nonce, ad []byte) Decryptor {
-	var d Decryptor
+func NewDecryptor(key, nonce, ad []byte) (d Decryptor) {
 	initBase(&d.base, key, nonce, ad)
 	initNode(&d.final, &d.base, 0)
 	return d
