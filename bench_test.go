@@ -41,13 +41,11 @@ func BenchmarkProtocol_Open(b *testing.B) {
 			p := New("bench")
 			plaintext := make([]byte, size.N)
 			ciphertext := make([]byte, size.N+TagSize)
-			// Pre-seal to get valid sealed data.
-			sealed := p.Clone().Seal("msg", ciphertext[:0], plaintext)
 
 			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
-				_, _ = p.Clone().Open("msg", plaintext[:0], sealed)
+				_, _ = p.Open("msg", plaintext[:0], ciphertext)
 			}
 		})
 	}
@@ -74,12 +72,11 @@ func BenchmarkProtocol_Unmask(b *testing.B) {
 			p := New("bench")
 			plaintext := make([]byte, size.N)
 			ciphertext := make([]byte, size.N)
-			p.Clone().Mask("msg", ciphertext[:0], plaintext)
 
 			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
-				p.Clone().Unmask("msg", plaintext[:0], ciphertext)
+				p.Unmask("msg", plaintext[:0], ciphertext)
 			}
 		})
 	}
