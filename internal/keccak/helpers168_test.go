@@ -25,8 +25,8 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 		for i := range 25 {
 			v := uint64(seed[i*8]) | uint64(seed[i*8+1])<<8 | uint64(seed[i*8+2])<<16 | uint64(seed[i*8+3])<<24 |
 				uint64(seed[i*8+4])<<32 | uint64(seed[i*8+5])<<40 | uint64(seed[i*8+6])<<48 | uint64(seed[i*8+7])<<56
-			sEnc.A[i] = v
-			sDec.A[i] = v
+			sEnc.a[i] = v
+			sDec.a[i] = v
 		}
 
 		if got, want := sEnc.fastLoopEncrypt168(pt, ct), n; got != want {
@@ -38,7 +38,7 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 		if !bytes.Equal(pt, recovered) {
 			t.Fatal("round-trip failed: plaintext != recovered")
 		}
-		if sEnc.A != sDec.A {
+		if sEnc.a != sDec.a {
 			t.Fatal("final states differ after encrypt/decrypt")
 		}
 	})
@@ -58,8 +58,8 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 				off := (i*8 + j) * 8
 				v := uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
 					uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
-				sEnc.A[i][j] = v
-				sDec.A[i][j] = v
+				sEnc.a[i][j] = v
+				sDec.a[i][j] = v
 			}
 		}
 
@@ -72,7 +72,7 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 		if !bytes.Equal(pt, recovered) {
 			t.Fatal("round-trip failed")
 		}
-		if sEnc.A != sDec.A {
+		if sEnc.a != sDec.a {
 			t.Fatal("final states differ")
 		}
 	})
@@ -82,7 +82,7 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 func seedState1(s *State1, seed []byte) {
 	for i := range 25 {
 		off := i * 8
-		s.A[i] = uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
+		s.a[i] = uint64(seed[off]) | uint64(seed[off+1])<<8 | uint64(seed[off+2])<<16 | uint64(seed[off+3])<<24 |
 			uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
 	}
 }
@@ -94,8 +94,8 @@ func genericEncrypt1(s *State1, pt, ct []byte) {
 			base := lane << 3
 			w := uint64(pt[off+base]) | uint64(pt[off+base+1])<<8 | uint64(pt[off+base+2])<<16 | uint64(pt[off+base+3])<<24 |
 				uint64(pt[off+base+4])<<32 | uint64(pt[off+base+5])<<40 | uint64(pt[off+base+6])<<48 | uint64(pt[off+base+7])<<56
-			s.A[lane] ^= w
-			v := s.A[lane]
+			s.a[lane] ^= w
+			v := s.a[lane]
 			ct[off+base] = byte(v)
 			ct[off+base+1] = byte(v >> 8)
 			ct[off+base+2] = byte(v >> 16)
@@ -116,7 +116,7 @@ func genericDecrypt1(s *State1, ct, pt []byte) {
 			base := lane << 3
 			w := uint64(ct[off+base]) | uint64(ct[off+base+1])<<8 | uint64(ct[off+base+2])<<16 | uint64(ct[off+base+3])<<24 |
 				uint64(ct[off+base+4])<<32 | uint64(ct[off+base+5])<<40 | uint64(ct[off+base+6])<<48 | uint64(ct[off+base+7])<<56
-			ptw := w ^ s.A[lane]
+			ptw := w ^ s.a[lane]
 			pt[off+base] = byte(ptw)
 			pt[off+base+1] = byte(ptw >> 8)
 			pt[off+base+2] = byte(ptw >> 16)
@@ -125,7 +125,7 @@ func genericDecrypt1(s *State1, ct, pt []byte) {
 			pt[off+base+5] = byte(ptw >> 40)
 			pt[off+base+6] = byte(ptw >> 48)
 			pt[off+base+7] = byte(ptw >> 56)
-			s.A[lane] = w
+			s.a[lane] = w
 		}
 		s.Permute12()
 	}
@@ -155,7 +155,7 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 		if !bytes.Equal(ctGen, ctAsm) {
 			t.Fatal("assembly output differs from generic")
 		}
-		if sGen.A != sAsm.A {
+		if sGen.a != sAsm.a {
 			t.Fatal("final state differs")
 		}
 	})
@@ -184,7 +184,7 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 				off := i * 8
 				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
 					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
-				sAsm.A[i][j] = v
+				sAsm.a[i][j] = v
 			}
 		}
 		ctAsm := make([]byte, 8*stride)
@@ -200,8 +200,8 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 		}
 		for i := range 25 {
 			for j := range 8 {
-				if sAsm.A[i][j] != sGen[j].A[i] {
-					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].A[i], sAsm.A[i][j])
+				if sAsm.a[i][j] != sGen[j].a[i] {
+					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.a[i][j])
 				}
 			}
 		}
@@ -232,7 +232,7 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 		if !bytes.Equal(ptGen, ptAsm) {
 			t.Fatal("assembly output differs from generic")
 		}
-		if sGen.A != sAsm.A {
+		if sGen.a != sAsm.a {
 			t.Fatal("final state differs")
 		}
 	})
@@ -261,7 +261,7 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 				off := i * 8
 				v := uint64(seeds[j][off]) | uint64(seeds[j][off+1])<<8 | uint64(seeds[j][off+2])<<16 | uint64(seeds[j][off+3])<<24 |
 					uint64(seeds[j][off+4])<<32 | uint64(seeds[j][off+5])<<40 | uint64(seeds[j][off+6])<<48 | uint64(seeds[j][off+7])<<56
-				sAsm.A[i][j] = v
+				sAsm.a[i][j] = v
 			}
 		}
 		ptAsm := make([]byte, 8*stride)
@@ -277,8 +277,8 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 		}
 		for i := range 25 {
 			for j := range 8 {
-				if sAsm.A[i][j] != sGen[j].A[i] {
-					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].A[i], sAsm.A[i][j])
+				if sAsm.a[i][j] != sGen[j].a[i] {
+					t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], sAsm.a[i][j])
 				}
 			}
 		}

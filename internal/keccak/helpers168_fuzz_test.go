@@ -39,7 +39,7 @@ func fuzzEncryptN(t *testing.T, nInst, nBlocks int, seed string) {
 		var s State8
 		for i := range 25 {
 			for j := range 8 {
-				seedLane(&s.A[i][j], seeds[j], i)
+				seedLane(&s.a[i][j], seeds[j], i)
 			}
 		}
 		s.fastLoopEncrypt168(pt, ctAsm, stride)
@@ -83,7 +83,7 @@ func fuzzDecryptN(t *testing.T, nInst, nBlocks int, seed string) {
 		var s State8
 		for i := range 25 {
 			for j := range 8 {
-				seedLane(&s.A[i][j], seeds[j], i)
+				seedLane(&s.a[i][j], seeds[j], i)
 			}
 		}
 		s.fastLoopDecrypt168(ct, ptAsm, stride)
@@ -110,8 +110,8 @@ func checkState8(t *testing.T, s *State8, sGen []State1) {
 	t.Helper()
 	for i := range 25 {
 		for j := range 8 {
-			if s.A[i][j] != sGen[j].A[i] {
-				t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].A[i], s.A[i][j])
+			if s.a[i][j] != sGen[j].a[i] {
+				t.Fatalf("state lane %d inst %d: gen=%016x asm=%016x", i, j, sGen[j].a[i], s.a[i][j])
 			}
 		}
 	}

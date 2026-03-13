@@ -25,7 +25,7 @@ func xorByteInWord(w *uint64, pos int, b byte) {
 	*w ^= uint64(b) << shift
 }
 
-func (s *State1) Reset() { clear(s.A[:]) }
+func (s *State1) Reset() { clear(s.a[:]) }
 
 // fastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State1) fastLoopAbsorb168(in []byte) int {
@@ -37,7 +37,7 @@ func (s *State1) fastLoopAbsorb168(in []byte) int {
 		p := (*[Rate]byte)(in[off : off+Rate])
 		for lane := range Rate >> 3 {
 			base := lane << 3
-			s.A[lane] ^= binary.LittleEndian.Uint64(p[base : base+8])
+			s.a[lane] ^= binary.LittleEndian.Uint64(p[base : base+8])
 		}
 		s.Permute12()
 	}
@@ -53,14 +53,14 @@ func (s *State1) absorbFinal(tail []byte, ds byte) {
 	full := len(tail) >> 3
 	for lane := range full {
 		base := lane << 3
-		s.A[lane] ^= binary.LittleEndian.Uint64(tail[base : base+8])
+		s.a[lane] ^= binary.LittleEndian.Uint64(tail[base : base+8])
 	}
 	if rem := len(tail) & 7; rem != 0 {
 		base := full << 3
-		s.A[full] ^= loadPartialLE(tail[base : base+rem])
+		s.a[full] ^= loadPartialLE(tail[base : base+rem])
 	}
-	xorByteInWord(&s.A[len(tail)>>3], len(tail), ds)
-	xorByteInWord(&s.A[(Rate-1)>>3], Rate-1, 0x80)
+	xorByteInWord(&s.a[len(tail)>>3], len(tail), ds)
+	xorByteInWord(&s.a[(Rate-1)>>3], Rate-1, 0x80)
 }
 
 // fastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes
@@ -74,8 +74,8 @@ func (s *State1) fastLoopEncrypt168(src, dst []byte) int {
 		for lane := range 21 {
 			base := lane << 3
 			w := binary.LittleEndian.Uint64(src[off+base : off+base+8])
-			s.A[lane] ^= w
-			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], s.A[lane])
+			s.a[lane] ^= w
+			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], s.a[lane])
 		}
 		s.Permute12()
 	}
@@ -93,9 +93,9 @@ func (s *State1) fastLoopDecrypt168(src, dst []byte) int {
 		for lane := range 21 {
 			base := lane << 3
 			ct := binary.LittleEndian.Uint64(src[off+base : off+base+8])
-			pt := ct ^ s.A[lane]
+			pt := ct ^ s.a[lane]
 			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], pt)
-			s.A[lane] = ct
+			s.a[lane] = ct
 		}
 		s.Permute12()
 	}
@@ -104,8 +104,8 @@ func (s *State1) fastLoopDecrypt168(src, dst []byte) int {
 
 // padPermute applies pad10*1 padding (ds at pos, 0x80 at Rate-1) and permutes.
 func (s *State1) padPermute(pos int, ds byte) {
-	xorByteInWord(&s.A[pos>>3], pos, ds)
-	xorByteInWord(&s.A[(Rate-1)>>3], Rate-1, 0x80)
+	xorByteInWord(&s.a[pos>>3], pos, ds)
+	xorByteInWord(&s.a[(Rate-1)>>3], Rate-1, 0x80)
 	s.Permute12()
 }
 
@@ -118,8 +118,8 @@ func (s *State1) encryptBytesAt(pos int, src, dst []byte) {
 		n := min(8-off, len(src))
 		shift := uint(off) << 3
 		w := loadPartialLE(src[:n]) << shift
-		s.A[lane] ^= w
-		storePartialLE(dst[:n], s.A[lane]>>shift)
+		s.a[lane] ^= w
+		storePartialLE(dst[:n], s.a[lane]>>shift)
 		src = src[n:]
 		dst = dst[n:]
 		lane++
@@ -133,14 +133,14 @@ func (s *State1) encryptBytesAt(pos int, src, dst []byte) {
 	for i := range full {
 		base := i << 3
 		w := binary.LittleEndian.Uint64(src[base : base+8])
-		s.A[lane+i] ^= w
-		binary.LittleEndian.PutUint64(dst[base:base+8], s.A[lane+i])
+		s.a[lane+i] ^= w
+		binary.LittleEndian.PutUint64(dst[base:base+8], s.a[lane+i])
 	}
 	if rem := len(src) & 7; rem > 0 {
 		base := full << 3
 		w := loadPartialLE(src[base : base+rem])
-		s.A[lane+full] ^= w
-		storePartialLE(dst[base:base+rem], s.A[lane+full])
+		s.a[lane+full] ^= w
+		storePartialLE(dst[base:base+rem], s.a[lane+full])
 	}
 }
 
@@ -154,8 +154,8 @@ func (s *State1) decryptBytesAt(pos int, src, dst []byte) {
 		shift := uint(off) << 3
 		mask := (uint64(1)<<(uint(n)*8) - 1) << shift
 		ct := loadPartialLE(src[:n]) << shift
-		storePartialLE(dst[:n], (ct^(s.A[lane]&mask))>>shift)
-		s.A[lane] = (s.A[lane] & ^mask) | ct
+		storePartialLE(dst[:n], (ct^(s.a[lane]&mask))>>shift)
+		s.a[lane] = (s.a[lane] & ^mask) | ct
 		src = src[n:]
 		dst = dst[n:]
 		lane++
@@ -169,15 +169,15 @@ func (s *State1) decryptBytesAt(pos int, src, dst []byte) {
 	for i := range full {
 		base := i << 3
 		ct := binary.LittleEndian.Uint64(src[base : base+8])
-		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.A[lane+i])
-		s.A[lane+i] = ct
+		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.a[lane+i])
+		s.a[lane+i] = ct
 	}
 	if rem := len(src) & 7; rem > 0 {
 		base := full << 3
 		ct := loadPartialLE(src[base : base+rem])
 		mask := uint64(1)<<(uint(rem)*8) - 1
-		storePartialLE(dst[base:base+rem], ct^(s.A[lane+full]&mask))
-		s.A[lane+full] = (s.A[lane+full] & ^mask) | ct
+		storePartialLE(dst[base:base+rem], ct^(s.a[lane+full]&mask))
+		s.a[lane+full] = (s.a[lane+full] & ^mask) | ct
 	}
 }
 
@@ -216,7 +216,7 @@ func (s *State1) DecryptAll(src, dst []byte, ds byte) {
 func (s *State8) SetAll(base *State1) {
 	for lane := range Lanes {
 		for inst := range 8 {
-			s.A[lane][inst] = base.A[lane]
+			s.a[lane][inst] = base.a[lane]
 		}
 	}
 }
@@ -228,18 +228,18 @@ func (s *State8) AbsorbWords(pos int, words [8]uint64) {
 	laneIdx := pos >> 3
 	if byteInLane == 0 {
 		for inst := range 8 {
-			s.A[laneIdx][inst] ^= words[inst]
+			s.a[laneIdx][inst] ^= words[inst]
 		}
 	} else {
 		shift := uint(byteInLane) * 8
 		for inst := range 8 {
-			s.A[laneIdx][inst] ^= words[inst] << shift
-			s.A[laneIdx+1][inst] ^= words[inst] >> (64 - shift)
+			s.a[laneIdx][inst] ^= words[inst] << shift
+			s.a[laneIdx+1][inst] ^= words[inst] >> (64 - shift)
 		}
 	}
 }
 
-func (s *State8) Reset() { clear(s.A[:]) }
+func (s *State8) Reset() { clear(s.a[:]) }
 
 // fastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 // Instance i reads from in[i*stride:]. Returns bytes absorbed per instance.
@@ -260,14 +260,14 @@ func (s *State8) fastLoopAbsorb168(in []byte, stride int) int {
 		p7 := (*[Rate]byte)(in[7*stride+off : 7*stride+off+Rate])
 		for lane := range Rate >> 3 {
 			base := lane << 3
-			s.A[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
-			s.A[lane][1] ^= binary.LittleEndian.Uint64(p1[base : base+8])
-			s.A[lane][2] ^= binary.LittleEndian.Uint64(p2[base : base+8])
-			s.A[lane][3] ^= binary.LittleEndian.Uint64(p3[base : base+8])
-			s.A[lane][4] ^= binary.LittleEndian.Uint64(p4[base : base+8])
-			s.A[lane][5] ^= binary.LittleEndian.Uint64(p5[base : base+8])
-			s.A[lane][6] ^= binary.LittleEndian.Uint64(p6[base : base+8])
-			s.A[lane][7] ^= binary.LittleEndian.Uint64(p7[base : base+8])
+			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
+			s.a[lane][1] ^= binary.LittleEndian.Uint64(p1[base : base+8])
+			s.a[lane][2] ^= binary.LittleEndian.Uint64(p2[base : base+8])
+			s.a[lane][3] ^= binary.LittleEndian.Uint64(p3[base : base+8])
+			s.a[lane][4] ^= binary.LittleEndian.Uint64(p4[base : base+8])
+			s.a[lane][5] ^= binary.LittleEndian.Uint64(p5[base : base+8])
+			s.a[lane][6] ^= binary.LittleEndian.Uint64(p6[base : base+8])
+			s.a[lane][7] ^= binary.LittleEndian.Uint64(p7[base : base+8])
 		}
 		s.Permute12()
 	}
@@ -285,33 +285,33 @@ func (s *State8) absorbFinal(tail0, tail1, tail2, tail3, tail4, tail5, tail6, ta
 	full := len(tail0) >> 3
 	for lane := range full {
 		base := lane << 3
-		s.A[lane][0] ^= binary.LittleEndian.Uint64(tail0[base : base+8])
-		s.A[lane][1] ^= binary.LittleEndian.Uint64(tail1[base : base+8])
-		s.A[lane][2] ^= binary.LittleEndian.Uint64(tail2[base : base+8])
-		s.A[lane][3] ^= binary.LittleEndian.Uint64(tail3[base : base+8])
-		s.A[lane][4] ^= binary.LittleEndian.Uint64(tail4[base : base+8])
-		s.A[lane][5] ^= binary.LittleEndian.Uint64(tail5[base : base+8])
-		s.A[lane][6] ^= binary.LittleEndian.Uint64(tail6[base : base+8])
-		s.A[lane][7] ^= binary.LittleEndian.Uint64(tail7[base : base+8])
+		s.a[lane][0] ^= binary.LittleEndian.Uint64(tail0[base : base+8])
+		s.a[lane][1] ^= binary.LittleEndian.Uint64(tail1[base : base+8])
+		s.a[lane][2] ^= binary.LittleEndian.Uint64(tail2[base : base+8])
+		s.a[lane][3] ^= binary.LittleEndian.Uint64(tail3[base : base+8])
+		s.a[lane][4] ^= binary.LittleEndian.Uint64(tail4[base : base+8])
+		s.a[lane][5] ^= binary.LittleEndian.Uint64(tail5[base : base+8])
+		s.a[lane][6] ^= binary.LittleEndian.Uint64(tail6[base : base+8])
+		s.a[lane][7] ^= binary.LittleEndian.Uint64(tail7[base : base+8])
 	}
 	if rem := len(tail0) & 7; rem != 0 {
 		base := full << 3
-		s.A[full][0] ^= loadPartialLE(tail0[base : base+rem])
-		s.A[full][1] ^= loadPartialLE(tail1[base : base+rem])
-		s.A[full][2] ^= loadPartialLE(tail2[base : base+rem])
-		s.A[full][3] ^= loadPartialLE(tail3[base : base+rem])
-		s.A[full][4] ^= loadPartialLE(tail4[base : base+rem])
-		s.A[full][5] ^= loadPartialLE(tail5[base : base+rem])
-		s.A[full][6] ^= loadPartialLE(tail6[base : base+rem])
-		s.A[full][7] ^= loadPartialLE(tail7[base : base+rem])
+		s.a[full][0] ^= loadPartialLE(tail0[base : base+rem])
+		s.a[full][1] ^= loadPartialLE(tail1[base : base+rem])
+		s.a[full][2] ^= loadPartialLE(tail2[base : base+rem])
+		s.a[full][3] ^= loadPartialLE(tail3[base : base+rem])
+		s.a[full][4] ^= loadPartialLE(tail4[base : base+rem])
+		s.a[full][5] ^= loadPartialLE(tail5[base : base+rem])
+		s.a[full][6] ^= loadPartialLE(tail6[base : base+rem])
+		s.a[full][7] ^= loadPartialLE(tail7[base : base+rem])
 	}
 	posLane := len(tail0) >> 3
 	pos := len(tail0)
 	endLane := (Rate - 1) >> 3
 	end := Rate - 1
 	for inst := range 8 {
-		xorByteInWord(&s.A[posLane][inst], pos, ds)
-		xorByteInWord(&s.A[endLane][inst], end, 0x80)
+		xorByteInWord(&s.a[posLane][inst], pos, ds)
+		xorByteInWord(&s.a[endLane][inst], end, 0x80)
 	}
 }
 
@@ -327,8 +327,8 @@ func (s *State8) fastLoopEncrypt168(src, dst []byte, stride int) int {
 			base := lane << 3
 			for inst := range 8 {
 				w := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
-				s.A[lane][inst] ^= w
-				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.A[lane][inst])
+				s.a[lane][inst] ^= w
+				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.a[lane][inst])
 			}
 		}
 		s.Permute12()
@@ -348,9 +348,9 @@ func (s *State8) fastLoopDecrypt168(src, dst []byte, stride int) int {
 			base := lane << 3
 			for inst := range 8 {
 				ct := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
-				pt := ct ^ s.A[lane][inst]
+				pt := ct ^ s.a[lane][inst]
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], pt)
-				s.A[lane][inst] = ct
+				s.a[lane][inst] = ct
 			}
 		}
 		s.Permute12()
@@ -367,8 +367,8 @@ func (s *State8) PadPermute(pos int, ds byte) {
 	endMask := uint64(0x80) << endShift
 	endLane := (Rate - 1) >> 3
 	for inst := range 8 {
-		s.A[posLane][inst] ^= dsMask
-		s.A[endLane][inst] ^= endMask
+		s.a[posLane][inst] ^= dsMask
+		s.a[endLane][inst] ^= endMask
 	}
 	s.Permute12()
 }
@@ -383,14 +383,14 @@ func (s *State8) encryptBytes(inst int, src, dst []byte) {
 	for i := range full {
 		base := i << 3
 		w := binary.LittleEndian.Uint64(src[base : base+8])
-		s.A[i][inst] ^= w
-		binary.LittleEndian.PutUint64(dst[base:base+8], s.A[i][inst])
+		s.a[i][inst] ^= w
+		binary.LittleEndian.PutUint64(dst[base:base+8], s.a[i][inst])
 	}
 	if rem := len(src) & 7; rem > 0 {
 		base := full << 3
 		w := loadPartialLE(src[base : base+rem])
-		s.A[full][inst] ^= w
-		storePartialLE(dst[base:base+rem], s.A[full][inst])
+		s.a[full][inst] ^= w
+		storePartialLE(dst[base:base+rem], s.a[full][inst])
 	}
 }
 
@@ -455,14 +455,14 @@ func (s *State8) decryptBytes(inst int, src, dst []byte) {
 	for i := range full {
 		base := i << 3
 		ct := binary.LittleEndian.Uint64(src[base : base+8])
-		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.A[i][inst])
-		s.A[i][inst] = ct
+		binary.LittleEndian.PutUint64(dst[base:base+8], ct^s.a[i][inst])
+		s.a[i][inst] = ct
 	}
 	if rem := len(src) & 7; rem > 0 {
 		base := full << 3
 		ct := loadPartialLE(src[base : base+rem])
 		mask := uint64(1)<<(rem*8) - 1
-		storePartialLE(dst[base:base+rem], ct^(s.A[full][inst]&mask))
-		s.A[full][inst] = (s.A[full][inst] & ^mask) | ct
+		storePartialLE(dst[base:base+rem], ct^(s.a[full][inst]&mask))
+		s.a[full][inst] = (s.a[full][inst] & ^mask) | ct
 	}
 }

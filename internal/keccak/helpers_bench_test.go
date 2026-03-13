@@ -70,10 +70,10 @@ func BenchmarkAbsorbFinal(b *testing.B) {
 func BenchmarkAbsorbCVx8(b *testing.B) {
 	var s8 State8
 	for inst := range 8 {
-		s8.A[0][inst] = uint64(inst + 1)
-		s8.A[1][inst] = uint64(inst + 0x10)
-		s8.A[2][inst] = uint64(inst + 0x20)
-		s8.A[3][inst] = uint64(inst + 0x30)
+		s8.a[0][inst] = uint64(inst + 1)
+		s8.a[1][inst] = uint64(inst + 0x10)
+		s8.a[2][inst] = uint64(inst + 0x20)
+		s8.a[3][inst] = uint64(inst + 0x30)
 	}
 
 	b.Run("x8", func(b *testing.B) {
