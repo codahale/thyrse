@@ -28,7 +28,7 @@ const (
 // KT128 is an incremental KT128 instance.
 type KT128 struct {
 	buf       []byte        // buffered message/leaf data
-	ts        keccak.Duplex // final-node sponge state
+	ts        keccak.State1 // final-node sponge state
 	pos       uint64        // total bytes written via Write
 	leafCount uint64        // total leaf CVs written to ts so far
 	state     uint8         // lifecycle: stateSingle -> stateTree -> stateFinalized

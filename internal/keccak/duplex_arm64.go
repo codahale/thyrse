@@ -5,7 +5,8 @@ package keccak
 //go:noescape
 func p1600x2Lane(a *[Lanes][2]uint64)
 
-func padPermute2(a, b *State1, pos int, ds byte) {
+func padPermute2(a, b *State1, ds byte) {
+	pos := a.pos
 	var buf [Lanes][2]uint64
 	for i := range Lanes {
 		buf[i][0] = a.a[i]

@@ -77,7 +77,7 @@ func BenchmarkAbsorbCVx8(b *testing.B) {
 	}
 
 	b.Run("x8", func(b *testing.B) {
-		var d Duplex
+		var d State1
 		b.SetBytes(8 * 32)
 		for b.Loop() {
 			d.Reset()

@@ -2,7 +2,7 @@
 
 package keccak
 
-func padPermute2(a, b *State1, pos int, ds byte) {
-	a.padPermute(pos, ds)
-	b.padPermute(pos, ds)
+func padPermute2(a, b *State1, ds byte) {
+	a.padPermute(a.pos, ds)
+	b.padPermute(b.pos, ds)
 }

@@ -25,7 +25,10 @@ func xorByteInWord(w *uint64, pos int, b byte) {
 	*w ^= uint64(b) << shift
 }
 
-func (s *State1) Reset() { clear(s.a[:]) }
+func (s *State1) Reset() {
+	clear(s.a[:])
+	s.pos = 0
+}
 
 // fastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State1) fastLoopAbsorb168(in []byte) int {
@@ -186,30 +189,25 @@ func (s *State1) AbsorbAll(in []byte, ds byte) {
 	done := s.fastLoopAbsorb168(in)
 	s.absorbFinal(in[done:], ds)
 	s.Permute12()
+	s.pos = 0
 }
 
 // EncryptAll encrypts all of src into dst, applies padding with ds, and permutes.
 func (s *State1) EncryptAll(src, dst []byte, ds byte) {
 	done := s.fastLoopEncrypt168(src, dst)
 	s.encryptBytesAt(0, src[done:], dst[done:])
-	tail := len(src) - done
-	pos := tail
-	if tail == 0 && len(src) > 0 {
-		pos = Rate
-	}
-	s.padPermute(pos, ds)
+	s.pos = len(src) - done
+	s.padPermute(s.pos, ds)
+	s.pos = 0
 }
 
 // DecryptAll decrypts all of src into dst, applies padding with ds, and permutes.
 func (s *State1) DecryptAll(src, dst []byte, ds byte) {
 	done := s.fastLoopDecrypt168(src, dst)
 	s.decryptBytesAt(0, src[done:], dst[done:])
-	tail := len(src) - done
-	pos := tail
-	if tail == 0 && len(src) > 0 {
-		pos = Rate
-	}
-	s.padPermute(pos, ds)
+	s.pos = len(src) - done
+	s.padPermute(s.pos, ds)
+	s.pos = 0
 }
 
 // SetAll sets all 8 instances to be identical copies of base.
@@ -219,13 +217,14 @@ func (s *State8) SetAll(base *State1) {
 			s.a[lane][inst] = base.a[lane]
 		}
 	}
+	s.pos = base.pos
 }
 
-// AbsorbWords XORs words[i] into instance i at the given byte position,
+// AbsorbWords XORs words[i] into instance i at the current byte position,
 // encoding each word as 8 little-endian bytes.
-func (s *State8) AbsorbWords(pos int, words [8]uint64) {
-	byteInLane := pos & 7
-	laneIdx := pos >> 3
+func (s *State8) AbsorbWords(words [8]uint64) {
+	byteInLane := s.pos & 7
+	laneIdx := s.pos >> 3
 	if byteInLane == 0 {
 		for inst := range 8 {
 			s.a[laneIdx][inst] ^= words[inst]
@@ -237,9 +236,13 @@ func (s *State8) AbsorbWords(pos int, words [8]uint64) {
 			s.a[laneIdx+1][inst] ^= words[inst] >> (64 - shift)
 		}
 	}
+	s.pos += 8
 }
 
-func (s *State8) Reset() { clear(s.a[:]) }
+func (s *State8) Reset() {
+	clear(s.a[:])
+	s.pos = 0
+}
 
 // fastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 // Instance i reads from in[i*stride:]. Returns bytes absorbed per instance.
@@ -358,11 +361,11 @@ func (s *State8) fastLoopDecrypt168(src, dst []byte, stride int) int {
 	return n
 }
 
-// PadPermute applies pad10*1 padding (ds at pos, 0x80 at Rate-1) and permutes all instances.
-func (s *State8) PadPermute(pos int, ds byte) {
-	shift := uint((pos & 7) << 3)
+// PadPermute applies pad10*1 padding (ds at s.pos, 0x80 at Rate-1) and permutes all instances.
+func (s *State8) PadPermute(ds byte) {
+	shift := uint((s.pos & 7) << 3)
 	dsMask := uint64(ds) << shift
-	posLane := pos >> 3
+	posLane := s.pos >> 3
 	endShift := uint(((Rate - 1) & 7) << 3)
 	endMask := uint64(0x80) << endShift
 	endLane := (Rate - 1) >> 3
@@ -371,6 +374,7 @@ func (s *State8) PadPermute(pos int, ds byte) {
 		s.a[endLane][inst] ^= endMask
 	}
 	s.Permute12()
+	s.pos = 0
 }
 
 // encryptBytes performs SpongeWrap encryption on a partial block for instance inst.
@@ -409,6 +413,7 @@ func (s *State8) AbsorbAll(in []byte, stride int, ds byte) {
 		ds,
 	)
 	s.Permute12()
+	s.pos = 0
 }
 
 // EncryptAll encrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
@@ -421,11 +426,8 @@ func (s *State8) EncryptAll(src, dst []byte, stride int, ds byte) {
 			s.encryptBytes(inst, src[off:off+tail], dst[off:off+tail])
 		}
 	}
-	pos := tail
-	if tail == 0 && stride > 0 {
-		pos = Rate
-	}
-	s.PadPermute(pos, ds)
+	s.pos = tail
+	s.PadPermute(ds)
 }
 
 // DecryptAll decrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
@@ -438,11 +440,8 @@ func (s *State8) DecryptAll(src, dst []byte, stride int, ds byte) {
 			s.decryptBytes(inst, src[off:off+tail], dst[off:off+tail])
 		}
 	}
-	pos := tail
-	if tail == 0 && stride > 0 {
-		pos = Rate
-	}
-	s.PadPermute(pos, ds)
+	s.pos = tail
+	s.PadPermute(ds)
 }
 
 // decryptBytes performs SpongeWrap decryption on a partial block for instance inst.

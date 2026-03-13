@@ -36,9 +36,9 @@ const (
 // hopFrame is the Sakura message-hop / chaining-hop framing: '110^{62}' packed LSB-first (8 bytes).
 var hopFrame = [8]byte{0x03}
 
-// initBase absorbs encode_string(key) || encode_string(nonce) || encode_string(ad) into a fresh duplex.
+// initBase absorbs encode_string(key) || encode_string(nonce) || encode_string(ad) into a fresh state.
 // AD is absorbed as header+body to avoid copying large AD.
-func initBase(base *keccak.Duplex, key, nonce, ad []byte) {
+func initBase(base *keccak.State1, key, nonce, ad []byte) {
 	base.Reset()
 
 	// K and N are small, so batch them.
@@ -56,17 +56,16 @@ func initBase(base *keccak.Duplex, key, nonce, ad []byte) {
 }
 
 // initX8 broadcasts base into all 8 lanes of s, XORs each suffixes[i] as an
-// 8-byte LE value at byte position basePos, applies pad10*1 with ds at
-// basePos+8, and permutes. This initializes 8 tree nodes in parallel from
-// a shared base duplex state.
-func initX8(s *keccak.State8, base *keccak.State1, basePos int, suffixes [8]uint64, ds byte) {
+// 8-byte LE value at the current position, applies pad10*1 with ds, and
+// permutes. This initializes 8 tree nodes in parallel from a shared base state.
+func initX8(s *keccak.State8, base *keccak.State1, suffixes [8]uint64, ds byte) {
 	s.SetAll(base)
-	s.AbsorbWords(basePos, suffixes)
-	s.PadPermute(basePos+8, ds)
+	s.AbsorbWords(suffixes)
+	s.PadPermute(ds)
 }
 
 // initNode clones base, absorbs LEU64(index), and pad-permutes with initDS.
-func initNode(d *keccak.Duplex, base *keccak.Duplex, index uint64) {
+func initNode(d *keccak.State1, base *keccak.State1, index uint64) {
 	*d = base.Clone()
 	var idx [8]byte
 	binary.LittleEndian.PutUint64(idx[:], index)
@@ -75,16 +74,16 @@ func initNode(d *keccak.Duplex, base *keccak.Duplex, index uint64) {
 }
 
 type cryptor struct {
-	base      keccak.Duplex // base duplex state with prefix absorbed
-	leaf      keccak.Duplex // current leaf's duplex (for chunks 1+)
-	final     keccak.Duplex // final node duplex (encrypts chunk 0, absorbs CVs)
+	base      keccak.State1 // base state with prefix absorbed
+	leaf      keccak.State1 // current leaf's state (for chunks 1+)
+	final     keccak.State1 // final node state (encrypts chunk 0, absorbs CVs)
 	finalized bool
 	nLeaves   int  // number of completed leaf CVs absorbed into final node
 	chunkOff  int  // bytes processed in current chunk
 	leafMode  bool // true after chunk 0 complete and HOP_FRAME absorbed
 }
 
-// finalizeCV squeezes the chain value from the current leaf's duplex and absorbs it into the final node.
+// finalizeCV squeezes the chain value from the current leaf's state and absorbs it into the final node.
 func (c *cryptor) finalizeCV() {
 	c.leaf.PadPermute(chainValueDS)
 	var cv [KeySize]byte
@@ -231,9 +230,9 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	// Small remainder via x1.
 	for idx < nFlush {
 		off := idx * ChunkSize
-		var d keccak.Duplex
+		var d keccak.State1
 		encryptX1(&e.base, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &d)
-		e.final.AbsorbCV(d.State())
+		e.final.AbsorbCV(&d)
 		e.nLeaves++
 		idx++
 	}
@@ -345,9 +344,9 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	// Small remainder via x1.
 	for idx < nFlush {
 		off := idx * ChunkSize
-		var leaf keccak.Duplex
+		var leaf keccak.State1
 		decryptX1(&d.base, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &leaf)
-		d.final.AbsorbCV(leaf.State())
+		d.final.AbsorbCV(&leaf)
 		d.nLeaves++
 		idx++
 	}
@@ -360,30 +359,30 @@ func (d *Decryptor) Finalize() [TagSize]byte {
 	return d.finalizeInternal()
 }
 
-func encryptX1(base *keccak.Duplex, index uint64, pt, ct []byte, d *keccak.Duplex) {
+func encryptX1(base *keccak.State1, index uint64, pt, ct []byte, d *keccak.State1) {
 	initNode(d, base, index)
-	d.State().EncryptAll(pt, ct, chainValueDS)
+	d.EncryptAll(pt, ct, chainValueDS)
 }
 
-func encryptX8(base *keccak.Duplex, baseIndex uint64, pt, ct []byte, s *keccak.State8) {
+func encryptX8(base *keccak.State1, baseIndex uint64, pt, ct []byte, s *keccak.State8) {
 	suffixes := [8]uint64{
 		baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3,
 		baseIndex + 4, baseIndex + 5, baseIndex + 6, baseIndex + 7,
 	}
-	initX8(s, base.State(), base.Pos(), suffixes, initDS)
+	initX8(s, base, suffixes, initDS)
 	s.EncryptAll(pt, ct, ChunkSize, chainValueDS)
 }
 
-func decryptX1(base *keccak.Duplex, index uint64, ct, pt []byte, d *keccak.Duplex) {
+func decryptX1(base *keccak.State1, index uint64, ct, pt []byte, d *keccak.State1) {
 	initNode(d, base, index)
-	d.State().DecryptAll(ct, pt, chainValueDS)
+	d.DecryptAll(ct, pt, chainValueDS)
 }
 
-func decryptX8(base *keccak.Duplex, baseIndex uint64, ct, pt []byte, s *keccak.State8) {
+func decryptX8(base *keccak.State1, baseIndex uint64, ct, pt []byte, s *keccak.State8) {
 	suffixes := [8]uint64{
 		baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3,
 		baseIndex + 4, baseIndex + 5, baseIndex + 6, baseIndex + 7,
 	}
-	initX8(s, base.State(), base.Pos(), suffixes, initDS)
+	initX8(s, base, suffixes, initDS)
 	s.DecryptAll(ct, pt, ChunkSize, chainValueDS)
 }

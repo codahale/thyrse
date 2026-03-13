@@ -133,7 +133,7 @@ func TestDuplexSpongeVectors(t *testing.T) {
 		msg := mustHex(t, tc.Msg)
 		want := mustHex(t, tc.Out)
 
-		var d Duplex
+		var d State1
 		d.Absorb(msg)
 		d.PadPermute(tc.DS)
 
@@ -184,7 +184,7 @@ func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
 		}
 
 		// Encrypt.
-		var enc Duplex
+		var enc State1
 		enc.Absorb([]byte("test-key"))
 		enc.PadPermute(0x08)
 		ct := make([]byte, size)
@@ -192,7 +192,7 @@ func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
 		encPos := enc.pos
 
 		// Decrypt with same init.
-		var dec Duplex
+		var dec State1
 		dec.Absorb([]byte("test-key"))
 		dec.PadPermute(0x08)
 		recovered := make([]byte, size)
@@ -220,7 +220,7 @@ func TestDuplexAbsorbCV(t *testing.T) {
 	leaf.a[3] = 0x191a1b1c1d1e1f20
 
 	// Absorb via AbsorbCV.
-	var d1 Duplex
+	var d1 State1
 	d1.AbsorbCV(&leaf)
 
 	// Absorb via manual byte extraction + Absorb.
@@ -229,16 +229,16 @@ func TestDuplexAbsorbCV(t *testing.T) {
 	binary.LittleEndian.PutUint64(cv[8:16], leaf.a[1])
 	binary.LittleEndian.PutUint64(cv[16:24], leaf.a[2])
 	binary.LittleEndian.PutUint64(cv[24:32], leaf.a[3])
-	var d2 Duplex
+	var d2 State1
 	d2.Absorb(cv[:])
 
-	if d1.s != d2.s || d1.pos != d2.pos {
+	if d1 != d2 {
 		t.Fatal("AbsorbCV and Absorb(cv[:]) diverged")
 	}
 }
 
 func TestDuplexEqual(t *testing.T) {
-	var a, b Duplex
+	var a, b State1
 	a.Absorb([]byte("same"))
 	b.Absorb([]byte("same"))
 	if got, want := a.Equal(&b), 1; got != want {
