@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/codahale/thyrse/internal/testdata"
 )
 
 // ptn returns a byte slice of length n using the KT128 test pattern:
@@ -382,4 +386,64 @@ func TestChain(t *testing.T) {
 			t.Error("Chain on two clones of the same hasher produced different results")
 		}
 	})
+}
+
+var sizes = slices.Concat(testdata.Sizes, []testdata.Size{
+	{Name: "8KiB+1B", N: BlockSize + 1},
+})
+
+func BenchmarkWrite(b *testing.B) {
+	for _, size := range sizes {
+		b.Run(size.Name, func(b *testing.B) {
+			msg := ptn(size.N)
+			out := make([]byte, 32)
+			b.SetBytes(int64(size.N))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				h := New()
+				_, _ = h.Write(msg)
+				_, _ = h.Read(out)
+			}
+		})
+	}
+}
+
+func BenchmarkWriteStreaming(b *testing.B) {
+	for _, size := range sizes {
+		if size.N < 2*BlockSize {
+			continue
+		}
+		b.Run(size.Name, func(b *testing.B) {
+			msg := ptn(size.N)
+			out := make([]byte, 32)
+			b.SetBytes(int64(size.N))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				h := New()
+				for i := 0; i < len(msg); i += BlockSize {
+					end := min(i+BlockSize, len(msg))
+					_, _ = h.Write(msg[i:end])
+				}
+				_, _ = h.Read(out)
+			}
+		})
+	}
+}
+
+func BenchmarkRead(b *testing.B) {
+	for _, outSize := range []int{32, 64, 256, 1024} {
+		b.Run(fmt.Sprintf("%d", outSize), func(b *testing.B) {
+			out := make([]byte, outSize)
+			b.SetBytes(int64(outSize))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				h := New()
+				_, _ = h.Write(ptn(BlockSize + 1))
+				_, _ = io.ReadFull(h, out)
+			}
+		})
+	}
 }
