@@ -30,7 +30,7 @@ func xorByteInWord(w *uint64, pos int, b byte) {
 	*w ^= uint64(b) << shift
 }
 
-var roundConstants = [24]uint64{ //nolint:gochecknoglobals
+var roundConstants = [24]uint64{
 	0x0000000000000001,
 	0x0000000000008082,
 	0x800000000000808A,
@@ -57,14 +57,14 @@ var roundConstants = [24]uint64{ //nolint:gochecknoglobals
 	0x8000000080008008,
 }
 
-var rho = [24]uint{ //nolint:gochecknoglobals
+var rho = [24]uint{
 	1, 3, 6, 10, 15, 21,
 	28, 36, 45, 55, 2, 14,
 	27, 41, 56, 8, 25, 43,
 	62, 18, 39, 61, 20, 44,
 }
 
-var pi = [24]int{ //nolint:gochecknoglobals
+var pi = [24]int{
 	10, 7, 11, 17, 18, 3,
 	5, 16, 8, 21, 24, 4,
 	15, 23, 19, 13, 12, 2,
