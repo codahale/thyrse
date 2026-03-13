@@ -212,7 +212,7 @@ func (s *State1) DecryptAll(src, dst []byte, ds byte) {
 
 // SetAll sets all 8 instances to be identical copies of base.
 func (s *State8) SetAll(base *State1) {
-	for lane := range Lanes {
+	for lane := range lanes {
 		for inst := range 8 {
 			s.a[lane][inst] = base.a[lane]
 		}

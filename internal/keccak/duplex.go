@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 )
 
-// Pos returns the current byte position within the rate.
-func (s *State1) Pos() int { return s.pos }
 
 // Clone returns a copy of the state. State1 is a value type,
 // so the struct copy is a deep copy.
@@ -63,7 +61,7 @@ func (s *State1) AbsorbCV(src *State1) {
 	if s.pos&7 != 0 {
 		panic("keccak: AbsorbCV on non-lane-aligned state")
 	}
-	s.absorbCVLanes(src.a[0], src.a[1], src.a[2], src.a[3])
+	s.absorbCVlanes(src.a[0], src.a[1], src.a[2], src.a[3])
 }
 
 // AbsorbCVx8 absorbs 8 chain values (32 bytes each) from src in instance order.
@@ -72,7 +70,7 @@ func (s *State1) AbsorbCVx8(src *State8) {
 		panic("keccak: AbsorbCV on non-lane-aligned state")
 	}
 	for inst := range 8 {
-		s.absorbCVLanes(src.a[0][inst], src.a[1][inst], src.a[2][inst], src.a[3][inst])
+		s.absorbCVlanes(src.a[0][inst], src.a[1][inst], src.a[2][inst], src.a[3][inst])
 	}
 }
 
@@ -82,13 +80,13 @@ func (s *State1) AbsorbCVx8N(src *State8, n int) {
 		panic("keccak: AbsorbCV on non-lane-aligned state")
 	}
 	for inst := range n {
-		s.absorbCVLanes(src.a[0][inst], src.a[1][inst], src.a[2][inst], src.a[3][inst])
+		s.absorbCVlanes(src.a[0][inst], src.a[1][inst], src.a[2][inst], src.a[3][inst])
 	}
 }
 
-// absorbCVLanes absorbs a 4-lane (32-byte) chain value. The caller must ensure
+// absorbCVlanes absorbs a 4-lane (32-byte) chain value. The caller must ensure
 // s.pos is lane-aligned.
-func (s *State1) absorbCVLanes(w0, w1, w2, w3 uint64) {
+func (s *State1) absorbCVlanes(w0, w1, w2, w3 uint64) {
 	lane := s.pos >> 3
 	remaining := (Rate >> 3) - lane
 	if remaining >= 4 {
@@ -198,7 +196,7 @@ func (a *State1) PadPermute2(b *State1, ds byte) {
 // The comparison is constant-time with respect to the keccak state.
 func (s *State1) Equal(other *State1) int {
 	var acc uint64
-	for i := range Lanes {
+	for i := range lanes {
 		acc |= s.a[i] ^ other.a[i]
 	}
 	acc |= acc >> 32

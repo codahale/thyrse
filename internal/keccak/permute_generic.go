@@ -43,7 +43,7 @@ var pi = [24]int{ //nolint:gochecknoglobals
 	20, 14, 22, 9, 6, 1,
 }
 
-func keccakP1600x12(a *[Lanes]uint64) {
+func keccakP1600x12(a *[lanes]uint64) {
 	var c [5]uint64
 	for round := 12; round < 24; round++ {
 		for i := range 5 {
@@ -52,7 +52,7 @@ func keccakP1600x12(a *[Lanes]uint64) {
 
 		for i := range 5 {
 			t := c[(i+4)%5] ^ bits.RotateLeft64(c[(i+1)%5], 1)
-			for j := 0; j < Lanes; j += 5 {
+			for j := 0; j < lanes; j += 5 {
 				a[j+i] ^= t
 			}
 		}
@@ -65,7 +65,7 @@ func keccakP1600x12(a *[Lanes]uint64) {
 			t = c0
 		}
 
-		for j := 0; j < Lanes; j += 5 {
+		for j := 0; j < lanes; j += 5 {
 			for i := range 5 {
 				c[i] = a[j+i]
 			}
@@ -85,11 +85,11 @@ func permute12x1Generic(s *State1) {
 func permute12x8Generic(s *State8) {
 	var t State1
 	for inst := range 8 {
-		for lane := range Lanes {
+		for lane := range lanes {
 			t.a[lane] = s.a[lane][inst]
 		}
 		keccakP1600x12(&t.a)
-		for lane := range Lanes {
+		for lane := range lanes {
 			s.a[lane][inst] = t.a[lane]
 		}
 	}

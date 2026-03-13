@@ -70,11 +70,11 @@ func mustHex(t *testing.T, s string) []byte {
 
 func state1FromBytes(t *testing.T, in []byte) State1 {
 	t.Helper()
-	if len(in) != StateBytes {
-		t.Fatalf("state1 bytes: got %d want %d", len(in), StateBytes)
+	if len(in) != stateBytes {
+		t.Fatalf("state1 bytes: got %d want %d", len(in), stateBytes)
 	}
 	var s State1
-	for lane := range Lanes {
+	for lane := range lanes {
 		base := lane * 8
 		s.a[lane] = binary.LittleEndian.Uint64(in[base : base+8])
 	}
@@ -82,8 +82,8 @@ func state1FromBytes(t *testing.T, in []byte) State1 {
 }
 
 func state1Bytes(s *State1) []byte {
-	out := make([]byte, StateBytes)
-	for lane := range Lanes {
+	out := make([]byte, stateBytes)
+	for lane := range lanes {
 		base := lane * 8
 		binary.LittleEndian.PutUint64(out[base:base+8], s.a[lane])
 	}
@@ -92,7 +92,7 @@ func state1Bytes(s *State1) []byte {
 
 func stateNSetBytes[T ~int](slices [][]byte, width T, set func(inst, lane int, v uint64)) {
 	for inst := range int(width) {
-		for lane := range Lanes {
+		for lane := range lanes {
 			base := lane * 8
 			set(inst, lane, binary.LittleEndian.Uint64(slices[inst][base:base+8]))
 		}
@@ -102,8 +102,8 @@ func stateNSetBytes[T ~int](slices [][]byte, width T, set func(inst, lane int, v
 func stateNBytes(width int, get func(inst, lane int) uint64) [][]byte {
 	out := make([][]byte, width)
 	for inst := range width {
-		b := make([]byte, StateBytes)
-		for lane := range Lanes {
+		b := make([]byte, stateBytes)
+		for lane := range lanes {
 			base := lane * 8
 			binary.LittleEndian.PutUint64(b[base:base+8], get(inst, lane))
 		}
