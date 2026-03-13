@@ -6,9 +6,9 @@
 
 
 #include "textflag.h"
-#include "keccak_amd64_gp.h"
-#include "keccak_amd64_avx2.h"
-#include "keccak_amd64_avx512.h"
+#include "permute_amd64_gp.h"
+#include "permute_amd64_avx2.h"
+#include "permute_amd64_avx512.h"
 
 
 // func p1600(a *State1)

@@ -5,9 +5,9 @@
 //go:build !purego
 
 #include "textflag.h"
-#include "keccak_amd64_gp.h"
-#include "keccak_amd64_avx2.h"
-#include "keccak_amd64_avx512.h"
+#include "permute_amd64_gp.h"
+#include "permute_amd64_avx2.h"
+#include "permute_amd64_avx512.h"
 
 // ABSORB_LANE_X8_GATHER gathers one uint64 from 8 instances at the given byte
 // offset from BX (data base pointer) using Z28 as the index vector

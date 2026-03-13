@@ -5,25 +5,27 @@ package keccak
 import "unsafe"
 
 //go:noescape
-func fastLoopAbsorb168x1(s *State1, in *byte, n int)
+func p1600x8Lane(a *State8)
 
 //go:noescape
-func fastLoopAbsorb168x1AVX512(s *State1, in *byte, n int)
+func p1600x8AVX512State(a *State8)
+
+func permute12x8Arch(s *State8) bool {
+	if hasAVX512 {
+		p1600x8AVX512State(s)
+	} else {
+		p1600x8Lane(s)
+	}
+	return true
+}
+
+const AvailableLanes = 8
 
 //go:noescape
 func fastLoopAbsorb168x8AVX2(s *State8, in *byte, stride, n int)
 
 //go:noescape
 func fastLoopAbsorb168x8AVX512(s *State8, in *byte, stride, n int)
-
-func fastLoopAbsorb168x1Arch(s *State1, in []byte) bool {
-	if hasAVX512 {
-		fastLoopAbsorb168x1AVX512(s, unsafe.SliceData(in), len(in))
-	} else {
-		fastLoopAbsorb168x1(s, unsafe.SliceData(in), len(in))
-	}
-	return true
-}
 
 func fastLoopAbsorb168x8Arch(s *State8, in []byte, stride, n int) bool {
 	if hasAVX512 {
@@ -33,12 +35,6 @@ func fastLoopAbsorb168x8Arch(s *State8, in []byte, stride, n int) bool {
 	}
 	return true
 }
-
-//go:noescape
-func fastLoopEncrypt168x1(s *State1, src, dst *byte, n int)
-
-//go:noescape
-func fastLoopDecrypt168x1(s *State1, src, dst *byte, n int)
 
 //go:noescape
 func fastLoopEncrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)
@@ -51,16 +47,6 @@ func fastLoopEncrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
 
 //go:noescape
 func fastLoopDecrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
-
-func fastLoopEncrypt168x1Arch(s *State1, src, dst []byte) bool {
-	fastLoopEncrypt168x1(s, unsafe.SliceData(src), unsafe.SliceData(dst), len(src))
-	return true
-}
-
-func fastLoopDecrypt168x1Arch(s *State1, src, dst []byte) bool {
-	fastLoopDecrypt168x1(s, unsafe.SliceData(src), unsafe.SliceData(dst), len(src))
-	return true
-}
 
 func fastLoopEncrypt168x8Arch(s *State8, src, dst []byte, stride, n int) bool {
 	if hasAVX512 {

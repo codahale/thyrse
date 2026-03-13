@@ -2,6 +2,34 @@ package keccak
 
 import "math/bits"
 
+const (
+	// stateBytes is the size of a Keccak-p[1600] state in bytes.
+	stateBytes = 200
+	// lanes is the number of 64-bit lanes in a Keccak-p[1600] state.
+	lanes = stateBytes / 8
+
+	Rate = 168
+)
+
+func loadPartialLE(in []byte) uint64 {
+	var v uint64
+	for i := range in {
+		v |= uint64(in[i]) << (8 * i)
+	}
+	return v
+}
+
+func storePartialLE(out []byte, v uint64) {
+	for i := range out {
+		out[i] = byte(v >> (8 * i))
+	}
+}
+
+func xorByteInWord(w *uint64, pos int, b byte) {
+	shift := uint((pos & 7) << 3)
+	*w ^= uint64(b) << shift
+}
+
 var roundConstants = [24]uint64{ //nolint:gochecknoglobals
 	0x0000000000000001,
 	0x0000000000008082,
@@ -75,22 +103,5 @@ func keccakP1600x12(a *[lanes]uint64) {
 		}
 
 		a[0] ^= roundConstants[round]
-	}
-}
-
-func permute12x1Generic(s *State1) {
-	keccakP1600x12(&s.a)
-}
-
-func permute12x8Generic(s *State8) {
-	var t State1
-	for inst := range 8 {
-		for lane := range lanes {
-			t.a[lane] = s.a[lane][inst]
-		}
-		keccakP1600x12(&t.a)
-		for lane := range lanes {
-			s.a[lane][inst] = t.a[lane]
-		}
 	}
 }
