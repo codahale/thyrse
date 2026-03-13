@@ -60,43 +60,9 @@ func initBase(base *keccak.Duplex, key, nonce, ad []byte) {
 // basePos+8, and permutes. This initializes 8 tree nodes in parallel from
 // a shared base duplex state.
 func initX8(s *keccak.State8, base *keccak.State1, basePos int, suffixes [8]uint64, ds byte) {
-	// Broadcast base into all 8 instances.
-	for lane := range keccak.Lanes {
-		for inst := range 8 {
-			s.A[lane][inst] = base.A[lane]
-		}
-	}
-
-	// XOR each suffix (8-byte LE) at basePos.
-	byteInLane := basePos & 7
-	laneIdx := basePos >> 3
-	if byteInLane == 0 {
-		// Lane-aligned: suffix fits in one lane.
-		for inst := range 8 {
-			s.A[laneIdx][inst] ^= suffixes[inst]
-		}
-	} else {
-		// Split across two lanes.
-		shift := uint(byteInLane) * 8
-		for inst := range 8 {
-			s.A[laneIdx][inst] ^= suffixes[inst] << shift
-			s.A[laneIdx+1][inst] ^= suffixes[inst] >> (64 - shift)
-		}
-	}
-
-	// Pad10*1 at basePos+8 with ds, then permute.
-	padPos := basePos + 8
-	padShift := uint((padPos & 7) << 3)
-	padLane := padPos >> 3
-	dsMask := uint64(ds) << padShift
-	endShift := uint(((keccak.Rate - 1) & 7) << 3)
-	endMask := uint64(0x80) << endShift
-	endLane := (keccak.Rate - 1) >> 3
-	for inst := range 8 {
-		s.A[padLane][inst] ^= dsMask
-		s.A[endLane][inst] ^= endMask
-	}
-	s.Permute12()
+	s.SetAll(base)
+	s.AbsorbWords(basePos, suffixes)
+	s.PadPermute(basePos+8, ds)
 }
 
 // initNode clones base, absorbs LEU64(index), and pad-permutes with initDS.
