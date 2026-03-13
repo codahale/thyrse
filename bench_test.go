@@ -119,12 +119,11 @@ func BenchmarkProtocol_UnmaskStream(b *testing.B) {
 			p := New("bench")
 			plaintext := make([]byte, size.N)
 			ciphertext := make([]byte, size.N)
-			p.Clone().Mask("msg", ciphertext[:0], plaintext)
 
 			b.SetBytes(int64(size.N))
 			b.ReportAllocs()
 			for b.Loop() {
-				us := p.Clone().UnmaskStream("msg")
+				us := p.UnmaskStream("msg")
 				us.XORKeyStream(plaintext, ciphertext)
 				_ = us.Close()
 			}
