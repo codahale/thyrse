@@ -202,27 +202,13 @@ func (d *Duplex) PadPermute(ds byte) {
 }
 
 // PadPermute2 applies pad10*1 padding with ds to both a and b (which may have
-// different states but must be at the same position), permutes both in parallel
-// via State2, and leaves both at pos=0 ready to squeeze.
+// different states but must be at the same position), permutes both, and
+// leaves both at pos=0 ready to squeeze.
 func (a *Duplex) PadPermute2(b *Duplex, ds byte) {
 	if a.pos != b.pos {
 		panic("keccak: PadPermute2 with mismatched positions")
 	}
-	var s2 State2
-	for i := range Lanes {
-		*s2.lane2(i, 0) = a.s.a[i]
-		*s2.lane2(i, 1) = b.s.a[i]
-	}
-	xorByteInWord(s2.lane2(a.pos>>3, 0), a.pos, ds)
-	xorByteInWord(s2.lane2(a.pos>>3, 1), a.pos, ds)
-	endLane := (Rate - 1) >> 3
-	xorByteInWord(s2.lane2(endLane, 0), Rate-1, 0x80)
-	xorByteInWord(s2.lane2(endLane, 1), Rate-1, 0x80)
-	s2.Permute12()
-	for i := range Lanes {
-		a.s.a[i] = s2.lane2val(i, 0)
-		b.s.a[i] = s2.lane2val(i, 1)
-	}
+	padPermute2(&a.s, &b.s, a.pos, ds)
 	a.pos = 0
 	b.pos = 0
 }

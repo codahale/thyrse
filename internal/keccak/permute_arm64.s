@@ -37,7 +37,7 @@ TEXT ·p1600(SB), $200-8
 
 
 
-// func p1600x2Lane(a *State2)
+// func p1600x2Lane(a *[Lanes][2]uint64)
 TEXT ·p1600x2Lane(SB), NOSPLIT, $0-8
 	MOVD	a+0(FP), R0
 	MOVD	$round_consts(SB), R1
