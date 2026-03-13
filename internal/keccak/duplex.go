@@ -197,9 +197,7 @@ func (d *Duplex) Decrypt(dst, src []byte) {
 // PadPermute applies pad10*1 padding at the current position with domain
 // separation byte ds, then permutes. Resets pos to 0.
 func (d *Duplex) PadPermute(ds byte) {
-	xorByteInWord(&d.s.a[d.pos>>3], d.pos, ds)
-	xorByteInWord(&d.s.a[(Rate-1)>>3], Rate-1, 0x80)
-	d.s.Permute12()
+	d.s.padPermute(d.pos, ds)
 	d.pos = 0
 }
 
