@@ -219,8 +219,8 @@ func (h *KT128) Chain(customA uint8, dstA []byte, customB uint8, dstB []byte) {
 	b.ts.Squeeze(dstB)
 }
 
-// clone returns an independent copy of the KT128.
-func (h *KT128) clone() *KT128 {
+// Clone returns an independent copy of the KT128. The original and clone evolve independently.
+func (h *KT128) Clone() *KT128 {
 	return &KT128{
 		buf:       slices.Clone(h.buf),
 		ts:        h.ts,
@@ -229,11 +229,6 @@ func (h *KT128) clone() *KT128 {
 		ds:        h.ds,
 		state:     h.state,
 	}
-}
-
-// Clone returns an independent copy of the KT128. The original and clone evolve independently.
-func (h *KT128) Clone() *KT128 {
-	return h.clone()
 }
 
 // Reset resets the KT128 to its initial state.
