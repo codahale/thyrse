@@ -5,9 +5,9 @@ package keccak
 import "unsafe"
 
 //go:noescape
-func processLeavesKT128ARM64(input *byte, cvs *byte)
+func processLeavesKT128ARM64(input *byte, s *State8)
 
-func processLeavesKT128Arch(input []byte, cvs *[256]byte) bool {
-	processLeavesKT128ARM64(unsafe.SliceData(input), &cvs[0])
+func processLeavesKT128Arch(input []byte, s *State8) bool {
+	processLeavesKT128ARM64(unsafe.SliceData(input), s)
 	return true
 }

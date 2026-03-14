@@ -1,9 +1,6 @@
 package keccak
 
-import (
-	"encoding/binary"
-	"testing"
-)
+import "testing"
 
 func TestProcessLeavesKT128(t *testing.T) {
 	const blockSize = 8192
@@ -14,24 +11,19 @@ func TestProcessLeavesKT128(t *testing.T) {
 		input[i] = byte(i*7 + i>>8)
 	}
 
-	// Compute expected CVs via generic path.
-	var want [256]byte
+	// Compute expected state via generic path.
+	var want State8
 	processLeavesKT128Generic(input, &want)
 
-	// Compute CVs via arch-dispatched path.
-	var got [256]byte
+	// Compute state via arch-dispatched path.
+	var got State8
 	ProcessLeavesKT128(input, &got)
 
-	if got != want {
+	for lane := range 25 {
 		for inst := range 8 {
-			wantCV := want[inst*32 : inst*32+32]
-			gotCV := got[inst*32 : inst*32+32]
-			for lane := range 4 {
-				w := binary.LittleEndian.Uint64(wantCV[lane*8:])
-				g := binary.LittleEndian.Uint64(gotCV[lane*8:])
-				if w != g {
-					t.Errorf("instance %d, lane %d: got %016x, want %016x", inst, lane, g, w)
-				}
+			if got.a[lane][inst] != want.a[lane][inst] {
+				t.Errorf("lane %d, inst %d: got %016x, want %016x",
+					lane, inst, got.a[lane][inst], want.a[lane][inst])
 			}
 		}
 	}
@@ -43,9 +35,9 @@ func BenchmarkProcessLeavesKT128(b *testing.B) {
 	for i := range input {
 		input[i] = byte(i)
 	}
-	var cvs [256]byte
+	var s State8
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		ProcessLeavesKT128(input, &cvs)
+		ProcessLeavesKT128(input, &s)
 	}
 }

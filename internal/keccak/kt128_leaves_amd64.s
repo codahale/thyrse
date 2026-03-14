@@ -28,11 +28,10 @@
 	MOVQ	$0x8000000000000000, AX; \
 	VPBROADCASTQ	AX, Zdst
 
-// func processLeavesKT128AVX512(input *byte, cvs *byte)
+// func processLeavesKT128AVX512(input *byte, s *State8)
 //
-// Processes 8 × 8192-byte chunks, producing 8 × 32-byte chain values.
+// Processes 8 × 8192-byte chunks, storing post-permute state to State8.
 // Input: 8 contiguous 8192-byte blocks (total 65536 bytes).
-// Output: 8 × 32-byte CVs in interleaved order (instance 0 first, etc.).
 //
 // KT128 leaf constants (hardcoded):
 //   Rate = 168, DS = 0x0B, BlockSize = 8192
@@ -45,13 +44,11 @@
 //   BX   = data base pointer
 //   R11  = round constants pointer
 //   R12  = stripe loop counter
-//   DI   = output (cvs) pointer (saved)
 //   Z0-Z24  = Keccak state (persistent)
 //   Z25-Z31 = scratch
 //   Z28     = gather index vector
 TEXT ·processLeavesKT128AVX512(SB), $384-16
 	MOVQ	input+0(FP), BX
-	MOVQ	cvs+8(FP), DI
 
 	// Build gather index vector {0, 8192, 2×8192, ..., 7×8192} at SP+320.
 	MOVQ	$0, 320(SP)
@@ -162,30 +159,33 @@ leaves_avx512_loop:
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
 
-	// Extract CVs via VPSCATTERQQ.
-	// Build scatter index: {0, 32, 64, 96, 128, 160, 192, 224} (byte offsets for 8 CVs).
-	MOVQ	$0, 320(SP)
-	MOVQ	$32, 328(SP)
-	MOVQ	$64, 336(SP)
-	MOVQ	$96, 344(SP)
-	MOVQ	$128, 352(SP)
-	MOVQ	$160, 360(SP)
-	MOVQ	$192, 368(SP)
-	MOVQ	$224, 376(SP)
-	VMOVDQU64	320(SP), Z28
-
-	// Scatter lane 0 at offset 0 within each CV.
-	KXNORB	K1, K1, K1
-	VPSCATTERQQ	Z0, K1, 0(DI)(Z28*1)
-	// Scatter lane 1 at offset 8 within each CV.
-	KXNORB	K1, K1, K1
-	VPSCATTERQQ	Z1, K1, 8(DI)(Z28*1)
-	// Scatter lane 2 at offset 16 within each CV.
-	KXNORB	K1, K1, K1
-	VPSCATTERQQ	Z2, K1, 16(DI)(Z28*1)
-	// Scatter lane 3 at offset 24 within each CV.
-	KXNORB	K1, K1, K1
-	VPSCATTERQQ	Z3, K1, 24(DI)(Z28*1)
+	// Store state back to State8.
+	MOVQ	s+8(FP), AX
+	VMOVDQU64	Z0, 0*64(AX)
+	VMOVDQU64	Z1, 1*64(AX)
+	VMOVDQU64	Z2, 2*64(AX)
+	VMOVDQU64	Z3, 3*64(AX)
+	VMOVDQU64	Z4, 4*64(AX)
+	VMOVDQU64	Z5, 5*64(AX)
+	VMOVDQU64	Z6, 6*64(AX)
+	VMOVDQU64	Z7, 7*64(AX)
+	VMOVDQU64	Z8, 8*64(AX)
+	VMOVDQU64	Z9, 9*64(AX)
+	VMOVDQU64	Z10, 10*64(AX)
+	VMOVDQU64	Z11, 11*64(AX)
+	VMOVDQU64	Z12, 12*64(AX)
+	VMOVDQU64	Z13, 13*64(AX)
+	VMOVDQU64	Z14, 14*64(AX)
+	VMOVDQU64	Z15, 15*64(AX)
+	VMOVDQU64	Z16, 16*64(AX)
+	VMOVDQU64	Z17, 17*64(AX)
+	VMOVDQU64	Z18, 18*64(AX)
+	VMOVDQU64	Z19, 19*64(AX)
+	VMOVDQU64	Z20, 20*64(AX)
+	VMOVDQU64	Z21, 21*64(AX)
+	VMOVDQU64	Z22, 22*64(AX)
+	VMOVDQU64	Z23, 23*64(AX)
+	VMOVDQU64	Z24, 24*64(AX)
 
 	VZEROUPPER
 	RET
@@ -199,16 +199,16 @@ leaves_avx512_loop:
 	MOVQ	i*8(DX), R10; XORQ	R10, i*32+16(R8); \
 	MOVQ	i*8(BX), R10; XORQ	R10, i*32+24(R8)
 
-// func processLeavesKT128AVX2(input *byte, cvs *byte)
+// func processLeavesKT128AVX2(input *byte, s *State8)
 //
-// Processes 8 × 8192-byte chunks via 2× x4 AVX2, producing 8 × 32-byte CVs.
+// Processes 8 × 8192-byte chunks via 2× x4 AVX2, storing post-permute state.
 //
 // Frame: 1648 bytes local (0-799 = buffer A, 800-1599 = buffer B,
-//        1600-1647 = 4 input ptrs + count + saved output ptr), 16 bytes args.
+//        1600-1647 = 4 input ptrs + count + saved State8 ptr), 16 bytes args.
 TEXT ·processLeavesKT128AVX2(SB), $1648-16
 	MOVQ	input+0(FP), AX
-	MOVQ	cvs+8(FP), DI
-	MOVQ	DI, 1640(SP)		// save output pointer
+	MOVQ	s+8(FP), DI
+	MOVQ	DI, 1640(SP)		// save State8 pointer
 
 	// === Half 0: instances 0-3 ===
 	// Input pointers: in + {0, 1, 2, 3}×8192.
@@ -360,33 +360,34 @@ leaves_avx2_final_round_a:
 	SUBQ	$1, R10
 	JNZ	leaves_avx2_final_round_a
 
-	// Extract CVs for instances 0-3.
-	// Buffer at SP+0 has 25 lanes × 32 bytes (4 instances interleaved).
-	// CV = lanes 0-3 = first 4×32 = 128 bytes.
-	// Deinterleave: for inst i, CV[j] = lane[j][i] (i-th qword in the Y register at lane j).
+	// Store state for instances 0-3 back to State8.
 	MOVQ	1640(SP), DI
 	LEAQ	0(SP), R8
-
-	// Instance 0: byte 0 of each lane Y word.
-	MOVQ	0*32+0(R8), AX;  MOVQ	AX, 0*32+0(DI)
-	MOVQ	1*32+0(R8), AX;  MOVQ	AX, 0*32+8(DI)
-	MOVQ	2*32+0(R8), AX;  MOVQ	AX, 0*32+16(DI)
-	MOVQ	3*32+0(R8), AX;  MOVQ	AX, 0*32+24(DI)
-	// Instance 1.
-	MOVQ	0*32+8(R8), AX;  MOVQ	AX, 1*32+0(DI)
-	MOVQ	1*32+8(R8), AX;  MOVQ	AX, 1*32+8(DI)
-	MOVQ	2*32+8(R8), AX;  MOVQ	AX, 1*32+16(DI)
-	MOVQ	3*32+8(R8), AX;  MOVQ	AX, 1*32+24(DI)
-	// Instance 2.
-	MOVQ	0*32+16(R8), AX; MOVQ	AX, 2*32+0(DI)
-	MOVQ	1*32+16(R8), AX; MOVQ	AX, 2*32+8(DI)
-	MOVQ	2*32+16(R8), AX; MOVQ	AX, 2*32+16(DI)
-	MOVQ	3*32+16(R8), AX; MOVQ	AX, 2*32+24(DI)
-	// Instance 3.
-	MOVQ	0*32+24(R8), AX; MOVQ	AX, 3*32+0(DI)
-	MOVQ	1*32+24(R8), AX; MOVQ	AX, 3*32+8(DI)
-	MOVQ	2*32+24(R8), AX; MOVQ	AX, 3*32+16(DI)
-	MOVQ	3*32+24(R8), AX; MOVQ	AX, 3*32+24(DI)
+	VMOVDQU	0*32(R8), Y0;  VMOVDQU	Y0, 0*64(DI)
+	VMOVDQU	1*32(R8), Y0;  VMOVDQU	Y0, 1*64(DI)
+	VMOVDQU	2*32(R8), Y0;  VMOVDQU	Y0, 2*64(DI)
+	VMOVDQU	3*32(R8), Y0;  VMOVDQU	Y0, 3*64(DI)
+	VMOVDQU	4*32(R8), Y0;  VMOVDQU	Y0, 4*64(DI)
+	VMOVDQU	5*32(R8), Y0;  VMOVDQU	Y0, 5*64(DI)
+	VMOVDQU	6*32(R8), Y0;  VMOVDQU	Y0, 6*64(DI)
+	VMOVDQU	7*32(R8), Y0;  VMOVDQU	Y0, 7*64(DI)
+	VMOVDQU	8*32(R8), Y0;  VMOVDQU	Y0, 8*64(DI)
+	VMOVDQU	9*32(R8), Y0;  VMOVDQU	Y0, 9*64(DI)
+	VMOVDQU	10*32(R8), Y0; VMOVDQU	Y0, 10*64(DI)
+	VMOVDQU	11*32(R8), Y0; VMOVDQU	Y0, 11*64(DI)
+	VMOVDQU	12*32(R8), Y0; VMOVDQU	Y0, 12*64(DI)
+	VMOVDQU	13*32(R8), Y0; VMOVDQU	Y0, 13*64(DI)
+	VMOVDQU	14*32(R8), Y0; VMOVDQU	Y0, 14*64(DI)
+	VMOVDQU	15*32(R8), Y0; VMOVDQU	Y0, 15*64(DI)
+	VMOVDQU	16*32(R8), Y0; VMOVDQU	Y0, 16*64(DI)
+	VMOVDQU	17*32(R8), Y0; VMOVDQU	Y0, 17*64(DI)
+	VMOVDQU	18*32(R8), Y0; VMOVDQU	Y0, 18*64(DI)
+	VMOVDQU	19*32(R8), Y0; VMOVDQU	Y0, 19*64(DI)
+	VMOVDQU	20*32(R8), Y0; VMOVDQU	Y0, 20*64(DI)
+	VMOVDQU	21*32(R8), Y0; VMOVDQU	Y0, 21*64(DI)
+	VMOVDQU	22*32(R8), Y0; VMOVDQU	Y0, 22*64(DI)
+	VMOVDQU	23*32(R8), Y0; VMOVDQU	Y0, 23*64(DI)
+	VMOVDQU	24*32(R8), Y0; VMOVDQU	Y0, 24*64(DI)
 
 	// === Half 1: instances 4-7 ===
 	MOVQ	input+0(FP), AX
@@ -537,30 +538,34 @@ leaves_avx2_final_round_b:
 	SUBQ	$1, R10
 	JNZ	leaves_avx2_final_round_b
 
-	// Extract CVs for instances 4-7.
+	// Store state for instances 4-7 back to State8 (offset 32).
 	MOVQ	1640(SP), DI
 	LEAQ	0(SP), R8
-
-	// Instance 4.
-	MOVQ	0*32+0(R8), AX;  MOVQ	AX, 4*32+0(DI)
-	MOVQ	1*32+0(R8), AX;  MOVQ	AX, 4*32+8(DI)
-	MOVQ	2*32+0(R8), AX;  MOVQ	AX, 4*32+16(DI)
-	MOVQ	3*32+0(R8), AX;  MOVQ	AX, 4*32+24(DI)
-	// Instance 5.
-	MOVQ	0*32+8(R8), AX;  MOVQ	AX, 5*32+0(DI)
-	MOVQ	1*32+8(R8), AX;  MOVQ	AX, 5*32+8(DI)
-	MOVQ	2*32+8(R8), AX;  MOVQ	AX, 5*32+16(DI)
-	MOVQ	3*32+8(R8), AX;  MOVQ	AX, 5*32+24(DI)
-	// Instance 6.
-	MOVQ	0*32+16(R8), AX; MOVQ	AX, 6*32+0(DI)
-	MOVQ	1*32+16(R8), AX; MOVQ	AX, 6*32+8(DI)
-	MOVQ	2*32+16(R8), AX; MOVQ	AX, 6*32+16(DI)
-	MOVQ	3*32+16(R8), AX; MOVQ	AX, 6*32+24(DI)
-	// Instance 7.
-	MOVQ	0*32+24(R8), AX; MOVQ	AX, 7*32+0(DI)
-	MOVQ	1*32+24(R8), AX; MOVQ	AX, 7*32+8(DI)
-	MOVQ	2*32+24(R8), AX; MOVQ	AX, 7*32+16(DI)
-	MOVQ	3*32+24(R8), AX; MOVQ	AX, 7*32+24(DI)
+	VMOVDQU	0*32(R8), Y0;  VMOVDQU	Y0, 0*64+32(DI)
+	VMOVDQU	1*32(R8), Y0;  VMOVDQU	Y0, 1*64+32(DI)
+	VMOVDQU	2*32(R8), Y0;  VMOVDQU	Y0, 2*64+32(DI)
+	VMOVDQU	3*32(R8), Y0;  VMOVDQU	Y0, 3*64+32(DI)
+	VMOVDQU	4*32(R8), Y0;  VMOVDQU	Y0, 4*64+32(DI)
+	VMOVDQU	5*32(R8), Y0;  VMOVDQU	Y0, 5*64+32(DI)
+	VMOVDQU	6*32(R8), Y0;  VMOVDQU	Y0, 6*64+32(DI)
+	VMOVDQU	7*32(R8), Y0;  VMOVDQU	Y0, 7*64+32(DI)
+	VMOVDQU	8*32(R8), Y0;  VMOVDQU	Y0, 8*64+32(DI)
+	VMOVDQU	9*32(R8), Y0;  VMOVDQU	Y0, 9*64+32(DI)
+	VMOVDQU	10*32(R8), Y0; VMOVDQU	Y0, 10*64+32(DI)
+	VMOVDQU	11*32(R8), Y0; VMOVDQU	Y0, 11*64+32(DI)
+	VMOVDQU	12*32(R8), Y0; VMOVDQU	Y0, 12*64+32(DI)
+	VMOVDQU	13*32(R8), Y0; VMOVDQU	Y0, 13*64+32(DI)
+	VMOVDQU	14*32(R8), Y0; VMOVDQU	Y0, 14*64+32(DI)
+	VMOVDQU	15*32(R8), Y0; VMOVDQU	Y0, 15*64+32(DI)
+	VMOVDQU	16*32(R8), Y0; VMOVDQU	Y0, 16*64+32(DI)
+	VMOVDQU	17*32(R8), Y0; VMOVDQU	Y0, 17*64+32(DI)
+	VMOVDQU	18*32(R8), Y0; VMOVDQU	Y0, 18*64+32(DI)
+	VMOVDQU	19*32(R8), Y0; VMOVDQU	Y0, 19*64+32(DI)
+	VMOVDQU	20*32(R8), Y0; VMOVDQU	Y0, 20*64+32(DI)
+	VMOVDQU	21*32(R8), Y0; VMOVDQU	Y0, 21*64+32(DI)
+	VMOVDQU	22*32(R8), Y0; VMOVDQU	Y0, 22*64+32(DI)
+	VMOVDQU	23*32(R8), Y0; VMOVDQU	Y0, 23*64+32(DI)
+	VMOVDQU	24*32(R8), Y0; VMOVDQU	Y0, 24*64+32(DI)
 
 	VZEROUPPER
 	RET
