@@ -11,4 +11,3 @@ func permute12x8Arch(s *State8) bool {
 }
 
 const AvailableLanes = 8
-
