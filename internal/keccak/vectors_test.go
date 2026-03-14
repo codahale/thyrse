@@ -251,14 +251,14 @@ func TestDuplexEqual(t *testing.T) {
 	}
 }
 
-func TestPermuteVectorsState8(t *testing.T) {
+func TestPermuteVectorsstate8(t *testing.T) {
 	vectors := loadVectors(t)
 	for i, tc := range vectors.Permute8 {
 		ins := stateNFromHex(t, tc.In, 8)
 		wants := stateNFromHex(t, tc.Out, 8)
-		var s State8
+		var s state8
 		stateNSetBytes(ins, 8, func(inst, lane int, v uint64) { s.a[lane][inst] = v })
-		s.Permute12()
+		s.permute12()
 		for inst, got := range stateNBytes(8, func(i, lane int) uint64 { return s.a[lane][i] }) {
 			if string(got) != string(wants[inst]) {
 				t.Fatalf("permute8[%d] lane %d mismatch", i, inst)

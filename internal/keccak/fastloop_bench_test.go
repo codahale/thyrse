@@ -49,13 +49,6 @@ func BenchmarkAbsorbFinal(b *testing.B) {
 		}
 	})
 
-	b.Run("x8", func(b *testing.B) {
-		var s State8
-		for b.Loop() {
-			s.Reset()
-			s.absorbFinal(tail, tail, tail, tail, tail, tail, tail, tail, 0x0B)
-		}
-	})
 }
 
 func BenchmarkAbsorbCVs(b *testing.B) {

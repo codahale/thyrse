@@ -2,13 +2,13 @@ package keccak
 
 import "encoding/binary"
 
-// State8 is eight lane-major Keccak-p[1600] states with shared duplex position tracking.
-type State8 struct {
+// state8 is eight lane-major Keccak-p[1600] states with shared duplex position tracking.
+type state8 struct {
 	a   [lanes][8]uint64
 	pos int
 }
 
-func permute12x8Generic(s *State8) {
+func permute12x8Generic(s *state8) {
 	var t State1
 	for inst := range 8 {
 		for lane := range lanes {
@@ -21,20 +21,20 @@ func permute12x8Generic(s *State8) {
 	}
 }
 
-func (s *State8) Permute12() {
+func (s *state8) permute12() {
 	if permute12x8Arch(s) {
 		return
 	}
 	permute12x8Generic(s)
 }
 
-func (s *State8) Reset() {
+func (s *state8) reset() {
 	clear(s.a[:])
 	s.pos = 0
 }
 
 // SetAll sets all 8 instances to be identical copies of base.
-func (s *State8) SetAll(base *State1) {
+func (s *state8) setAll(base *State1) {
 	for lane := range lanes {
 		for inst := range 8 {
 			s.a[lane][inst] = base.a[lane]
@@ -45,7 +45,7 @@ func (s *State8) SetAll(base *State1) {
 
 // AbsorbWords XORs words[i] into instance i at the current byte position,
 // encoding each word as 8 little-endian bytes.
-func (s *State8) AbsorbWords(words [8]uint64) {
+func (s *state8) absorbWords(words [8]uint64) {
 	byteInLane := s.pos & 7
 	laneIdx := s.pos >> 3
 	if byteInLane == 0 {
@@ -62,79 +62,8 @@ func (s *State8) AbsorbWords(words [8]uint64) {
 	s.pos += 8
 }
 
-// fastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
-// Instance i reads from in[i*stride:]. Returns bytes absorbed per instance.
-func (s *State8) fastLoopAbsorb168(in []byte, stride int) int {
-	n := max(len(in)-7*stride, 0) // last instance starts at in[7*stride:]
-	n = (n / Rate) * Rate
-	for off := 0; off < n; off += Rate {
-		p0 := (*[Rate]byte)(in[off : off+Rate])
-		p1 := (*[Rate]byte)(in[stride+off : stride+off+Rate])
-		p2 := (*[Rate]byte)(in[2*stride+off : 2*stride+off+Rate])
-		p3 := (*[Rate]byte)(in[3*stride+off : 3*stride+off+Rate])
-		p4 := (*[Rate]byte)(in[4*stride+off : 4*stride+off+Rate])
-		p5 := (*[Rate]byte)(in[5*stride+off : 5*stride+off+Rate])
-		p6 := (*[Rate]byte)(in[6*stride+off : 6*stride+off+Rate])
-		p7 := (*[Rate]byte)(in[7*stride+off : 7*stride+off+Rate])
-		for lane := range Rate >> 3 {
-			base := lane << 3
-			s.a[lane][0] ^= binary.LittleEndian.Uint64(p0[base : base+8])
-			s.a[lane][1] ^= binary.LittleEndian.Uint64(p1[base : base+8])
-			s.a[lane][2] ^= binary.LittleEndian.Uint64(p2[base : base+8])
-			s.a[lane][3] ^= binary.LittleEndian.Uint64(p3[base : base+8])
-			s.a[lane][4] ^= binary.LittleEndian.Uint64(p4[base : base+8])
-			s.a[lane][5] ^= binary.LittleEndian.Uint64(p5[base : base+8])
-			s.a[lane][6] ^= binary.LittleEndian.Uint64(p6[base : base+8])
-			s.a[lane][7] ^= binary.LittleEndian.Uint64(p7[base : base+8])
-		}
-		s.Permute12()
-	}
-	return n
-}
-
-// absorbFinal absorbs final partial 168-byte blocks and applies Keccak padding.
-func (s *State8) absorbFinal(tail0, tail1, tail2, tail3, tail4, tail5, tail6, tail7 []byte, ds byte) {
-
-	if len(tail0) != len(tail1) || len(tail0) != len(tail2) || len(tail0) != len(tail3) ||
-		len(tail0) != len(tail4) || len(tail0) != len(tail5) || len(tail0) != len(tail6) ||
-		len(tail0) != len(tail7) || len(tail0) >= Rate {
-		panic("keccak: invalid final tail length")
-	}
-	full := len(tail0) >> 3
-	for lane := range full {
-		base := lane << 3
-		s.a[lane][0] ^= binary.LittleEndian.Uint64(tail0[base : base+8])
-		s.a[lane][1] ^= binary.LittleEndian.Uint64(tail1[base : base+8])
-		s.a[lane][2] ^= binary.LittleEndian.Uint64(tail2[base : base+8])
-		s.a[lane][3] ^= binary.LittleEndian.Uint64(tail3[base : base+8])
-		s.a[lane][4] ^= binary.LittleEndian.Uint64(tail4[base : base+8])
-		s.a[lane][5] ^= binary.LittleEndian.Uint64(tail5[base : base+8])
-		s.a[lane][6] ^= binary.LittleEndian.Uint64(tail6[base : base+8])
-		s.a[lane][7] ^= binary.LittleEndian.Uint64(tail7[base : base+8])
-	}
-	if rem := len(tail0) & 7; rem != 0 {
-		base := full << 3
-		s.a[full][0] ^= loadPartialLE(tail0[base : base+rem])
-		s.a[full][1] ^= loadPartialLE(tail1[base : base+rem])
-		s.a[full][2] ^= loadPartialLE(tail2[base : base+rem])
-		s.a[full][3] ^= loadPartialLE(tail3[base : base+rem])
-		s.a[full][4] ^= loadPartialLE(tail4[base : base+rem])
-		s.a[full][5] ^= loadPartialLE(tail5[base : base+rem])
-		s.a[full][6] ^= loadPartialLE(tail6[base : base+rem])
-		s.a[full][7] ^= loadPartialLE(tail7[base : base+rem])
-	}
-	posLane := len(tail0) >> 3
-	pos := len(tail0)
-	endLane := (Rate - 1) >> 3
-	end := Rate - 1
-	for inst := range 8 {
-		xorByteInWord(&s.a[posLane][inst], pos, ds)
-		xorByteInWord(&s.a[endLane][inst], end, 0x80)
-	}
-}
-
 // fastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes.
-func (s *State8) fastLoopEncrypt168(src, dst []byte, stride int) int {
+func (s *state8) fastLoopEncrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-7*stride, 0)
 	n = (n / Rate) * Rate
 	for off := 0; off < n; off += Rate {
@@ -146,13 +75,13 @@ func (s *State8) fastLoopEncrypt168(src, dst []byte, stride int) int {
 				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.a[lane][inst])
 			}
 		}
-		s.Permute12()
+		s.permute12()
 	}
 	return n
 }
 
 // fastLoopDecrypt168 decrypts ciphertext and permutes.
-func (s *State8) fastLoopDecrypt168(src, dst []byte, stride int) int {
+func (s *state8) fastLoopDecrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-7*stride, 0)
 	n = (n / Rate) * Rate
 	for off := 0; off < n; off += Rate {
@@ -165,13 +94,13 @@ func (s *State8) fastLoopDecrypt168(src, dst []byte, stride int) int {
 				s.a[lane][inst] = ct
 			}
 		}
-		s.Permute12()
+		s.permute12()
 	}
 	return n
 }
 
 // PadPermute applies pad10*1 padding (ds at s.pos, 0x80 at Rate-1) and permutes all instances.
-func (s *State8) PadPermute(ds byte) {
+func (s *state8) padPermute(ds byte) {
 	shift := uint((s.pos & 7) << 3)
 	dsMask := uint64(ds) << shift
 	posLane := s.pos >> 3
@@ -182,12 +111,12 @@ func (s *State8) PadPermute(ds byte) {
 		s.a[posLane][inst] ^= dsMask
 		s.a[endLane][inst] ^= endMask
 	}
-	s.Permute12()
+	s.permute12()
 	s.pos = 0
 }
 
 // encryptBytes performs SpongeWrap encryption on a partial block for instance inst.
-func (s *State8) encryptBytes(inst int, src, dst []byte) {
+func (s *state8) encryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
 	if full > 0 {
 		_ = src[full*8-1] // BCE hint
@@ -208,7 +137,7 @@ func (s *State8) encryptBytes(inst int, src, dst []byte) {
 }
 
 // decryptBytes performs SpongeWrap decryption on a partial block for instance inst.
-func (s *State8) decryptBytes(inst int, src, dst []byte) {
+func (s *state8) decryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
 	if full > 0 {
 		_ = src[full*8-1] // BCE hint
@@ -229,26 +158,8 @@ func (s *State8) decryptBytes(inst int, src, dst []byte) {
 	}
 }
 
-// AbsorbAll absorbs all data (8 instances at stride), applies padding with ds, and permutes.
-func (s *State8) AbsorbAll(in []byte, stride int, ds byte) {
-	done := s.fastLoopAbsorb168(in, stride)
-	s.absorbFinal(
-		in[done:stride],
-		in[stride+done:2*stride],
-		in[2*stride+done:3*stride],
-		in[3*stride+done:4*stride],
-		in[4*stride+done:5*stride],
-		in[5*stride+done:6*stride],
-		in[6*stride+done:7*stride],
-		in[7*stride+done:8*stride],
-		ds,
-	)
-	s.Permute12()
-	s.pos = 0
-}
-
-// EncryptAll encrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
-func (s *State8) EncryptAll(src, dst []byte, stride int, ds byte) {
+// encryptAll encrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
+func (s *state8) encryptAll(src, dst []byte, stride int, ds byte) {
 	done := s.fastLoopEncrypt168(src, dst, stride)
 	tail := stride - done
 	if tail > 0 {
@@ -258,11 +169,11 @@ func (s *State8) EncryptAll(src, dst []byte, stride int, ds byte) {
 		}
 	}
 	s.pos = tail
-	s.PadPermute(ds)
+	s.padPermute(ds)
 }
 
-// DecryptAll decrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
-func (s *State8) DecryptAll(src, dst []byte, stride int, ds byte) {
+// decryptAll decrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
+func (s *state8) decryptAll(src, dst []byte, stride int, ds byte) {
 	done := s.fastLoopDecrypt168(src, dst, stride)
 	tail := stride - done
 	if tail > 0 {
@@ -272,5 +183,5 @@ func (s *State8) DecryptAll(src, dst []byte, stride int, ds byte) {
 		}
 	}
 	s.pos = tail
-	s.PadPermute(ds)
+	s.padPermute(ds)
 }

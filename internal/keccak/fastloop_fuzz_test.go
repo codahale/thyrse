@@ -36,14 +36,14 @@ func fuzzEncryptN(t *testing.T, nInst, nBlocks int, seed string) {
 	ctAsm := make([]byte, nInst*stride)
 	switch nInst {
 	case 8:
-		var s State8
+		var s state8
 		for i := range 25 {
 			for j := range 8 {
 				seedLane(&s.a[i][j], seeds[j], i)
 			}
 		}
 		s.fastLoopEncrypt168(pt, ctAsm, stride)
-		checkState8(t, &s, sGen[:])
+		checkstate8(t, &s, sGen[:])
 	}
 
 	if !bytes.Equal(ctGen, ctAsm) {
@@ -80,14 +80,14 @@ func fuzzDecryptN(t *testing.T, nInst, nBlocks int, seed string) {
 	ptAsm := make([]byte, nInst*stride)
 	switch nInst {
 	case 8:
-		var s State8
+		var s state8
 		for i := range 25 {
 			for j := range 8 {
 				seedLane(&s.a[i][j], seeds[j], i)
 			}
 		}
 		s.fastLoopDecrypt168(ct, ptAsm, stride)
-		checkState8(t, &s, sGen[:])
+		checkstate8(t, &s, sGen[:])
 	}
 
 	if !bytes.Equal(ptGen, ptAsm) {
@@ -106,7 +106,7 @@ func seedLane(dst *uint64, seed []byte, lane int) {
 		uint64(seed[off+4])<<32 | uint64(seed[off+5])<<40 | uint64(seed[off+6])<<48 | uint64(seed[off+7])<<56
 }
 
-func checkState8(t *testing.T, s *State8, sGen []State1) {
+func checkstate8(t *testing.T, s *state8, sGen []State1) {
 	t.Helper()
 	for i := range 25 {
 		for j := range 8 {

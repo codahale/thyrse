@@ -55,15 +55,6 @@ func initBase(base *keccak.State1, key, nonce, ad []byte) {
 	base.Absorb(ad)
 }
 
-// initX8 broadcasts base into all 8 lanes of s, XORs each suffixes[i] as an
-// 8-byte LE value at the current position, applies pad10*1 with ds, and
-// permutes. This initializes 8 tree nodes in parallel from a shared base state.
-func initX8(s *keccak.State8, base *keccak.State1, suffixes [8]uint64, ds byte) {
-	s.SetAll(base)
-	s.AbsorbWords(suffixes)
-	s.PadPermute(ds)
-}
-
 // initNode clones base, absorbs LEU64(index), and pad-permutes with initDS.
 func initNode(d *keccak.State1, base *keccak.State1, index uint64) {
 	*d = base.Clone()
@@ -203,16 +194,10 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
-	var s8 keccak.State8
 	var cvs [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		suffixes := [8]uint64{
-			uint64(e.nLeaves + 1), uint64(e.nLeaves + 2), uint64(e.nLeaves + 3), uint64(e.nLeaves + 4),
-			uint64(e.nLeaves + 5), uint64(e.nLeaves + 6), uint64(e.nLeaves + 7), uint64(e.nLeaves + 8),
-		}
-		initX8(&s8, &e.base, suffixes, initDS)
-		keccak.EncryptChunksTW128(&s8, src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
+		keccak.EncryptChunksTW128(&e.base, uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
 		e.final.AbsorbCVs(cvs[:])
 		e.nLeaves += 8
 		idx += 8
@@ -225,12 +210,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		suffixes := [8]uint64{
-			uint64(e.nLeaves + 1), uint64(e.nLeaves + 2), uint64(e.nLeaves + 3), uint64(e.nLeaves + 4),
-			uint64(e.nLeaves + 5), uint64(e.nLeaves + 6), uint64(e.nLeaves + 7), uint64(e.nLeaves + 8),
-		}
-		initX8(&s8, &e.base, suffixes, initDS)
-		keccak.EncryptChunksTW128(&s8, padSrc[:], padDst[:], &cvs)
+		keccak.EncryptChunksTW128(&e.base, uint64(e.nLeaves+1), padSrc[:], padDst[:], &cvs)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
 		e.final.AbsorbCVs(cvs[:rem*32])
 		e.nLeaves += rem
@@ -327,16 +307,10 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
-	var s8 keccak.State8
 	var cvs [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		suffixes := [8]uint64{
-			uint64(d.nLeaves + 1), uint64(d.nLeaves + 2), uint64(d.nLeaves + 3), uint64(d.nLeaves + 4),
-			uint64(d.nLeaves + 5), uint64(d.nLeaves + 6), uint64(d.nLeaves + 7), uint64(d.nLeaves + 8),
-		}
-		initX8(&s8, &d.base, suffixes, initDS)
-		keccak.DecryptChunksTW128(&s8, src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
+		keccak.DecryptChunksTW128(&d.base, uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
 		d.final.AbsorbCVs(cvs[:])
 		d.nLeaves += 8
 		idx += 8
@@ -349,12 +323,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		suffixes := [8]uint64{
-			uint64(d.nLeaves + 1), uint64(d.nLeaves + 2), uint64(d.nLeaves + 3), uint64(d.nLeaves + 4),
-			uint64(d.nLeaves + 5), uint64(d.nLeaves + 6), uint64(d.nLeaves + 7), uint64(d.nLeaves + 8),
-		}
-		initX8(&s8, &d.base, suffixes, initDS)
-		keccak.DecryptChunksTW128(&s8, padSrc[:], padDst[:], &cvs)
+		keccak.DecryptChunksTW128(&d.base, uint64(d.nLeaves+1), padSrc[:], padDst[:], &cvs)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
 		d.final.AbsorbCVs(cvs[:rem*32])
 		d.nLeaves += rem

@@ -51,7 +51,7 @@ func TestFastLoopEncryptDecrypt168(t *testing.T) {
 		ct := make([]byte, 8*stride)
 		recovered := make([]byte, 8*stride)
 
-		var sEnc, sDec State8
+		var sEnc, sDec state8
 		seed := drbg.Data(1600)
 		for i := range 25 {
 			for j := range 8 {
@@ -178,7 +178,7 @@ func TestFastLoopEncrypt168CrossValidation(t *testing.T) {
 			genericEncrypt1(&sGen[inst], pt[inst*stride:(inst+1)*stride], ctGen[inst*stride:(inst+1)*stride])
 		}
 
-		var sAsm State8
+		var sAsm state8
 		for i := range 25 {
 			for j := range 8 {
 				off := i * 8
@@ -255,7 +255,7 @@ func TestFastLoopDecrypt168CrossValidation(t *testing.T) {
 			genericDecrypt1(&sGen[inst], ct[inst*stride:(inst+1)*stride], ptGen[inst*stride:(inst+1)*stride])
 		}
 
-		var sAsm State8
+		var sAsm state8
 		for i := range 25 {
 			for j := range 8 {
 				off := i * 8
@@ -307,10 +307,10 @@ func BenchmarkFastLoopEncrypt168(b *testing.B) {
 		in8 := makeInput(8 * n)
 		out8 := make([]byte, 8*n)
 		b.Run("x8/"+size.name, func(b *testing.B) {
-			var s State8
+			var s state8
 			b.SetBytes(int64(8 * n))
 			for b.Loop() {
-				s.Reset()
+				s.reset()
 				s.fastLoopEncrypt168(in8, out8, n)
 			}
 		})
@@ -339,10 +339,10 @@ func BenchmarkFastLoopDecrypt168(b *testing.B) {
 		in8 := makeInput(8 * n)
 		out8 := make([]byte, 8*n)
 		b.Run("x8/"+size.name, func(b *testing.B) {
-			var s State8
+			var s state8
 			b.SetBytes(int64(8 * n))
 			for b.Loop() {
-				s.Reset()
+				s.reset()
 				s.fastLoopDecrypt168(in8, out8, n)
 			}
 		})

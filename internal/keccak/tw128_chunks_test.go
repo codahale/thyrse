@@ -9,12 +9,10 @@ import (
 func TestEncryptChunksTW128(t *testing.T) {
 	const blockSize = 8192
 
-	// Build deterministic State8.
-	var s State8
+	// Build deterministic base State1.
+	var base State1
 	for lane := range 25 {
-		for inst := range 8 {
-			s.a[lane][inst] = uint64(lane*8+inst)*0x0123456789ABCDEF + uint64(inst)
-		}
+		base.a[lane] = uint64(lane)*0x0123456789ABCDEF + 1
 	}
 
 	// Build deterministic input.
@@ -23,17 +21,17 @@ func TestEncryptChunksTW128(t *testing.T) {
 		src[i] = byte(i*7 + i>>8)
 	}
 
-	// Run generic path.
-	s1 := s
+	// Run generic path: init + encryptAll + extract CVs.
+	var s1 state8
+	initChunksTW128(&s1, &base, 1)
 	dst1 := make([]byte, 8*blockSize)
 	var cvs1 [256]byte
 	encryptChunksTW128Generic(&s1, src, dst1, &cvs1)
 
 	// Run arch-dispatched path.
-	s2 := s
 	dst2 := make([]byte, 8*blockSize)
 	var cvs2 [256]byte
-	EncryptChunksTW128(&s2, src, dst2, &cvs2)
+	EncryptChunksTW128(&base, 1, src, dst2, &cvs2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("ciphertext mismatch between generic and arch paths")
@@ -54,12 +52,10 @@ func TestEncryptChunksTW128(t *testing.T) {
 func TestDecryptChunksTW128(t *testing.T) {
 	const blockSize = 8192
 
-	// Build deterministic State8.
-	var s State8
+	// Build deterministic base State1.
+	var base State1
 	for lane := range 25 {
-		for inst := range 8 {
-			s.a[lane][inst] = uint64(lane*8+inst)*0xFEDCBA9876543210 + uint64(inst)
-		}
+		base.a[lane] = uint64(lane)*0xFEDCBA9876543210 + 1
 	}
 
 	// Build deterministic input (ciphertext).
@@ -69,16 +65,16 @@ func TestDecryptChunksTW128(t *testing.T) {
 	}
 
 	// Run generic path.
-	s1 := s
+	var s1 state8
+	initChunksTW128(&s1, &base, 1)
 	dst1 := make([]byte, 8*blockSize)
 	var cvs1 [256]byte
 	decryptChunksTW128Generic(&s1, src, dst1, &cvs1)
 
 	// Run arch-dispatched path.
-	s2 := s
 	dst2 := make([]byte, 8*blockSize)
 	var cvs2 [256]byte
-	DecryptChunksTW128(&s2, src, dst2, &cvs2)
+	DecryptChunksTW128(&base, 1, src, dst2, &cvs2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("plaintext mismatch between generic and arch paths")
@@ -103,11 +99,11 @@ func BenchmarkEncryptChunksTW128(b *testing.B) {
 	for i := range src {
 		src[i] = byte(i)
 	}
-	var s State8
+	var base State1
 	var cvs [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		EncryptChunksTW128(&s, src, dst, &cvs)
+		EncryptChunksTW128(&base, 1, src, dst, &cvs)
 	}
 }
 
@@ -118,10 +114,10 @@ func BenchmarkDecryptChunksTW128(b *testing.B) {
 	for i := range src {
 		src[i] = byte(i)
 	}
-	var s State8
+	var base State1
 	var cvs [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		DecryptChunksTW128(&s, src, dst, &cvs)
+		DecryptChunksTW128(&base, 1, src, dst, &cvs)
 	}
 }

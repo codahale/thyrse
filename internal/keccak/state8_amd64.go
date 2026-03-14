@@ -3,12 +3,12 @@
 package keccak
 
 //go:noescape
-func p1600x8Lane(a *State8)
+func p1600x8Lane(a *state8)
 
 //go:noescape
-func p1600x8AVX512State(a *State8)
+func p1600x8AVX512State(a *state8)
 
-func permute12x8Arch(s *State8) bool {
+func permute12x8Arch(s *state8) bool {
 	if hasAVX512 {
 		p1600x8AVX512State(s)
 	} else {
