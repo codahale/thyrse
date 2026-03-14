@@ -34,15 +34,6 @@ func BenchmarkFastLoopAbsorb168(b *testing.B) {
 			}
 		})
 
-		in8 := makeInput(8 * size.n)
-		b.Run("x8/"+size.name, func(b *testing.B) {
-			var s State8
-			b.SetBytes(int64(8 * size.n))
-			for b.Loop() {
-				s.Reset()
-				s.fastLoopAbsorb168(in8, size.n)
-			}
-		})
 	}
 }
 

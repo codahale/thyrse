@@ -193,111 +193,6 @@
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V19.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V19.B16; \
 	VLD1 (SRC0), [V25.D1]; ADD $8, SRC0; VLD1 (SRC1), [V26.D1]; ADD $8, SRC1; VZIP1 V26.D2, V25.D2, V25.D2; VEOR V20.B16, V25.B16, V26.B16; VST1 [V26.D1], (DST0); ADD $8, DST0; VDUP V26.D[1], V27.D2; VST1 [V27.D1], (DST1); ADD $8, DST1; VMOV V25.B16, V20.B16
 
-// func fastLoopAbsorb168x8(s *State8, in *byte, stride, n int)
-TEXT ·fastLoopAbsorb168x8(SB), NOSPLIT, $64-32
-	MOVD	s+0(FP), R0
-	MOVD	in+8(FP), R2
-	MOVD	stride+16(FP), R7
-	MOVD	n+24(FP), R4
-
-	// Compute 8 pointers from base + i*stride.
-	ADD	R2, R7, R3   // in + stride
-	ADD	R7, R3, R5   // in + 2*stride
-	ADD	R7, R5, R6   // in + 3*stride
-	MOVD	R5, 0(RSP)
-	MOVD	R6, 8(RSP)
-	ADD	R7, R6, R5   // in + 4*stride
-	MOVD	R5, 16(RSP)
-	ADD	R7, R5, R5   // in + 5*stride
-	MOVD	R5, 24(RSP)
-	ADD	R7, R5, R5   // in + 6*stride
-	MOVD	R5, 32(RSP)
-	ADD	R7, R5, R5   // in + 7*stride
-	MOVD	R5, 40(RSP)
-	MOVD	R4, 48(RSP)
-
-	// Pair (0,1): offset 0, stride 64.
-	MOVD	R0, R7
-	LOAD25_STRIDE(R7, 64)
-
-loop_x8_01:
-	ABSORB_STRIPE_X2(R2, R3)
-
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	KECCAK_12_ROUNDS
-
-	SUBS	$168, R4
-	BNE	loop_x8_01
-
-	MOVD	R0, R7
-	STORE25_STRIDE(R7, 64)
-
-	// Pair (2,3): offset 16, stride 64.
-	MOVD	0(RSP), R2   // in2
-	MOVD	8(RSP), R3   // in3
-	MOVD	48(RSP), R4  // n
-
-	ADD	$16, R0, R7
-	LOAD25_STRIDE(R7, 64)
-
-loop_x8_23:
-	ABSORB_STRIPE_X2(R2, R3)
-
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	KECCAK_12_ROUNDS
-
-	SUBS	$168, R4
-	BNE	loop_x8_23
-
-	ADD	$16, R0, R7
-	STORE25_STRIDE(R7, 64)
-
-	// Pair (4,5): offset 32, stride 64.
-	MOVD	16(RSP), R2  // in4
-	MOVD	24(RSP), R3  // in5
-	MOVD	48(RSP), R4  // n
-
-	ADD	$32, R0, R7
-	LOAD25_STRIDE(R7, 64)
-
-loop_x8_45:
-	ABSORB_STRIPE_X2(R2, R3)
-
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	KECCAK_12_ROUNDS
-
-	SUBS	$168, R4
-	BNE	loop_x8_45
-
-	ADD	$32, R0, R7
-	STORE25_STRIDE(R7, 64)
-
-	// Pair (6,7): offset 48, stride 64.
-	MOVD	32(RSP), R2  // in6
-	MOVD	40(RSP), R3  // in7
-	MOVD	48(RSP), R4  // n
-
-	ADD	$48, R0, R7
-	LOAD25_STRIDE(R7, 64)
-
-loop_x8_67:
-	ABSORB_STRIPE_X2(R2, R3)
-
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	KECCAK_12_ROUNDS
-
-	SUBS	$168, R4
-	BNE	loop_x8_67
-
-	ADD	$48, R0, R7
-	STORE25_STRIDE(R7, 64)
-
-	RET
-
 // ENCRYPT_STRIPE_X1 encrypts 21 full lanes from SRC into state
 // V0-V20 (.D1), writing ciphertext to DST. Uses V25 as temp.
 #define ENCRYPT_STRIPE_X1(SRC, DST) \
@@ -723,3 +618,4 @@ dec_loop_x8_67:
 	STORE25_STRIDE(R8, 64)
 
 	RET
+

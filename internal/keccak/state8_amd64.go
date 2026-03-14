@@ -21,20 +21,7 @@ func permute12x8Arch(s *State8) bool {
 
 const AvailableLanes = 8
 
-//go:noescape
-func fastLoopAbsorb168x8AVX2(s *State8, in *byte, stride, n int)
-
-//go:noescape
-func fastLoopAbsorb168x8AVX512(s *State8, in *byte, stride, n int)
-
-func fastLoopAbsorb168x8Arch(s *State8, in []byte, stride, n int) bool {
-	if hasAVX512 {
-		fastLoopAbsorb168x8AVX512(s, unsafe.SliceData(in), stride, n)
-	} else {
-		fastLoopAbsorb168x8AVX2(s, unsafe.SliceData(in), stride, n)
-	}
-	return true
-}
+func fastLoopAbsorb168x8Arch(_ *State8, _ []byte, _, _ int) bool { return false }
 
 //go:noescape
 func fastLoopEncrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)

@@ -124,28 +124,26 @@ func (h *KT128) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// processLeafBatch computes leaf CVs for nLeaves complete chunks using x8 SIMD with padding for remainders.
+// processLeafBatch computes leaf CVs for nLeaves complete chunks using fused SIMD leaf processing.
 func (h *KT128) processLeafBatch(data []byte, nLeaves int) {
-	var s8 keccak.State8
 	idx := 0
 
 	for idx+8 <= nLeaves {
 		off := idx * BlockSize
-		leafStateX8(data[off:off+8*BlockSize], &s8)
-		h.ts.AbsorbCVx8(&s8)
+		var cvs [256]byte
+		keccak.ProcessLeavesKT128(data[off:off+8*BlockSize], &cvs)
+		h.ts.Absorb(cvs[:])
 		idx += 8
 	}
 
-	// Remainder: pad to 8 and use x8 when utilization is high enough to
-	// offset the cost of absorbing+permuting unused padding lanes. Below
-	// the threshold, individual x1 calls are cheaper (no 64 KiB stack
-	// copy, no wasted permutations).
+	// Remainder: pad to 8 and use fused path when utilization is high enough.
 	if rem := nLeaves - idx; rem >= 5 {
 		off := idx * BlockSize
 		var padData [8 * BlockSize]byte
 		copy(padData[:rem*BlockSize], data[off:off+rem*BlockSize])
-		leafStateX8(padData[:], &s8)
-		h.ts.AbsorbCVx8N(&s8, rem)
+		var cvs [256]byte
+		keccak.ProcessLeavesKT128(padData[:], &cvs)
+		h.ts.Absorb(cvs[:rem*32])
 		idx += rem
 	}
 
@@ -319,10 +317,4 @@ var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 func leafStateX1(data []byte, s *keccak.State1) {
 	s.Reset()
 	s.AbsorbAll(data, leafDS)
-}
-
-// leafStateX8 computes 8 leaf states in parallel.
-func leafStateX8(data []byte, s *keccak.State8) {
-	s.Reset()
-	s.AbsorbAll(data, BlockSize, leafDS)
 }
