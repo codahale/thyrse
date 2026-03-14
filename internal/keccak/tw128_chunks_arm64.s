@@ -1,8 +1,8 @@
 // Fused TW128 chunk processing — ARM64 NEON implementation.
 //
 // Each function processes 8 × 8192-byte chunks in a single call using 4× x2 pairs,
-// encrypting/decrypting and producing 8 × 32-byte chain values without
-// materializing intermediate state.
+// encrypting/decrypting with hardcoded constants and storing post-permute state
+// back to State8 for CV extraction by the caller.
 
 //go:build !purego
 
@@ -112,39 +112,21 @@
 	ADD	$96, R1; \
 	KECCAK_12_ROUNDS
 
-// EXTRACT_CVS extracts CV lanes 0-3 for two instances into R6 (cvs pointer).
-#define EXTRACT_CVS \
-	VST1	[V0.D1], (R6); ADD $8, R6; \
-	VST1	[V1.D1], (R6); ADD $8, R6; \
-	VST1	[V2.D1], (R6); ADD $8, R6; \
-	VST1	[V3.D1], (R6); ADD $8, R6; \
-	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6; \
-	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6; \
-	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6; \
-	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
-
-// func encryptChunksTW128ARM64(s *State8, src, dst *byte, cvs *byte)
+// func encryptChunksTW128ARM64(s *State8, src, dst *byte)
 //
 // Processes 8 × 8192-byte chunks using 4× x2 pairs,
-// encrypting and producing 8 × 32-byte chain values.
+// encrypting and storing post-permute state back to State8.
 //
-// TW128 chunk constants (hardcoded):
-//   Rate = 168, DS = 0x0B, BlockSize = 8192
-//   48 full 168-byte stripes per chunk
-//   128-byte remainder = 16 lanes
-//
-// Frame: 32 bytes local.
-TEXT ·encryptChunksTW128ARM64(SB), NOSPLIT, $32-32
+// Frame: 24 bytes local.
+TEXT ·encryptChunksTW128ARM64(SB), NOSPLIT, $24-24
 	MOVD	s+0(FP), R0		// State8 pointer
 	MOVD	src+8(FP), R7		// src base
 	MOVD	dst+16(FP), R8		// dst base
-	MOVD	cvs+24(FP), R6		// cvs output
 
 	MOVD	R0, 0(RSP)		// save State8 pointer
 	MOVD	R7, 8(RSP)		// save src base
 	MOVD	R8, 16(RSP)		// save dst base
-	MOVD	R6, 24(RSP)		// save cvs pointer
 
 	// === Pair (0,1): instances 0 and 1 ===
 	MOVD	R0, R8
@@ -168,27 +150,24 @@ tw128_enc_arm64_loop_01:
 	SUBS	$1, R4
 	BNE	tw128_enc_arm64_loop_01
 
-	// Encrypt final 16 lanes.
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
-
-	// Padding + final permutation.
 	PAD_AND_PERMUTE
 
-	// Extract CVs for instances 0, 1.
-	MOVD	24(RSP), R6
-	EXTRACT_CVS
+	// Store state back for pair (0,1).
+	MOVD	0(RSP), R0
+	MOVD	R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	// === Pair (2,3): instances 2 and 3 ===
-	MOVD	0(RSP), R0		// State8
 	ADD	$16, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
-	MOVD	8(RSP), R7		// src base
-	ADD	$16384, R7, R2		// src2
-	ADD	$24576, R7, R3		// src3
-	MOVD	16(RSP), R8		// dst base
-	ADD	$16384, R8, R5		// dst2
-	ADD	$24576, R8, R6		// dst3
+	MOVD	8(RSP), R7
+	ADD	$16384, R7, R2
+	ADD	$24576, R7, R3
+	MOVD	16(RSP), R8
+	ADD	$16384, R8, R5
+	ADD	$24576, R8, R6
 
 	MOVD	$48, R4
 
@@ -205,21 +184,20 @@ tw128_enc_arm64_loop_23:
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	24(RSP), R6
-	ADD	$64, R6		// skip instances 0,1 CVs
-	EXTRACT_CVS
+	MOVD	0(RSP), R0
+	ADD	$16, R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	// === Pair (4,5): instances 4 and 5 ===
-	MOVD	0(RSP), R0
 	ADD	$32, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
 	MOVD	8(RSP), R7
-	ADD	$32768, R7, R2		// src4
-	ADD	$40960, R7, R3		// src5
+	ADD	$32768, R7, R2
+	ADD	$40960, R7, R3
 	MOVD	16(RSP), R8
-	ADD	$32768, R8, R5		// dst4
-	ADD	$40960, R8, R6		// dst5
+	ADD	$32768, R8, R5
+	ADD	$40960, R8, R6
 
 	MOVD	$48, R4
 
@@ -236,21 +214,20 @@ tw128_enc_arm64_loop_45:
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	24(RSP), R6
-	ADD	$128, R6		// skip instances 0-3 CVs
-	EXTRACT_CVS
+	MOVD	0(RSP), R0
+	ADD	$32, R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	// === Pair (6,7): instances 6 and 7 ===
-	MOVD	0(RSP), R0
 	ADD	$48, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
 	MOVD	8(RSP), R7
-	ADD	$49152, R7, R2		// src6
-	ADD	$57344, R7, R3		// src7
+	ADD	$49152, R7, R2
+	ADD	$57344, R7, R3
 	MOVD	16(RSP), R8
-	ADD	$49152, R8, R5		// dst6
-	ADD	$57344, R8, R6		// dst7
+	ADD	$49152, R8, R5
+	ADD	$57344, R8, R6
 
 	MOVD	$48, R4
 
@@ -267,27 +244,22 @@ tw128_enc_arm64_loop_67:
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	24(RSP), R6
-	ADD	$192, R6		// skip instances 0-5 CVs
-	EXTRACT_CVS
+	MOVD	0(RSP), R0
+	ADD	$48, R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	RET
 
 
-// func decryptChunksTW128ARM64(s *State8, src, dst *byte, cvs *byte)
-//
-// Processes 8 × 8192-byte chunks using 4× x2 pairs,
-// decrypting and producing 8 × 32-byte chain values.
-TEXT ·decryptChunksTW128ARM64(SB), NOSPLIT, $32-32
+// func decryptChunksTW128ARM64(s *State8, src, dst *byte)
+TEXT ·decryptChunksTW128ARM64(SB), NOSPLIT, $24-24
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R7
 	MOVD	dst+16(FP), R8
-	MOVD	cvs+24(FP), R6
 
 	MOVD	R0, 0(RSP)
 	MOVD	R7, 8(RSP)
 	MOVD	R8, 16(RSP)
-	MOVD	R6, 24(RSP)
 
 	// === Pair (0,1) ===
 	MOVD	R0, R8
@@ -314,11 +286,11 @@ tw128_dec_arm64_loop_01:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	24(RSP), R6
-	EXTRACT_CVS
+	MOVD	0(RSP), R0
+	MOVD	R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	// === Pair (2,3) ===
-	MOVD	0(RSP), R0
 	ADD	$16, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -344,12 +316,11 @@ tw128_dec_arm64_loop_23:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	24(RSP), R6
-	ADD	$64, R6
-	EXTRACT_CVS
+	MOVD	0(RSP), R0
+	ADD	$16, R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	// === Pair (4,5) ===
-	MOVD	0(RSP), R0
 	ADD	$32, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -375,12 +346,11 @@ tw128_dec_arm64_loop_45:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	24(RSP), R6
-	ADD	$128, R6
-	EXTRACT_CVS
+	MOVD	0(RSP), R0
+	ADD	$32, R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	// === Pair (6,7) ===
-	MOVD	0(RSP), R0
 	ADD	$48, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -406,8 +376,8 @@ tw128_dec_arm64_loop_67:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	24(RSP), R6
-	ADD	$192, R6
-	EXTRACT_CVS
+	MOVD	0(RSP), R0
+	ADD	$48, R0, R8
+	STORE25_STRIDE(R8, 64)
 
 	RET
