@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/codahale/thyrse/internal/enc"
 	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/internal/mem"
 	"github.com/codahale/thyrse/internal/tw128"
@@ -76,18 +77,18 @@ func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 	for i := range n {
 		clone := p.Clone()
 		clone.beginFrame(opFork, label)
-		clone.writeLeftEncode(uint64(n))
-		clone.writeLeftEncode(uint64(i + 1))
-		clone.writeEncodeString(values[i])
+		_, _ = clone.h.Write(enc.LeftEncode(nil, uint64(n)))
+		_, _ = clone.h.Write(enc.LeftEncode(nil, uint64(i+1)))
+		_, _ = clone.h.Write(enc.EncodeString(nil, values[i]))
 		clone.endFrame()
 		clones[i] = clone
 	}
 
 	// Now write base fork frame (ordinal 0, empty value).
 	p.beginFrame(opFork, label)
-	p.writeLeftEncode(uint64(n))
-	p.writeLeftEncode(0)
-	p.writeEncodeString(nil)
+	_, _ = p.h.Write(enc.LeftEncode(nil, uint64(n)))
+	_, _ = p.h.Write(enc.LeftEncode(nil, 0))
+	_, _ = p.h.Write(enc.EncodeString(nil, nil))
 	p.endFrame()
 
 	return clones
@@ -101,8 +102,9 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 	}
 	ret, out := mem.SliceForAppend(dst, outputLen)
 
+	var buf [enc.MaxIntSize]byte
 	p.beginFrame(opDerive, label)
-	p.writeLeftEncode(uint64(outputLen))
+	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(outputLen)))
 	p.endFrame()
 
 	cv := p.finalize(dsDerive, out)
@@ -333,20 +335,10 @@ func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 // writeOpLabel writes op || encode_string(label) in a single call to h.Write.
 // All protocol operations start with this preamble.
 func (p *Protocol) writeOpLabel(op byte, label string) {
-	n := len(label)
-	bits := n * 8
-	if bits < 256 {
-		// Fast path: left_encode(bits) = [1, bits], frame is op || 1 || bits || label.
-		var buf [3 + 31]byte // max n=31 when bits<256
-		buf[0] = op
-		buf[1] = 1
-		buf[2] = byte(bits)
-		copy(buf[3:], label)
-		_, _ = p.h.Write(buf[:3+n])
-	} else {
-		_, _ = p.h.Write([]byte{op})
-		p.writeEncodeString([]byte(label))
-	}
+	buf := make([]byte, 1, 1+enc.MaxIntSize+len(label))
+	buf[0] = op
+	buf = enc.EncodeString(buf, []byte(label))
+	_, _ = p.h.Write(buf)
 }
 
 // beginFrame records the current position and writes the operation preamble.
@@ -357,7 +349,8 @@ func (p *Protocol) beginFrame(op byte, label string) {
 
 // endFrame writes the position marker that closes the current frame.
 func (p *Protocol) endFrame() {
-	p.writeRightEncode(p.frameStart)
+	var buf [enc.MaxIntSize]byte
+	_, _ = p.h.Write(enc.RightEncode(buf[:0], p.frameStart))
 }
 
 // resetChain resets the transcript with a CHAIN frame. The chain value is always chainValueSize bytes and the tag, when
@@ -412,69 +405,6 @@ func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 		// buf[108] = 0
 		buf[109] = 1 // right_encode(0)
 		_, _ = p.h.Write(buf[:])
-	}
-}
-
-// writeLeftEncode writes left_encode(x) as defined in NIST SP 800-185.
-func (p *Protocol) writeLeftEncode(x uint64) {
-	var buf [9]byte
-
-	if x == 0 {
-		buf[0] = 1
-		_, _ = p.h.Write(buf[:2])
-		return
-	}
-
-	i := 8
-	v := x
-	for v > 0 {
-		buf[i] = byte(v)
-		v >>= 8
-		i--
-	}
-	buf[i] = byte(8 - i)
-	_, _ = p.h.Write(buf[i:9])
-}
-
-// writeRightEncode writes right_encode(x): big-endian encoding of x followed by byte count.
-func (p *Protocol) writeRightEncode(x uint64) {
-	var buf [9]byte
-
-	if x == 0 {
-		buf[0] = 0
-		buf[1] = 1
-		_, _ = p.h.Write(buf[:2])
-		return
-	}
-
-	i := 7
-	v := x
-	for v > 0 {
-		buf[i] = byte(v)
-		v >>= 8
-		i--
-	}
-	n := byte(7 - i)
-	buf[8] = n
-	_, _ = p.h.Write(buf[i+1 : 9])
-}
-
-// writeEncodeString writes encode_string(x) = left_encode(len(x)*8) || x (NIST SP 800-185).
-func (p *Protocol) writeEncodeString(data []byte) {
-	n := len(data)
-	bits := uint64(n) * 8
-	if n > 0 && bits < 256 {
-		// Fast path: left_encode(bits) = [1, bits], batch into single write.
-		var buf [2 + 31]byte // max n=31 when bits<256
-		buf[0] = 1
-		buf[1] = byte(bits)
-		copy(buf[2:], data)
-		_, _ = p.h.Write(buf[:2+n])
-		return
-	}
-	p.writeLeftEncode(bits)
-	if n > 0 {
-		_, _ = p.h.Write(data)
 	}
 }
 
