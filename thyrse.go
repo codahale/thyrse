@@ -362,19 +362,57 @@ func (p *Protocol) endFrame() {
 
 // resetChain resets the transcript with a CHAIN frame. The chain value is always chainValueSize bytes and the tag, when
 // present, is always tw128.TagSize bytes.
+//
+// The frame layout is assembled into a stack buffer and written in a single h.Write call. After h.Reset, the frame
+// starts at position 0, so right_encode(frameStart) is always [0x00, 0x01].
+//
+// No-tag layout (75 bytes, used by Derive and Ratchet):
+//
+//	opChain 0x01 0x00  originOp  0x01 0x01  0x02 0x02 0x00 [chainValue: 64B]  0x00 0x01
+//	╰─ writeOpLabel ─╯           ╰─LE(1)─╯ ╰─LE(512)──╯                      ╰─RE(0)─╯
+//
+// With-tag layout (110 bytes, used by Mask and Seal):
+//
+//	opChain 0x01 0x00  originOp  0x01 0x02  0x02 0x02 0x00 [chainValue: 64B]  0x02 0x01 0x00 [tag: 32B]  0x00 0x01
+//	╰─ writeOpLabel ─╯           ╰─LE(2)─╯ ╰─LE(512)──╯                      ╰─LE(256)──╯              ╰─RE(0)─╯
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset()
-	p.beginFrame(opChain, "")
-	_, _ = p.h.Write([]byte{originOp})
+
 	if len(tag) == 0 {
-		p.writeLeftEncode(1)
-		p.writeEncodeString(chainValue)
+		var buf [75]byte
+		buf[0] = opChain
+		buf[1] = 1
+		// buf[2] = 0 — left_encode(0) low byte
+		buf[3] = originOp
+		buf[4] = 1
+		buf[5] = 1 // left_encode(1)
+		buf[6] = 2
+		buf[7] = 2 // left_encode(512) = [2, 2, 0]
+		// buf[8] = 0
+		copy(buf[9:73], chainValue)
+		// buf[73] = 0 — right_encode(0) value
+		buf[74] = 1 // right_encode(0) byte count
+		_, _ = p.h.Write(buf[:])
 	} else {
-		p.writeLeftEncode(2)
-		p.writeEncodeString(chainValue)
-		p.writeEncodeString(tag)
+		var buf [110]byte
+		buf[0] = opChain
+		buf[1] = 1
+		// buf[2] = 0
+		buf[3] = originOp
+		buf[4] = 1
+		buf[5] = 2 // left_encode(2)
+		buf[6] = 2
+		buf[7] = 2 // left_encode(512)
+		// buf[8] = 0
+		copy(buf[9:73], chainValue)
+		buf[73] = 2
+		buf[74] = 1 // left_encode(256) = [2, 1, 0]
+		// buf[75] = 0
+		copy(buf[76:108], tag)
+		// buf[108] = 0
+		buf[109] = 1 // right_encode(0)
+		_, _ = p.h.Write(buf[:])
 	}
-	p.endFrame()
 }
 
 // writeLeftEncode writes left_encode(x) as defined in NIST SP 800-185.
