@@ -2,8 +2,6 @@
 
 package keccak
 
-import "unsafe"
-
 //go:noescape
 func p1600x8Lane(a *State8)
 
@@ -23,32 +21,6 @@ const AvailableLanes = 8
 
 func fastLoopAbsorb168x8Arch(_ *State8, _ []byte, _, _ int) bool { return false }
 
-//go:noescape
-func fastLoopEncrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)
+func fastLoopEncrypt168x8Arch(_ *State8, _, _ []byte, _, _ int) bool { return false }
 
-//go:noescape
-func fastLoopDecrypt168x8AVX2(s *State8, src, dst *byte, stride, n int)
-
-//go:noescape
-func fastLoopEncrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
-
-//go:noescape
-func fastLoopDecrypt168x8AVX512(s *State8, src, dst *byte, stride, n int)
-
-func fastLoopEncrypt168x8Arch(s *State8, src, dst []byte, stride, n int) bool {
-	if hasAVX512 {
-		fastLoopEncrypt168x8AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
-	} else {
-		fastLoopEncrypt168x8AVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
-	}
-	return true
-}
-
-func fastLoopDecrypt168x8Arch(s *State8, src, dst []byte, stride, n int) bool {
-	if hasAVX512 {
-		fastLoopDecrypt168x8AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
-	} else {
-		fastLoopDecrypt168x8AVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst), stride, n)
-	}
-	return true
-}
+func fastLoopDecrypt168x8Arch(_ *State8, _, _ []byte, _, _ int) bool { return false }
