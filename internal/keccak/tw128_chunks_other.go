@@ -2,6 +2,6 @@
 
 package keccak
 
-func encryptChunksTW128Arch(_ *State8, _, _ []byte) bool { return false }
+func encryptChunksTW128Arch(_ *State8, _, _ []byte, _ *[256]byte) bool { return false }
 
-func decryptChunksTW128Arch(_ *State8, _, _ []byte) bool { return false }
+func decryptChunksTW128Arch(_ *State8, _, _ []byte, _ *[256]byte) bool { return false }

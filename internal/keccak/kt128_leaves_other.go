@@ -2,4 +2,4 @@
 
 package keccak
 
-func processLeavesKT128Arch(_ []byte, _ *State8) bool { return false }
+func processLeavesKT128Arch(_ []byte, _ *[256]byte) bool { return false }

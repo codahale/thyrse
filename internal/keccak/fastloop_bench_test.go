@@ -58,13 +58,10 @@ func BenchmarkAbsorbFinal(b *testing.B) {
 	})
 }
 
-func BenchmarkAbsorbCVx8(b *testing.B) {
-	var s8 State8
-	for inst := range 8 {
-		s8.a[0][inst] = uint64(inst + 1)
-		s8.a[1][inst] = uint64(inst + 0x10)
-		s8.a[2][inst] = uint64(inst + 0x20)
-		s8.a[3][inst] = uint64(inst + 0x30)
+func BenchmarkAbsorbCVs(b *testing.B) {
+	var cvs [256]byte
+	for i := range cvs {
+		cvs[i] = byte(i)
 	}
 
 	b.Run("x8", func(b *testing.B) {
@@ -72,8 +69,7 @@ func BenchmarkAbsorbCVx8(b *testing.B) {
 		b.SetBytes(8 * 32)
 		for b.Loop() {
 			d.Reset()
-			d.AbsorbCVx8(&s8)
+			d.AbsorbCVs(cvs[:])
 		}
 	})
-
 }

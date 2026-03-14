@@ -263,23 +263,19 @@ func (s *State1) AbsorbCV(src *State1) {
 	s.absorbCVlanes(src.a[0], src.a[1], src.a[2], src.a[3])
 }
 
-// AbsorbCVx8 absorbs 8 chain values (32 bytes each) from src in instance order.
-func (s *State1) AbsorbCVx8(src *State8) {
+// AbsorbCVs absorbs n 32-byte chain values from a contiguous byte buffer.
+// The position must be lane-aligned (multiple of 8). Each CV is 4 LE uint64 lanes.
+func (s *State1) AbsorbCVs(cvs []byte) {
 	if s.pos&7 != 0 {
-		panic("keccak: AbsorbCV on non-lane-aligned state")
+		panic("keccak: AbsorbCVs on non-lane-aligned state")
 	}
-	for inst := range 8 {
-		s.absorbCVlanes(src.a[0][inst], src.a[1][inst], src.a[2][inst], src.a[3][inst])
-	}
-}
-
-// AbsorbCVx8N absorbs the first n chain values (32 bytes each) from src in instance order.
-func (s *State1) AbsorbCVx8N(src *State8, n int) {
-	if s.pos&7 != 0 {
-		panic("keccak: AbsorbCV on non-lane-aligned state")
-	}
-	for inst := range n {
-		s.absorbCVlanes(src.a[0][inst], src.a[1][inst], src.a[2][inst], src.a[3][inst])
+	for len(cvs) >= 32 {
+		w0 := binary.LittleEndian.Uint64(cvs[0:])
+		w1 := binary.LittleEndian.Uint64(cvs[8:])
+		w2 := binary.LittleEndian.Uint64(cvs[16:])
+		w3 := binary.LittleEndian.Uint64(cvs[24:])
+		s.absorbCVlanes(w0, w1, w2, w3)
+		cvs = cvs[32:]
 	}
 }
 

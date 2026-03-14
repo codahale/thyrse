@@ -128,11 +128,11 @@ func (h *KT128) Write(p []byte) (int, error) {
 func (h *KT128) processLeafBatch(data []byte, nLeaves int) {
 	idx := 0
 
-	var s8 keccak.State8
+	var cvs [256]byte
 	for idx+8 <= nLeaves {
 		off := idx * BlockSize
-		keccak.ProcessLeavesKT128(data[off:off+8*BlockSize], &s8)
-		h.ts.AbsorbCVx8(&s8)
+		keccak.ProcessLeavesKT128(data[off:off+8*BlockSize], &cvs)
+		h.ts.AbsorbCVs(cvs[:])
 		idx += 8
 	}
 
@@ -141,8 +141,8 @@ func (h *KT128) processLeafBatch(data []byte, nLeaves int) {
 		off := idx * BlockSize
 		var padData [8 * BlockSize]byte
 		copy(padData[:rem*BlockSize], data[off:off+rem*BlockSize])
-		keccak.ProcessLeavesKT128(padData[:], &s8)
-		h.ts.AbsorbCVx8N(&s8, rem)
+		keccak.ProcessLeavesKT128(padData[:], &cvs)
+		h.ts.AbsorbCVs(cvs[:rem*32])
 		idx += rem
 	}
 

@@ -204,6 +204,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
 	var s8 keccak.State8
+	var cvs [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
 		suffixes := [8]uint64{
@@ -211,8 +212,8 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 			uint64(e.nLeaves + 5), uint64(e.nLeaves + 6), uint64(e.nLeaves + 7), uint64(e.nLeaves + 8),
 		}
 		initX8(&s8, &e.base, suffixes, initDS)
-		keccak.EncryptChunksTW128(&s8, src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize])
-		e.final.AbsorbCVx8(&s8)
+		keccak.EncryptChunksTW128(&s8, src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
+		e.final.AbsorbCVs(cvs[:])
 		e.nLeaves += 8
 		idx += 8
 	}
@@ -229,9 +230,9 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 			uint64(e.nLeaves + 5), uint64(e.nLeaves + 6), uint64(e.nLeaves + 7), uint64(e.nLeaves + 8),
 		}
 		initX8(&s8, &e.base, suffixes, initDS)
-		keccak.EncryptChunksTW128(&s8, padSrc[:], padDst[:])
+		keccak.EncryptChunksTW128(&s8, padSrc[:], padDst[:], &cvs)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
-		e.final.AbsorbCVx8N(&s8, rem)
+		e.final.AbsorbCVs(cvs[:rem*32])
 		e.nLeaves += rem
 		idx += rem
 	}
@@ -327,6 +328,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
 	var s8 keccak.State8
+	var cvs [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
 		suffixes := [8]uint64{
@@ -334,8 +336,8 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 			uint64(d.nLeaves + 5), uint64(d.nLeaves + 6), uint64(d.nLeaves + 7), uint64(d.nLeaves + 8),
 		}
 		initX8(&s8, &d.base, suffixes, initDS)
-		keccak.DecryptChunksTW128(&s8, src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize])
-		d.final.AbsorbCVx8(&s8)
+		keccak.DecryptChunksTW128(&s8, src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
+		d.final.AbsorbCVs(cvs[:])
 		d.nLeaves += 8
 		idx += 8
 	}
@@ -352,9 +354,9 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 			uint64(d.nLeaves + 5), uint64(d.nLeaves + 6), uint64(d.nLeaves + 7), uint64(d.nLeaves + 8),
 		}
 		initX8(&s8, &d.base, suffixes, initDS)
-		keccak.DecryptChunksTW128(&s8, padSrc[:], padDst[:])
+		keccak.DecryptChunksTW128(&s8, padSrc[:], padDst[:], &cvs)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
-		d.final.AbsorbCVx8N(&s8, rem)
+		d.final.AbsorbCVs(cvs[:rem*32])
 		d.nLeaves += rem
 		idx += rem
 	}

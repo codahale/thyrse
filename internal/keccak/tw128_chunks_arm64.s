@@ -1,8 +1,8 @@
 // Fused TW128 chunk processing — ARM64 NEON implementation.
 //
 // Each function processes 8 × 8192-byte chunks in a single call using 4× x2 pairs,
-// encrypting/decrypting with hardcoded constants and storing post-permute state
-// back to State8 for CV extraction by the caller.
+// encrypting/decrypting with hardcoded constants and writing 8 × 32-byte CVs
+// to a byte buffer.
 
 //go:build !purego
 
@@ -113,20 +113,22 @@
 	KECCAK_12_ROUNDS
 
 
-// func encryptChunksTW128ARM64(s *State8, src, dst *byte)
+// func encryptChunksTW128ARM64(s *State8, src, dst *byte, cvs *byte)
 //
 // Processes 8 × 8192-byte chunks using 4× x2 pairs,
-// encrypting and storing post-permute state back to State8.
+// encrypting and writing 8 × 32-byte CVs.
 //
-// Frame: 24 bytes local.
-TEXT ·encryptChunksTW128ARM64(SB), NOSPLIT, $24-24
+// Frame: 32 bytes local (0=State8 ptr, 8=src base, 16=dst base, 24=cvs ptr).
+TEXT ·encryptChunksTW128ARM64(SB), NOSPLIT, $32-32
 	MOVD	s+0(FP), R0		// State8 pointer
 	MOVD	src+8(FP), R7		// src base
 	MOVD	dst+16(FP), R8		// dst base
+	MOVD	cvs+24(FP), R6		// cvs pointer
 
 	MOVD	R0, 0(RSP)		// save State8 pointer
 	MOVD	R7, 8(RSP)		// save src base
 	MOVD	R8, 16(RSP)		// save dst base
+	MOVD	R6, 24(RSP)		// save cvs pointer
 
 	// === Pair (0,1): instances 0 and 1 ===
 	MOVD	R0, R8
@@ -153,12 +155,19 @@ tw128_enc_arm64_loop_01:
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	// Store state back for pair (0,1).
-	MOVD	0(RSP), R0
-	MOVD	R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (0,1).
+	MOVD	24(RSP), R6		// restore cvs pointer
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (2,3): instances 2 and 3 ===
+	MOVD	0(RSP), R0
 	ADD	$16, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -184,11 +193,20 @@ tw128_enc_arm64_loop_23:
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	0(RSP), R0
-	ADD	$16, R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (2,3). Cvs pointer is at offset 64 from pair (0,1).
+	MOVD	24(RSP), R6
+	ADD	$64, R6
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (4,5): instances 4 and 5 ===
+	MOVD	0(RSP), R0
 	ADD	$32, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -214,11 +232,20 @@ tw128_enc_arm64_loop_45:
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	0(RSP), R0
-	ADD	$32, R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (4,5). Cvs pointer is at offset 128.
+	MOVD	24(RSP), R6
+	ADD	$128, R6
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (6,7): instances 6 and 7 ===
+	MOVD	0(RSP), R0
 	ADD	$48, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -244,22 +271,32 @@ tw128_enc_arm64_loop_67:
 	ENCRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	0(RSP), R0
-	ADD	$48, R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (6,7). Cvs pointer is at offset 192.
+	MOVD	24(RSP), R6
+	ADD	$192, R6
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	RET
 
 
-// func decryptChunksTW128ARM64(s *State8, src, dst *byte)
-TEXT ·decryptChunksTW128ARM64(SB), NOSPLIT, $24-24
+// func decryptChunksTW128ARM64(s *State8, src, dst *byte, cvs *byte)
+TEXT ·decryptChunksTW128ARM64(SB), NOSPLIT, $32-32
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R7
 	MOVD	dst+16(FP), R8
+	MOVD	cvs+24(FP), R6
 
 	MOVD	R0, 0(RSP)
 	MOVD	R7, 8(RSP)
 	MOVD	R8, 16(RSP)
+	MOVD	R6, 24(RSP)
 
 	// === Pair (0,1) ===
 	MOVD	R0, R8
@@ -286,11 +323,19 @@ tw128_dec_arm64_loop_01:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	0(RSP), R0
-	MOVD	R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (0,1).
+	MOVD	24(RSP), R6
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (2,3) ===
+	MOVD	0(RSP), R0
 	ADD	$16, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -316,11 +361,20 @@ tw128_dec_arm64_loop_23:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	0(RSP), R0
-	ADD	$16, R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (2,3).
+	MOVD	24(RSP), R6
+	ADD	$64, R6
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (4,5) ===
+	MOVD	0(RSP), R0
 	ADD	$32, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -346,11 +400,20 @@ tw128_dec_arm64_loop_45:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	0(RSP), R0
-	ADD	$32, R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (4,5).
+	MOVD	24(RSP), R6
+	ADD	$128, R6
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (6,7) ===
+	MOVD	0(RSP), R0
 	ADD	$48, R0, R8
 	LOAD25_STRIDE(R8, 64)
 
@@ -376,8 +439,16 @@ tw128_dec_arm64_loop_67:
 	DECRYPT_FINAL_16_X2(R2, R3, R5, R6)
 	PAD_AND_PERMUTE
 
-	MOVD	0(RSP), R0
-	ADD	$48, R0, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (6,7).
+	MOVD	24(RSP), R6
+	ADD	$192, R6
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	RET

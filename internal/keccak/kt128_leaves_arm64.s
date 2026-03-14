@@ -117,9 +117,9 @@
 	VZIP1	V26.D2, V25.D2, V25.D2; \
 	VEOR	V25.B16, V20.B16, V20.B16
 
-// func processLeavesKT128ARM64(input *byte, s *State8)
+// func processLeavesKT128ARM64(input *byte, cvs *byte)
 //
-// Processes 8 × 8192-byte chunks, storing post-permute state to State8.
+// Processes 8 × 8192-byte chunks, writing 8 × 32-byte CVs to cvs.
 // Uses 4× x2 pairs: (0,1), (2,3), (4,5), (6,7).
 //
 // KT128 leaf constants (hardcoded):
@@ -131,7 +131,7 @@
 // Frame: 32 bytes local.
 TEXT ·processLeavesKT128ARM64(SB), NOSPLIT, $32-16
 	MOVD	input+0(FP), R0		// input base
-	MOVD	s+8(FP), R6		// State8 pointer
+	MOVD	cvs+8(FP), R6		// output CVs base
 
 	// === Pair (0,1): instances 0 and 1 ===
 	MOVD	R0, R2			// in0
@@ -165,7 +165,7 @@ TEXT ·processLeavesKT128ARM64(SB), NOSPLIT, $32-16
 	VEOR	V24.B16, V24.B16, V24.B16
 
 	MOVD	$48, R4
-	MOVD	R6, 0(RSP)		// save State8 pointer
+	MOVD	R6, 0(RSP)		// save cvs pointer
 	MOVD	R0, 8(RSP)		// save input base
 
 leaves_arm64_loop_01:
@@ -209,10 +209,16 @@ leaves_arm64_loop_01:
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	// Store state for pair (0,1) back to State8.
-	MOVD	0(RSP), R6		// restore State8 pointer
-	MOVD	R6, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (0,1).
+	MOVD	0(RSP), R6		// restore cvs pointer
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (2,3): instances 2 and 3 ===
 	MOVD	8(RSP), R0		// restore input base
@@ -286,10 +292,15 @@ leaves_arm64_loop_23:
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	// Store state for pair (2,3) back to State8 (offset 16).
-	MOVD	0(RSP), R6
-	ADD	$16, R6, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (2,3).
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (4,5): instances 4 and 5 ===
 	MOVD	8(RSP), R0
@@ -363,10 +374,15 @@ leaves_arm64_loop_45:
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	// Store state for pair (4,5) back to State8 (offset 32).
-	MOVD	0(RSP), R6
-	ADD	$32, R6, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (4,5).
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	// === Pair (6,7): instances 6 and 7 ===
 	MOVD	8(RSP), R0
@@ -440,9 +456,14 @@ leaves_arm64_loop_67:
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
-	// Store state for pair (6,7) back to State8 (offset 48).
-	MOVD	0(RSP), R6
-	ADD	$48, R6, R8
-	STORE25_STRIDE(R8, 64)
+	// Extract CVs for pair (6,7).
+	VST1	[V0.D1], (R6); ADD $8, R6
+	VST1	[V1.D1], (R6); ADD $8, R6
+	VST1	[V2.D1], (R6); ADD $8, R6
+	VST1	[V3.D1], (R6); ADD $8, R6
+	VDUP	V0.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V1.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V2.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
+	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 	RET

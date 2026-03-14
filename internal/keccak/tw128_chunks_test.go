@@ -2,6 +2,7 @@ package keccak
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 )
 
@@ -25,22 +26,26 @@ func TestEncryptChunksTW128(t *testing.T) {
 	// Run generic path.
 	s1 := s
 	dst1 := make([]byte, 8*blockSize)
-	s1.EncryptAll(src, dst1, blockSize, 0x0B)
+	var cvs1 [256]byte
+	encryptChunksTW128Generic(&s1, src, dst1, &cvs1)
 
 	// Run arch-dispatched path.
 	s2 := s
 	dst2 := make([]byte, 8*blockSize)
-	EncryptChunksTW128(&s2, src, dst2)
+	var cvs2 [256]byte
+	EncryptChunksTW128(&s2, src, dst2, &cvs2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("ciphertext mismatch between generic and arch paths")
 	}
-	// Verify state matches (CVs are in lanes 0-3).
-	for lane := range 25 {
+	if cvs1 != cvs2 {
 		for inst := range 8 {
-			if s1.a[lane][inst] != s2.a[lane][inst] {
-				t.Errorf("encrypt: state mismatch at lane %d, inst %d: got %016x, want %016x",
-					lane, inst, s2.a[lane][inst], s1.a[lane][inst])
+			for lane := range 4 {
+				w := binary.LittleEndian.Uint64(cvs1[inst*32+lane*8:])
+				g := binary.LittleEndian.Uint64(cvs2[inst*32+lane*8:])
+				if w != g {
+					t.Errorf("encrypt: instance %d, lane %d: got %016x, want %016x", inst, lane, g, w)
+				}
 			}
 		}
 	}
@@ -66,21 +71,26 @@ func TestDecryptChunksTW128(t *testing.T) {
 	// Run generic path.
 	s1 := s
 	dst1 := make([]byte, 8*blockSize)
-	s1.DecryptAll(src, dst1, blockSize, 0x0B)
+	var cvs1 [256]byte
+	decryptChunksTW128Generic(&s1, src, dst1, &cvs1)
 
 	// Run arch-dispatched path.
 	s2 := s
 	dst2 := make([]byte, 8*blockSize)
-	DecryptChunksTW128(&s2, src, dst2)
+	var cvs2 [256]byte
+	DecryptChunksTW128(&s2, src, dst2, &cvs2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("plaintext mismatch between generic and arch paths")
 	}
-	for lane := range 25 {
+	if cvs1 != cvs2 {
 		for inst := range 8 {
-			if s1.a[lane][inst] != s2.a[lane][inst] {
-				t.Errorf("decrypt: state mismatch at lane %d, inst %d: got %016x, want %016x",
-					lane, inst, s2.a[lane][inst], s1.a[lane][inst])
+			for lane := range 4 {
+				w := binary.LittleEndian.Uint64(cvs1[inst*32+lane*8:])
+				g := binary.LittleEndian.Uint64(cvs2[inst*32+lane*8:])
+				if w != g {
+					t.Errorf("decrypt: instance %d, lane %d: got %016x, want %016x", inst, lane, g, w)
+				}
 			}
 		}
 	}
@@ -94,9 +104,10 @@ func BenchmarkEncryptChunksTW128(b *testing.B) {
 		src[i] = byte(i)
 	}
 	var s State8
+	var cvs [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		EncryptChunksTW128(&s, src, dst)
+		EncryptChunksTW128(&s, src, dst, &cvs)
 	}
 }
 
@@ -108,8 +119,9 @@ func BenchmarkDecryptChunksTW128(b *testing.B) {
 		src[i] = byte(i)
 	}
 	var s State8
+	var cvs [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		DecryptChunksTW128(&s, src, dst)
+		DecryptChunksTW128(&s, src, dst, &cvs)
 	}
 }
