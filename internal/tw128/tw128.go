@@ -77,9 +77,7 @@ type cryptor struct {
 // finalizeCV squeezes the chain value from the current leaf's state and absorbs it into the final node.
 func (c *cryptor) finalizeCV() {
 	c.leaf.PadPermute(chainValueDS)
-	var cv [KeySize]byte
-	c.leaf.Squeeze(cv[:])
-	c.final.Absorb(cv[:])
+	c.final.AbsorbCV(&c.leaf)
 	c.nLeaves++
 	c.chunkOff = 0
 }
