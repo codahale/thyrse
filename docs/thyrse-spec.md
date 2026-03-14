@@ -616,7 +616,6 @@ associated data. Under a uniformly random 32-byte key, TW128 provides:
 - **IND-CPA** confidentiality. TW128 is nonce-respecting; Thyrse satisfies this by using each key exactly once.
 - **INT-CTXT** authenticity, with forgery probability at most $`S / 2^{256}`$ for $`S`$ attempts.
 - **CMT-4** committing security (Bellare and Hoang, EUROCRYPT 2022): a ciphertext does not admit two valid openings under distinct $`(\mathit{key}, \mathit{plaintext})`$ pairs.
-- **Tag PRF:** the full 32-byte tag is a pseudorandom function of $`(\mathit{key}, \mathit{ciphertext})`$.
 
 `DecryptAndMAC` does not perform tag verification; the caller (Thyrse) is responsible. See the TW128 specification
 (§5.6, Caller obligations) for the full contract.
