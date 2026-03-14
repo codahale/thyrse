@@ -118,7 +118,7 @@ GLOBL	round_consts_2x(SB), NOPTR|RODATA, $384
 // func p1600x8AVX512State(a *State8)
 //
 // state is interleaved as 25 zmm lanes, each containing 8 uint64 words.
-TEXT ·p1600x8AVX512State(SB), $320-8
+TEXT ·p1600x8AVX512State(SB), $0-8
 	MOVQ	a+0(FP), AX
 	LEAQ	round_consts_2x+192(SB), R11
 	VMOVDQU64	0*64(AX), Z0

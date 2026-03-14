@@ -39,7 +39,7 @@
 //   128-byte remainder = 16 lanes
 //   Suffix 0x0B at lane 16, pad10*1 end 0x80 at lane 20
 //
-// Frame: 384 bytes local (320 theta D + 64 gather indices), 16 bytes args.
+// Frame: 64 bytes local (gather indices), 16 bytes args.
 // Register allocation:
 //   BX   = data base pointer
 //   R11  = round constants pointer
@@ -47,19 +47,19 @@
 //   Z0-Z24  = Keccak state (persistent)
 //   Z25-Z31 = scratch
 //   Z28     = gather index vector
-TEXT ·processLeavesKT128AVX512(SB), $384-16
+TEXT ·processLeavesKT128AVX512(SB), $64-16
 	MOVQ	input+0(FP), BX
 	MOVQ	cvs+8(FP), DI
 
-	// Build gather index vector {0, 8192, 2×8192, ..., 7×8192} at SP+320.
-	MOVQ	$0, 320(SP)
-	MOVQ	$8192, 328(SP)
-	MOVQ	$16384, 336(SP)
-	MOVQ	$24576, 344(SP)
-	MOVQ	$32768, 352(SP)
-	MOVQ	$40960, 360(SP)
-	MOVQ	$49152, 368(SP)
-	MOVQ	$57344, 376(SP)
+	// Build gather index vector {0, 8192, 2×8192, ..., 7×8192} at SP+0.
+	MOVQ	$0, 0(SP)
+	MOVQ	$8192, 8(SP)
+	MOVQ	$16384, 16(SP)
+	MOVQ	$24576, 24(SP)
+	MOVQ	$32768, 32(SP)
+	MOVQ	$40960, 40(SP)
+	MOVQ	$49152, 48(SP)
+	MOVQ	$57344, 56(SP)
 
 	// Zero state Z0-Z24.
 	VPXORQ	Z0, Z0, Z0
@@ -93,7 +93,7 @@ TEXT ·processLeavesKT128AVX512(SB), $384-16
 
 leaves_avx512_loop:
 	// Reload gather index vector (Z28 is clobbered by permutation).
-	VMOVDQU64	320(SP), Z28
+	VMOVDQU64	0(SP), Z28
 
 	// Absorb 21 rate lanes via gather.
 	ABSORB_LANE_X8_GATHER(0*8, Z0)
@@ -130,7 +130,7 @@ leaves_avx512_loop:
 	JNZ	leaves_avx512_loop
 
 	// Absorb final 16 lanes (128-byte remainder).
-	VMOVDQU64	320(SP), Z28
+	VMOVDQU64	0(SP), Z28
 	ABSORB_LANE_X8_GATHER(0*8, Z0)
 	ABSORB_LANE_X8_GATHER(1*8, Z1)
 	ABSORB_LANE_X8_GATHER(2*8, Z2)
@@ -161,15 +161,15 @@ leaves_avx512_loop:
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
 
 	// Extract CVs via VPSCATTERQQ.
-	MOVQ	$0, 320(SP)
-	MOVQ	$32, 328(SP)
-	MOVQ	$64, 336(SP)
-	MOVQ	$96, 344(SP)
-	MOVQ	$128, 352(SP)
-	MOVQ	$160, 360(SP)
-	MOVQ	$192, 368(SP)
-	MOVQ	$224, 376(SP)
-	VMOVDQU64	320(SP), Z28
+	MOVQ	$0, 0(SP)
+	MOVQ	$32, 8(SP)
+	MOVQ	$64, 16(SP)
+	MOVQ	$96, 24(SP)
+	MOVQ	$128, 32(SP)
+	MOVQ	$160, 40(SP)
+	MOVQ	$192, 48(SP)
+	MOVQ	$224, 56(SP)
+	VMOVDQU64	0(SP), Z28
 
 	KXNORB	K1, K1, K1
 	VPSCATTERQQ	Z0, K1, 0(DI)(Z28*1)

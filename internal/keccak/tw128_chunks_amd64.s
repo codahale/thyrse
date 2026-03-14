@@ -64,22 +64,22 @@
 //   48 full 168-byte stripes per 8192-byte chunk
 //   128-byte remainder = 16 lanes
 //
-// Frame: 384 bytes local (320 theta D + 64 gather indices), 32 bytes args.
-TEXT ·encryptChunksTW128AVX512(SB), $384-32
+// Frame: 64 bytes local (gather indices), 32 bytes args.
+TEXT ·encryptChunksTW128AVX512(SB), $64-32
 	MOVQ	s+0(FP), AX
 	MOVQ	src+8(FP), BX
 	MOVQ	dst+16(FP), R14
 	MOVQ	cvs+24(FP), DI
 
-	// Build gather/scatter index vector {0, 8192, 2×8192, ..., 7×8192} at SP+320.
-	MOVQ	$0, 320(SP)
-	MOVQ	$8192, 328(SP)
-	MOVQ	$16384, 336(SP)
-	MOVQ	$24576, 344(SP)
-	MOVQ	$32768, 352(SP)
-	MOVQ	$40960, 360(SP)
-	MOVQ	$49152, 368(SP)
-	MOVQ	$57344, 376(SP)
+	// Build gather/scatter index vector {0, 8192, 2×8192, ..., 7×8192} at SP+0.
+	MOVQ	$0, 0(SP)
+	MOVQ	$8192, 8(SP)
+	MOVQ	$16384, 16(SP)
+	MOVQ	$24576, 24(SP)
+	MOVQ	$32768, 32(SP)
+	MOVQ	$40960, 40(SP)
+	MOVQ	$49152, 48(SP)
+	MOVQ	$57344, 56(SP)
 
 	// Load state from State8 into Z0-Z24.
 	VMOVDQU64	0*64(AX), Z0
@@ -112,7 +112,7 @@ TEXT ·encryptChunksTW128AVX512(SB), $384-32
 	MOVQ	$48, R12
 
 tw128_enc_avx512_loop:
-	VMOVDQU64	320(SP), Z28
+	VMOVDQU64	0(SP), Z28
 
 	ENCRYPT_LANE_X8_GS(0*8, Z0)
 	ENCRYPT_LANE_X8_GS(1*8, Z1)
@@ -147,7 +147,7 @@ tw128_enc_avx512_loop:
 	JNZ	tw128_enc_avx512_loop
 
 	// Encrypt final 16 lanes (128-byte remainder).
-	VMOVDQU64	320(SP), Z28
+	VMOVDQU64	0(SP), Z28
 	ENCRYPT_LANE_X8_GS(0*8, Z0)
 	ENCRYPT_LANE_X8_GS(1*8, Z1)
 	ENCRYPT_LANE_X8_GS(2*8, Z2)
@@ -178,15 +178,15 @@ tw128_enc_avx512_loop:
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
 
 	// Extract CVs via VPSCATTERQQ.
-	MOVQ	$0, 320(SP)
-	MOVQ	$32, 328(SP)
-	MOVQ	$64, 336(SP)
-	MOVQ	$96, 344(SP)
-	MOVQ	$128, 352(SP)
-	MOVQ	$160, 360(SP)
-	MOVQ	$192, 368(SP)
-	MOVQ	$224, 376(SP)
-	VMOVDQU64	320(SP), Z28
+	MOVQ	$0, 0(SP)
+	MOVQ	$32, 8(SP)
+	MOVQ	$64, 16(SP)
+	MOVQ	$96, 24(SP)
+	MOVQ	$128, 32(SP)
+	MOVQ	$160, 40(SP)
+	MOVQ	$192, 48(SP)
+	MOVQ	$224, 56(SP)
+	VMOVDQU64	0(SP), Z28
 
 	KXNORB	K1, K1, K1
 	VPSCATTERQQ	Z0, K1, 0(DI)(Z28*1)
@@ -202,20 +202,20 @@ tw128_enc_avx512_loop:
 
 
 // func decryptChunksTW128AVX512(s *State8, src, dst *byte, cvs *byte)
-TEXT ·decryptChunksTW128AVX512(SB), $384-32
+TEXT ·decryptChunksTW128AVX512(SB), $64-32
 	MOVQ	s+0(FP), AX
 	MOVQ	src+8(FP), BX
 	MOVQ	dst+16(FP), R14
 	MOVQ	cvs+24(FP), DI
 
-	MOVQ	$0, 320(SP)
-	MOVQ	$8192, 328(SP)
-	MOVQ	$16384, 336(SP)
-	MOVQ	$24576, 344(SP)
-	MOVQ	$32768, 352(SP)
-	MOVQ	$40960, 360(SP)
-	MOVQ	$49152, 368(SP)
-	MOVQ	$57344, 376(SP)
+	MOVQ	$0, 0(SP)
+	MOVQ	$8192, 8(SP)
+	MOVQ	$16384, 16(SP)
+	MOVQ	$24576, 24(SP)
+	MOVQ	$32768, 32(SP)
+	MOVQ	$40960, 40(SP)
+	MOVQ	$49152, 48(SP)
+	MOVQ	$57344, 56(SP)
 
 	VMOVDQU64	0*64(AX), Z0
 	VMOVDQU64	1*64(AX), Z1
@@ -246,7 +246,7 @@ TEXT ·decryptChunksTW128AVX512(SB), $384-32
 	MOVQ	$48, R12
 
 tw128_dec_avx512_loop:
-	VMOVDQU64	320(SP), Z28
+	VMOVDQU64	0(SP), Z28
 
 	DECRYPT_LANE_X8_GS(0*8, Z0)
 	DECRYPT_LANE_X8_GS(1*8, Z1)
@@ -281,7 +281,7 @@ tw128_dec_avx512_loop:
 	JNZ	tw128_dec_avx512_loop
 
 	// Decrypt final 16 lanes.
-	VMOVDQU64	320(SP), Z28
+	VMOVDQU64	0(SP), Z28
 	DECRYPT_LANE_X8_GS(0*8, Z0)
 	DECRYPT_LANE_X8_GS(1*8, Z1)
 	DECRYPT_LANE_X8_GS(2*8, Z2)
@@ -310,15 +310,15 @@ tw128_dec_avx512_loop:
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
 
 	// Extract CVs via VPSCATTERQQ.
-	MOVQ	$0, 320(SP)
-	MOVQ	$32, 328(SP)
-	MOVQ	$64, 336(SP)
-	MOVQ	$96, 344(SP)
-	MOVQ	$128, 352(SP)
-	MOVQ	$160, 360(SP)
-	MOVQ	$192, 368(SP)
-	MOVQ	$224, 376(SP)
-	VMOVDQU64	320(SP), Z28
+	MOVQ	$0, 0(SP)
+	MOVQ	$32, 8(SP)
+	MOVQ	$64, 16(SP)
+	MOVQ	$96, 24(SP)
+	MOVQ	$128, 32(SP)
+	MOVQ	$160, 40(SP)
+	MOVQ	$192, 48(SP)
+	MOVQ	$224, 56(SP)
+	VMOVDQU64	0(SP), Z28
 
 	KXNORB	K1, K1, K1
 	VPSCATTERQQ	Z0, K1, 0(DI)(Z28*1)
