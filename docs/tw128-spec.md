@@ -381,7 +381,8 @@ concrete bounds as conditional.
 ```
 
 Let $`\mathsf{Bad}_{\mathrm{perm}}`$ be the event that two distinct Keccak-p evaluations (among all $`\sigma + t`$
-online and offline calls) produce equal capacity portions. By the birthday bound,
+online and offline calls) produce equal capacity portions, or that any evaluation produces a capacity portion
+equal to the initial capacity $`0^c`$. By the birthday bound,
 $`\Pr[\mathsf{Bad}_{\mathrm{perm}}] \leq \varepsilon_{\mathrm{cap}}`$. This term appears in every final bound
 in Section 6.14.
 
@@ -471,9 +472,9 @@ duplexing call. TW128's tags ($`\tau = 32`$ bytes) and chain values
 
 *Proof sketch.* The core argument is: padded calls with different domain bytes differ in rate content; all other cross-role pairs differ in their capacity portion under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$.
 
-1. **Padded vs. padded (different domain bytes).** Each `_duplex_pad_permute` call XORs its domain byte at offset `pos` in the rate. If two calls share the same `pos`, the different domain bytes produce different rate content. If they differ in `pos`, they must also differ in capacity: non-init padded calls ($`\mathcal{C}`$, $`\mathcal{T}_s`$, $`\mathcal{T}_f`$) inherit capacity from prior $`\pi`$-outputs, which are pairwise distinct under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Only init calls ($`\mathcal{I}`$) start from zero capacity, and all init calls reach `_duplex_pad_permute` at the same `pos`, so cross-init pairs fall under the same-`pos` case — distinct indices ensure distinct rate content.
+1. **Padded vs. padded (different domain bytes).** Each `_duplex_pad_permute` call XORs its domain byte at offset `pos` in the rate. If two calls share the same `pos`, the different domain bytes produce different rate content. If they differ in `pos`, they must also differ in capacity: non-init padded calls ($`\mathcal{C}`$, $`\mathcal{T}_s`$, $`\mathcal{T}_f`$) inherit capacity from prior $`\pi`$-outputs, which are pairwise distinct under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Only init calls ($`\mathcal{I}`$) start from zero capacity, and within a single context all init calls reach `_duplex_pad_permute` at the same `pos`, so cross-init pairs fall under the same-`pos` case — distinct indices ensure distinct rate content.
 
-2. **Padded vs. unpadded.** Unpadded intermediate calls ($`\mathcal{U}`$) inherit capacity from prior $`\pi`$-outputs. So do non-init padded calls. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ these inherited capacities are pairwise distinct. Init calls start from zero capacity, which equals an inherited capacity with probability at most $`\sigma / 2^c \leq 2\varepsilon_{\mathrm{cap}}`$.
+2. **Padded vs. unpadded.** Unpadded intermediate calls ($`\mathcal{U}`$) inherit capacity from prior $`\pi`$-outputs. So do non-init padded calls. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ these inherited capacities are pairwise distinct. Init calls start from zero capacity; under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$ no inherited capacity equals $`0^c`$.
 
 3. **Within a set.** Cross-instance: distinct absorption streams (different `encode_string` prefixes or different `LEU64(index)` values) produce distinct rate content at init, propagating through the capacity chain. Within-instance: each call inherits the previous call's capacity portion, pairwise distinct under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$. Both mechanisms apply to $`\mathcal{U}`$.
 
@@ -603,10 +604,11 @@ Oracle Enc_b(N, AD, M0, M1):
 *Justification.* Under the bare-game conditioning (Section 6.9), every construction $`\pi`$-output is exactly
 uniform. Each ciphertext byte $`\mathit{ct}[j] = \mathit{pt}[j] \oplus S[\mathit{pos}]`$ is therefore a one-time pad:
 $`S[\mathit{pos}]`$ is exactly uniform and plaintext-independent. Overwrite mode writes $`\mathit{ct}[j]`$ (not
-$`\mathit{pt}[j]`$) into the state, so subsequent state evolution depends only on the ciphertext, not the
-plaintext choice. For n > 1, leaves operate on independent init states (domain separation, Section 6.5;
-context independence, Section 6.6), so the joint distribution of all ciphertext chunks and the tag is
-independent of the adversary's plaintext choice.
+$`\mathit{pt}[j]`$) into the state, so subsequent state evolution — including the tag-squeeze input — depends
+only on the ciphertext, not the plaintext choice. Since the ciphertext distribution is uniform regardless of
+which message was encrypted, so is the tag. For n > 1, leaves operate on independent init states (domain
+separation, Section 6.5; context independence, Section 6.6), so the same reasoning applies to each chunk
+independently.
 
 The total bound follows from the decomposition in Section 6.9.
 
@@ -631,14 +633,20 @@ Oracle Forge(N, AD, C):
 **Claim.** $`\mathrm{Adv}_{\mathrm{INT\text{-}CTXT}}^{\mathrm{bare}} \le S / 2^{8\tau}.`$
 
 *Justification.* Under the bare-game conditioning (Section 6.9), every construction $`\pi`$-output is exactly
-uniform. A forgery must either target a different context — producing an independent init state (Section 6.6)
-and therefore an independent, exactly uniform tag — or the same context with a modified ciphertext. In the
-latter case, any change to the ciphertext (whether in content, length, or chunk count) alters the input to at
-least one $`\pi`$-call in the tag's dependency chain: a different ciphertext byte changes the rate via overwrite
-mode; a different length shifts absorption boundaries or changes the `length_encode` suffix; crossing the n=1/n>1
-boundary changes the tag domain byte (`0x07` vs `0x06`). The altered $`\pi`$-input is fresh (bare-game
-conditioning), and freshness cascades through the capacity chain to the tag squeeze, producing an exactly
-uniform tag (Section 6.7).
+uniform. A forgery must either target a different context or the same context with a modified ciphertext.
+
+A different context produces an independent init state (Section 6.6) and therefore an independent, exactly
+uniform tag. For the same context, any change to the ciphertext alters the input to at least one $`\pi`$-call
+in the tag's dependency chain: a different ciphertext byte changes the rate via overwrite mode; a different
+length shifts absorption boundaries or changes the `length_encode` suffix; crossing the n=1/n>1 boundary
+changes the tag domain byte (`0x07` vs `0x06`).
+
+The altered $`\pi`$-input is fresh (bare-game conditioning) and therefore produces an exactly uniform output,
+including a fresh capacity portion. Under $`\neg\mathsf{Bad}_{\mathrm{perm}}`$, this fresh capacity is shared by
+no other $`\pi`$-input, so the next call in the chain is also fresh; this propagates to the tag-squeeze call,
+producing an exactly uniform tag (Section 6.7). For modifications in a leaf chunk, the same mechanism produces a
+different chain value, which when absorbed into the final node alters a $`\pi`$-input there, and the cascade
+continues to the tag.
 
 Each forgery attempt therefore succeeds with probability at most $`2^{-8\tau}`$. Across $`S`$ attempts (union bound):
 
@@ -706,7 +714,7 @@ The adversary has direct access to the ideal permutation $`\pi`$ and its inverse
   opening's $`\pi`$-calls. In particular, the tag-squeeze $`\pi`$-input of the second opening is fresh:
   over the random choice of $`\pi`$, the probability that it maps to a state whose first $`\tau`$ bytes
   equal $`T^\star`$ is $`1/2^{8\tau}`$. Since each candidate requires at least one unique $`\pi`$-query
-  (the init call for $`L'`$), the adversary can evaluate at most $`t + \sigma_v`$ candidates within their
+  (distinct base states produce distinct init $`\pi`$-inputs, Section 6.6), the adversary can evaluate at most $`t + \sigma_v`$ candidates within their
   query budget. By a union bound, the probability over $`\pi`$ that any candidate yields $`T' = T^\star`$
   is at most $`(t + \sigma_v)/2^{8\tau}`$. Tag matching is a necessary condition for $`C^\star`$ agreement,
   so the additional requirement that the ciphertext portions match can only reduce this probability.
