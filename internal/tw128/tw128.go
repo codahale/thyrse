@@ -386,4 +386,3 @@ func decryptX1(base *keccak.State1, index uint64, ct, pt []byte, d *keccak.State
 	initNode(d, base, index)
 	d.DecryptAll(ct, pt, chainValueDS)
 }
-
