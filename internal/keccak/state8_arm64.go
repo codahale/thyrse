@@ -12,8 +12,3 @@ func permute12x8Arch(s *State8) bool {
 
 const AvailableLanes = 8
 
-func fastLoopAbsorb168x8Arch(_ *State8, _ []byte, _, _ int) bool { return false }
-
-func fastLoopEncrypt168x8Arch(_ *State8, _, _ []byte, _, _ int) bool { return false }
-
-func fastLoopDecrypt168x8Arch(_ *State8, _, _ []byte, _, _ int) bool { return false }

@@ -67,9 +67,6 @@ func (s *State8) AbsorbWords(words [8]uint64) {
 func (s *State8) fastLoopAbsorb168(in []byte, stride int) int {
 	n := max(len(in)-7*stride, 0) // last instance starts at in[7*stride:]
 	n = (n / Rate) * Rate
-	if n > 0 && fastLoopAbsorb168x8Arch(s, in, stride, n) {
-		return n
-	}
 	for off := 0; off < n; off += Rate {
 		p0 := (*[Rate]byte)(in[off : off+Rate])
 		p1 := (*[Rate]byte)(in[stride+off : stride+off+Rate])
@@ -140,9 +137,6 @@ func (s *State8) absorbFinal(tail0, tail1, tail2, tail3, tail4, tail5, tail6, ta
 func (s *State8) fastLoopEncrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-7*stride, 0)
 	n = (n / Rate) * Rate
-	if n > 0 && fastLoopEncrypt168x8Arch(s, src, dst, stride, n) {
-		return n
-	}
 	for off := 0; off < n; off += Rate {
 		for lane := range 21 {
 			base := lane << 3
@@ -161,9 +155,6 @@ func (s *State8) fastLoopEncrypt168(src, dst []byte, stride int) int {
 func (s *State8) fastLoopDecrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-7*stride, 0)
 	n = (n / Rate) * Rate
-	if n > 0 && fastLoopDecrypt168x8Arch(s, src, dst, stride, n) {
-		return n
-	}
 	for off := 0; off < n; off += Rate {
 		for lane := range 21 {
 			base := lane << 3
