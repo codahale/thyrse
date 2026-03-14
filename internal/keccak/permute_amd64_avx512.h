@@ -13,8 +13,11 @@
 	VPTERNLOGQ	$0x96, e, d, dst
 
 // Theta in-place: compute column parities C[0..4] in Z25-Z29, then apply
-// each D[x] = C[(x+4)%5] ^ ROT(C[(x+1)%5],1) directly into the 5 state
-// lanes of column x via Z30.  C values in Z25-Z29 are never clobbered.
+// D[x] = C[(x+4)%5] ^ ROT(C[(x+1)%5],1) directly into each state lane
+// using VPTERNLOGQ to fuse the D formation with the state XOR.
+// Z30 holds ROT(C[next],1); VPTERNLOGQ $0x96 three-way XORs
+// state ^= C_prev ^ ROT(C_next,1) without an intermediate D register.
+// C values in Z25-Z29 are read-only throughout.
 #define X8_THETA_INPLACE_AVX512() \
 	XOR5_AVX512_8X(Z25, Z0, Z5, Z10, Z15, Z20); \
 	XOR5_AVX512_8X(Z26, Z1, Z6, Z11, Z16, Z21); \
@@ -23,44 +26,39 @@
 	XOR5_AVX512_8X(Z29, Z4, Z9, Z14, Z19, Z24); \
 	/* D[0] = C[4] ^ ROT(C[1],1) — column 0 */ \
 	VPROLQ	$1, Z26, Z30; \
-	VPXORQ	Z29, Z30, Z30; \
-	VPXORQ	Z30, Z0, Z0; \
-	VPXORQ	Z30, Z5, Z5; \
-	VPXORQ	Z30, Z10, Z10; \
-	VPXORQ	Z30, Z15, Z15; \
-	VPXORQ	Z30, Z20, Z20; \
+	VPTERNLOGQ	$0x96, Z29, Z30, Z0; \
+	VPTERNLOGQ	$0x96, Z29, Z30, Z5; \
+	VPTERNLOGQ	$0x96, Z29, Z30, Z10; \
+	VPTERNLOGQ	$0x96, Z29, Z30, Z15; \
+	VPTERNLOGQ	$0x96, Z29, Z30, Z20; \
 	/* D[1] = C[0] ^ ROT(C[2],1) — column 1 */ \
 	VPROLQ	$1, Z27, Z30; \
-	VPXORQ	Z25, Z30, Z30; \
-	VPXORQ	Z30, Z1, Z1; \
-	VPXORQ	Z30, Z6, Z6; \
-	VPXORQ	Z30, Z11, Z11; \
-	VPXORQ	Z30, Z16, Z16; \
-	VPXORQ	Z30, Z21, Z21; \
+	VPTERNLOGQ	$0x96, Z25, Z30, Z1; \
+	VPTERNLOGQ	$0x96, Z25, Z30, Z6; \
+	VPTERNLOGQ	$0x96, Z25, Z30, Z11; \
+	VPTERNLOGQ	$0x96, Z25, Z30, Z16; \
+	VPTERNLOGQ	$0x96, Z25, Z30, Z21; \
 	/* D[2] = C[1] ^ ROT(C[3],1) — column 2 */ \
 	VPROLQ	$1, Z28, Z30; \
-	VPXORQ	Z26, Z30, Z30; \
-	VPXORQ	Z30, Z2, Z2; \
-	VPXORQ	Z30, Z7, Z7; \
-	VPXORQ	Z30, Z12, Z12; \
-	VPXORQ	Z30, Z17, Z17; \
-	VPXORQ	Z30, Z22, Z22; \
+	VPTERNLOGQ	$0x96, Z26, Z30, Z2; \
+	VPTERNLOGQ	$0x96, Z26, Z30, Z7; \
+	VPTERNLOGQ	$0x96, Z26, Z30, Z12; \
+	VPTERNLOGQ	$0x96, Z26, Z30, Z17; \
+	VPTERNLOGQ	$0x96, Z26, Z30, Z22; \
 	/* D[3] = C[2] ^ ROT(C[4],1) — column 3 */ \
 	VPROLQ	$1, Z29, Z30; \
-	VPXORQ	Z27, Z30, Z30; \
-	VPXORQ	Z30, Z3, Z3; \
-	VPXORQ	Z30, Z8, Z8; \
-	VPXORQ	Z30, Z13, Z13; \
-	VPXORQ	Z30, Z18, Z18; \
-	VPXORQ	Z30, Z23, Z23; \
+	VPTERNLOGQ	$0x96, Z27, Z30, Z3; \
+	VPTERNLOGQ	$0x96, Z27, Z30, Z8; \
+	VPTERNLOGQ	$0x96, Z27, Z30, Z13; \
+	VPTERNLOGQ	$0x96, Z27, Z30, Z18; \
+	VPTERNLOGQ	$0x96, Z27, Z30, Z23; \
 	/* D[4] = C[3] ^ ROT(C[0],1) — column 4 */ \
 	VPROLQ	$1, Z25, Z30; \
-	VPXORQ	Z28, Z30, Z30; \
-	VPXORQ	Z30, Z4, Z4; \
-	VPXORQ	Z30, Z9, Z9; \
-	VPXORQ	Z30, Z14, Z14; \
-	VPXORQ	Z30, Z19, Z19; \
-	VPXORQ	Z30, Z24, Z24
+	VPTERNLOGQ	$0x96, Z28, Z30, Z4; \
+	VPTERNLOGQ	$0x96, Z28, Z30, Z9; \
+	VPTERNLOGQ	$0x96, Z28, Z30, Z14; \
+	VPTERNLOGQ	$0x96, Z28, Z30, Z19; \
+	VPTERNLOGQ	$0x96, Z28, Z30, Z24
 
 // Rho/Pi/Chi row transform (theta already applied in-place).
 #define X8_RPC_MAP_AVX512(L1, L2, L3, L4, L5, R1, R2, R3, R4, R5, A, B, C, D, E) \
