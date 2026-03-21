@@ -1,18 +1,14 @@
-// Package tw128 implements TW128, a tree-parallel authenticated encryption algorithm that uses a Sakura flat-tree
-// topology with kangaroo hopping to enable SIMD acceleration on large inputs.
+// Package tw128 implements TW128, a tree-parallel authenticated encryption algorithm based on keyed duplexes.
 //
-// Each tree node absorbs encode_string(K) || encode_string(N) || encode_string(AD) || LEU64(i) into a duplex,
-// pad-permutes with 0x08, and encrypts. The context prefix is absorbed once into a "base" duplex state, then
-// cloned per node.
+// The trunk duplex handles optional associated-data absorption, encryption of chunk 0, optional absorption
+// of later hidden leaf tags, and squeezing the final authentication tag. Later chunks are processed by
+// independent LeafWrap transcripts under disjoint IVs iv(U, i) for i >= 1.
 //
-// The final node (index 0) encrypts chunk 0 directly (the "message hop"). For multi-chunk messages, independent leaves
-// (indices 1..n-1) encrypt subsequent chunks and produce chain values that are absorbed into the final node (the
-// "chaining hop"). All leaf operations are independent and executed in parallel using SIMD-accelerated permutations.
+// Each duplex is initialized with S = K || iv(U, j) and operates with pad10* padding and per-block capacity
+// framing (body blocks are full-state: block || 0x01 || 0^{c-1}).
 package tw128
 
 import (
-	"encoding/binary"
-
 	"github.com/codahale/thyrse/internal/enc"
 	"github.com/codahale/thyrse/internal/keccak"
 )
@@ -21,70 +17,86 @@ const (
 	// KeySize is the size of the key in bytes.
 	KeySize = 32
 
+	// NonceSize is the size of the nonce in bytes.
+	NonceSize = 16
+
 	// TagSize is the size of the authentication tag in bytes.
 	TagSize = 32
 
-	// ChunkSize is the size of each leaf chunk in bytes.
-	ChunkSize = 8 * 1024
+	// ChunkSize is the size of each chunk in bytes.
+	ChunkSize = 8128
 
-	initDS       = 0x08 // Domain separation byte for duplex init (prefix+index absorption).
-	chainValueDS = 0x0B // Domain separation byte for chain value (Sakura inner node '110').
-	tagSingleDS  = 0x07 // Domain separation byte for tag, n=1 (Sakura single-node final '11').
-	tagChainDS   = 0x06 // Domain separation byte for tag, n>1 (Sakura chaining-hop final '01').
+	// leafTagSize is the size of each hidden leaf tag in bytes.
+	leafTagSize = 32
+
+	// trailerAD is the phase trailer for the associated-data phase.
+	trailerAD = 0x00
+
+	// trailerTC is the phase trailer for the leaf-tag (tag-chain) phase.
+	trailerTC = 0x01
 )
 
-// hopFrame is the Sakura message-hop / chaining-hop framing: '110^{62}' packed LSB-first (8 bytes).
-var hopFrame = [8]byte{0x03}
-
-// initBase absorbs encode_string(key) || encode_string(nonce) || encode_string(ad) into a fresh state.
-// AD is absorbed as header+body to avoid copying large AD.
-func initBase(base *keccak.State1, key, nonce, ad []byte) {
-	base.Reset()
-
-	// K and N are small, so batch them.
-	var buf [128]byte
-	b := buf[:0]
-	b = enc.EncodeString(b, key)
-	b = enc.EncodeString(b, nonce)
-	base.Absorb(b)
-
-	// AD may be large — encode header separately, then stream AD data.
-	b = buf[:0]
-	b = enc.LeftEncode(b, uint64(len(ad))*8)
-	base.Absorb(b)
-	base.Absorb(ad)
+// iv computes the IV for duplex index j: 0^{168-16-|ν(j)|} || nonce || ν(j).
+// Nonce must be NonceSize bytes (or nil, treated as all zeros).
+func iv(nonce []byte, j uint64) [keccak.Rate]byte {
+	var buf [keccak.Rate]byte
+	var nu [enc.MaxIntSize + 1]byte
+	nuSlice := enc.RightEncode(nu[:0], j)
+	off := keccak.Rate - NonceSize - len(nuSlice)
+	copy(buf[off:], nonce)
+	copy(buf[off+NonceSize:], nuSlice)
+	return buf
 }
 
-// initNode clones base, absorbs LEU64(index), and pad-permutes with initDS.
-func initNode(d *keccak.State1, base *keccak.State1, index uint64) {
-	*d = base.Clone()
-	var idx [8]byte
-	binary.LittleEndian.PutUint64(idx[:], index)
-	d.Absorb(idx[:])
-	d.PadPermute(initDS)
+// initTrunk initializes a trunk duplex with K, iv(U,0), and optional AD absorption.
+func initTrunk(s *keccak.State1, key, nonce, ad []byte) {
+	ivBuf := iv(nonce, 0)
+	s.InitKeyed(key, ivBuf[:])
+	if len(ad) > 0 {
+		s.Absorb(ad)
+		s.Absorb([]byte{trailerAD})
+		s.PadStarPermute()
+	}
+}
+
+// initLeaf initializes a leaf duplex with K, iv(U,j).
+func initLeaf(s *keccak.State1, key, nonce []byte, j uint64) {
+	ivBuf := iv(nonce, j)
+	s.InitKeyed(key, ivBuf[:])
 }
 
 type cryptor struct {
-	base      keccak.State1 // base state with prefix absorbed
-	leaf      keccak.State1 // current leaf's state (for chunks 1+)
-	final     keccak.State1 // final node state (encrypts chunk 0, absorbs CVs)
+	key       [KeySize]byte
+	nonce     [NonceSize]byte
+	trunk     keccak.State1 // trunk duplex state
+	leaf      keccak.State1 // current leaf duplex state (chunks 1+)
+	nLeaves   int           // number of completed leaves
+	chunkOff  int           // bytes processed in current chunk
+	leafMode  bool          // true after chunk 0 body complete
 	finalized bool
-	nLeaves   int  // number of completed leaf CVs absorbed into final node
-	chunkOff  int  // bytes processed in current chunk
-	leafMode  bool // true after chunk 0 complete and HOP_FRAME absorbed
 }
 
-// finalizeCV squeezes the chain value from the current leaf's state and absorbs it into the final node.
-func (c *cryptor) finalizeCV() {
-	c.leaf.PadPermute(chainValueDS)
-	c.final.AbsorbCV(&c.leaf)
+func (c *cryptor) initCryptor(key, nonce, ad []byte) {
+	copy(c.key[:], key)
+	if len(nonce) > 0 {
+		copy(c.nonce[:], nonce)
+	}
+	initTrunk(&c.trunk, c.key[:], c.nonce[:], ad)
+}
+
+// finalizeLeaf squeezes the current leaf's tag and absorbs it into the trunk.
+// Uses AbsorbCV to read directly from the leaf's lane-major state, avoiding
+// byte serialization.
+func (c *cryptor) finalizeLeaf() {
+	c.leaf.BodyPadStarPermute()
+	c.trunk.AbsorbCV(&c.leaf)
 	c.nLeaves++
 	c.chunkOff = 0
 }
 
-// transitionToLeafMode absorbs HOP_FRAME into the final node and enters leaf mode.
+// transitionToLeafMode finalizes the trunk body phase and enters leaf mode.
 func (c *cryptor) transitionToLeafMode() {
-	c.final.Absorb(hopFrame[:])
+	c.trunk.BodyPadStarPermute()
 	c.leafMode = true
 	c.chunkOff = 0
 }
@@ -95,42 +107,35 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 	}
 	c.finalized = true
 
-	if !c.leafMode {
-		// n=1: tag directly from final node (which encrypted chunk 0).
-		c.final.PadPermute(tagSingleDS)
-		var tag [TagSize]byte
-		c.final.Squeeze(tag[:])
-		return tag
+	// If still on chunk 0 and body data was written, finalize the trunk body phase.
+	if !c.leafMode && c.chunkOff > 0 {
+		c.trunk.BodyPadStarPermute()
 	}
 
-	// n>1: finalize last leaf if partial chunk in progress.
-	if c.chunkOff > 0 {
-		c.finalizeCV()
+	// Finalize the last leaf if a partial chunk is in progress.
+	if c.leafMode && c.chunkOff > 0 {
+		c.finalizeLeaf()
 	}
 
-	// Chaining hop suffix: length_encode(nLeaves) || 0xFF || 0xFF
-	var leBuf [9 + 2]byte
-	suffix := append(enc.LengthEncode(leBuf[:0], uint64(c.nLeaves)), 0xFF, 0xFF)
-	c.final.Absorb(suffix)
+	// Tag-absorb phase: leaf tags were absorbed incrementally; finalize with trailer.
+	if c.nLeaves > 0 {
+		c.trunk.Absorb([]byte{trailerTC})
+		c.trunk.PadStarPermute()
+	}
 
-	// Tag: pad_permute(0x06)
-	c.final.PadPermute(tagChainDS)
 	var tag [TagSize]byte
-	c.final.Squeeze(tag[:])
+	c.trunk.Squeeze(tag[:])
 	return tag
 }
 
-// Encryptor incrementally encrypts data and computes the authentication tag. It implements a streaming interface where
-// each call to [Encryptor.XORKeyStream] immediately produces ciphertext. Call [Encryptor.Finalize] after all data has
-// been processed to obtain the authentication tag.
+// Encryptor incrementally encrypts data and computes the authentication tag.
 type Encryptor struct {
 	cryptor
 }
 
 // NewEncryptor returns a new Encryptor initialized with the given key, nonce, and associated data.
 func NewEncryptor(key, nonce, ad []byte) (e Encryptor) {
-	initBase(&e.base, key, nonce, ad)
-	initNode(&e.final, &e.base, 0)
+	e.initCryptor(key, nonce, ad)
 	return e
 }
 
@@ -141,9 +146,9 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	}
 
 	if !e.leafMode {
-		// Still on chunk 0: encrypt into final node.
+		// Still on chunk 0: encrypt into trunk.
 		n := min(len(src), ChunkSize-e.chunkOff)
-		e.final.Encrypt(dst[:n], src[:n])
+		e.trunk.BodyEncrypt(dst[:n], src[:n])
 		e.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -162,13 +167,13 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	// Continue an in-progress partial leaf chunk.
 	if e.chunkOff > 0 {
 		n := min(len(src), ChunkSize-e.chunkOff)
-		e.leaf.Encrypt(dst[:n], src[:n])
+		e.leaf.BodyEncrypt(dst[:n], src[:n])
 		e.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
 		if e.chunkOff == ChunkSize {
-			e.finalizeCV()
+			e.finalizeLeaf()
 		}
 	}
 
@@ -181,9 +186,9 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial leaf chunk with remaining bytes.
 	if len(src) > 0 {
-		initNode(&e.leaf, &e.base, uint64(e.nLeaves+1))
+		initLeaf(&e.leaf, e.key[:], e.nonce[:], uint64(e.nLeaves+1))
 		e.chunkOff = 0
-		e.leaf.Encrypt(dst[:len(src)], src)
+		e.leaf.BodyEncrypt(dst[:len(src)], src)
 		e.chunkOff += len(src)
 	}
 }
@@ -192,25 +197,24 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
-	var cvs [256]byte
+	var tags [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		keccak.EncryptChunksTW128(&e.base, uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
-		e.final.AbsorbCVs(cvs[:])
+		keccak.EncryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+		e.trunk.AbsorbCVs(tags[:])
 		e.nLeaves += 8
 		idx += 8
 	}
 
-	// Remainder: pad to 8 and use x8 when utilization is high enough to
-	// offset the cost of absorbing+permuting unused padding lanes.
+	// Remainder: pad to 8 and use x8 when utilization is high enough.
 	if rem := nFlush - idx; rem >= 5 {
 		off := idx * ChunkSize
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		keccak.EncryptChunksTW128(&e.base, uint64(e.nLeaves+1), padSrc[:], padDst[:], &cvs)
+		keccak.EncryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), padSrc[:], padDst[:], &tags)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
-		e.final.AbsorbCVs(cvs[:rem*32])
+		e.trunk.AbsorbCVs(tags[:rem*leafTagSize])
 		e.nLeaves += rem
 		idx += rem
 	}
@@ -218,32 +222,26 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	// Small remainder via x1.
 	for idx < nFlush {
 		off := idx * ChunkSize
-		var d keccak.State1
-		encryptX1(&e.base, uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &d)
-		e.final.AbsorbCV(&d)
+		encryptX1(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &e.leaf)
+		e.trunk.AbsorbCV(&e.leaf)
 		e.nLeaves++
 		idx++
 	}
 }
 
-// Finalize returns the authentication tag. It must be called exactly once after all data has been processed via
-// [Encryptor.XORKeyStream].
+// Finalize returns the authentication tag.
 func (e *Encryptor) Finalize() [TagSize]byte {
 	return e.finalizeInternal()
 }
 
-// Decryptor incrementally decrypts data and computes the authentication tag. It implements a streaming interface where
-// each call to [Decryptor.XORKeyStream] immediately produces plaintext. Call [Decryptor.Finalize] after all data has
-// been processed to obtain the expected authentication tag. The caller MUST verify the tag using constant-time
-// comparison before using the plaintext.
+// Decryptor incrementally decrypts data and computes the authentication tag.
 type Decryptor struct {
 	cryptor
 }
 
 // NewDecryptor returns a new Decryptor initialized with the given key, nonce, and associated data.
 func NewDecryptor(key, nonce, ad []byte) (d Decryptor) {
-	initBase(&d.base, key, nonce, ad)
-	initNode(&d.final, &d.base, 0)
+	d.initCryptor(key, nonce, ad)
 	return d
 }
 
@@ -254,9 +252,9 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	}
 
 	if !d.leafMode {
-		// Still on chunk 0: decrypt from final node.
+		// Still on chunk 0: decrypt from trunk.
 		n := min(len(src), ChunkSize-d.chunkOff)
-		d.final.Decrypt(dst[:n], src[:n])
+		d.trunk.BodyDecrypt(dst[:n], src[:n])
 		d.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -275,13 +273,13 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	// Continue an in-progress partial leaf chunk.
 	if d.chunkOff > 0 {
 		n := min(len(src), ChunkSize-d.chunkOff)
-		d.leaf.Decrypt(dst[:n], src[:n])
+		d.leaf.BodyDecrypt(dst[:n], src[:n])
 		d.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
 		if d.chunkOff == ChunkSize {
-			d.finalizeCV()
+			d.finalizeLeaf()
 		}
 	}
 
@@ -294,9 +292,9 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 
 	// Start a new partial leaf chunk with remaining bytes.
 	if len(src) > 0 {
-		initNode(&d.leaf, &d.base, uint64(d.nLeaves+1))
+		initLeaf(&d.leaf, d.key[:], d.nonce[:], uint64(d.nLeaves+1))
 		d.chunkOff = 0
-		d.leaf.Decrypt(dst[:len(src)], src)
+		d.leaf.BodyDecrypt(dst[:len(src)], src)
 		d.chunkOff += len(src)
 	}
 }
@@ -305,25 +303,24 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
-	var cvs [256]byte
+	var tags [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		keccak.DecryptChunksTW128(&d.base, uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &cvs)
-		d.final.AbsorbCVs(cvs[:])
+		keccak.DecryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+		d.trunk.AbsorbCVs(tags[:])
 		d.nLeaves += 8
 		idx += 8
 	}
 
-	// Remainder: pad to 8 and use x8 when utilization is high enough to
-	// offset the cost of absorbing+permuting unused padding lanes.
+	// Remainder: pad to 8 and use x8 when utilization is high enough.
 	if rem := nFlush - idx; rem >= 5 {
 		off := idx * ChunkSize
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		keccak.DecryptChunksTW128(&d.base, uint64(d.nLeaves+1), padSrc[:], padDst[:], &cvs)
+		keccak.DecryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), padSrc[:], padDst[:], &tags)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
-		d.final.AbsorbCVs(cvs[:rem*32])
+		d.trunk.AbsorbCVs(tags[:rem*leafTagSize])
 		d.nLeaves += rem
 		idx += rem
 	}
@@ -331,27 +328,30 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	// Small remainder via x1.
 	for idx < nFlush {
 		off := idx * ChunkSize
-		var leaf keccak.State1
-		decryptX1(&d.base, uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &leaf)
-		d.final.AbsorbCV(&leaf)
+		decryptX1(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &d.leaf)
+		d.trunk.AbsorbCV(&d.leaf)
 		d.nLeaves++
 		idx++
 	}
 }
 
-// Finalize returns the expected authentication tag. It must be called exactly once after all data has been processed
-// via [Decryptor.XORKeyStream]. The caller MUST verify the tag using constant-time comparison before using the
-// plaintext.
+// Finalize returns the expected authentication tag.
 func (d *Decryptor) Finalize() [TagSize]byte {
 	return d.finalizeInternal()
 }
 
-func encryptX1(base *keccak.State1, index uint64, pt, ct []byte, d *keccak.State1) {
-	initNode(d, base, index)
-	d.EncryptAll(pt, ct, chainValueDS)
+func encryptX1(key, nonce []byte, index uint64, pt, ct []byte, d *keccak.State1) {
+	initLeaf(d, key, nonce, index)
+	done := d.BodyEncryptLoop(pt, ct)
+	d.EncryptBytesAt(0, pt[done:], ct[done:])
+	d.SetPos(len(pt) - done)
+	d.BodyPadStarPermute()
 }
 
-func decryptX1(base *keccak.State1, index uint64, ct, pt []byte, d *keccak.State1) {
-	initNode(d, base, index)
-	d.DecryptAll(ct, pt, chainValueDS)
+func decryptX1(key, nonce []byte, index uint64, ct, pt []byte, d *keccak.State1) {
+	initLeaf(d, key, nonce, index)
+	done := d.BodyDecryptLoop(ct, pt)
+	d.DecryptBytesAt(0, ct[done:], pt[done:])
+	d.SetPos(len(ct) - done)
+	d.BodyPadStarPermute()
 }

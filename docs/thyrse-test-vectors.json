@@ -24,8 +24,8 @@
       "description": "Full AEAD followed by Derive.",
       "init_label": "test.vector",
       "expected": {
-        "seal": "a47534a760edf2b24077a2211900cc4db7a97036337d22bdf17fb0a285e99e7ea122e6e5bf94804371089bdb67",
-        "derive": "72d797a1cc50197c6c4a28c3ba9722f7ea2da5be4debe6af8e0eac3989ab1333"
+        "seal": "284aa6fe3d849c1cf0b9dd99935412a4057afd6dc450d440da81868c87d641f3705fff71a02df59da4874877af",
+        "derive": "f3e4860fc7cb87788f6b477ceca9687a8de678f85b482674feec1b96032a9c13"
       }
     },
     {
@@ -34,8 +34,8 @@
       "description": "Combined unauthenticated and authenticated encryption.",
       "init_label": "test.vector",
       "expected": {
-        "mask": "dc27b27d7d5bd93935ef35f9f3e1",
-        "seal": "c32f614cad9498d547fec901f492d41977e4a507e454ecc6e648a6b5acec3bedd8359e4b4008bf8720f0d18c7de9"
+        "mask": "584e8f15ffffbb2ebc7edf2c5418",
+        "seal": "0a1aed26fc427845b38f958434f4291416386e660c8384eecdd092155edbeb36627e33df52d2b1a2e5789edd7437"
       }
     },
     {
@@ -73,7 +73,7 @@
       "description": "Successful authenticated encryption and decryption. Post-operation Derive outputs match.",
       "init_label": "test.vector",
       "expected": {
-        "seal": "9761c8e0370bf42d6a3c8e16e343276d93da7d0ec9546fda99d53d5f8319981248c2106145d10c439e2451cb31"
+        "seal": "f2cc9a1674ec78e5e82b78ef683fc24d967896e8d45ed93db53946ce098e8b090caf6f14e3113126278cf995c9"
       }
     },
     {
@@ -82,7 +82,7 @@
       "description": "Open returns \u22a5 and subsequent Derive outputs diverge from the sender.",
       "init_label": "test.vector",
       "expected": {
-        "seal": "104ba934631d8ff29731c4046aa6838924074bcd1e2d096b079c7ed031ea2f3f67a453e389e1292c813ea2fc0e"
+        "seal": "842992737788a7f37995ecb31bb3e6c95d688cfb687b1f3965439c82fe1e1bd9b65428e747b44bb8ac7a0b6b77"
       }
     },
     {
@@ -91,7 +91,7 @@
       "description": "First of three sequential Seals. Each derives a different key because the transcript advances via tag absorption.",
       "init_label": "test.vector",
       "expected": {
-        "seal": "50e36d935a8014535ee39956c4eea213eace89c1e07e1d23a79540a7cb2deb7dbb9327c30ac435d3d30119a9bb"
+        "seal": "2adba32ed642a0ec036aa094c2a344dfd80d8b52c718e78804fe502d0d959a368ab7daac222426789f7904c3b9"
       }
     },
     {
@@ -100,7 +100,7 @@
       "description": "Second of three sequential Seals.",
       "init_label": "test.vector",
       "expected": {
-        "seal": "b698325983a038f4bacfa830c7ee664fa0d03500bdfab70b61fdbb411e845f14d7505c6931db7ab7addae5295796"
+        "seal": "03ffcfa6c610cf3e9596ecb4c3e8e05653dbe4ce0ca899c380ae08d26b2854a4c1b9f9748c6a515e44f60c90a9c2"
       }
     },
     {
@@ -109,7 +109,7 @@
       "description": "Third of three sequential Seals.",
       "init_label": "test.vector",
       "expected": {
-        "seal": "8bbfd161b5e2b24cfed595f9efa93c8b813a499e2d774f3938227b501fb7fc0fa43442d88409687e1d217062ce"
+        "seal": "4bdb8acc212c782a866a8fb041bd80005cadbcfab8eeb427e34ea70fe7149b2e78b16375efa5ec2bd42c784c83"
       }
     }
   ]

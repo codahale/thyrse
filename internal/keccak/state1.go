@@ -413,6 +413,148 @@ func (s *State1) Equal(other *State1) int {
 	return lanesEq & posEq
 }
 
+// InitKeyed sets the state to key || iv (Mennink keyed duplex init), then
+// permutes. Key must be 32 bytes (4 lanes) and iv must be 168 bytes (21 lanes),
+// filling the full 200-byte state. Resets pos to 0.
+func (s *State1) InitKeyed(key, iv []byte) {
+	_ = key[31] // bounds check
+	_ = iv[167] // bounds check
+	for lane := range 4 {
+		s.a[lane] = binary.LittleEndian.Uint64(key[lane<<3 : lane<<3+8])
+	}
+	for lane := range 21 {
+		s.a[4+lane] = binary.LittleEndian.Uint64(iv[lane<<3 : lane<<3+8])
+	}
+	s.Permute12()
+	s.pos = 0
+}
+
+// PadStarPermute applies pad10* padding at the current position and permutes.
+// Unlike PadPermute (pad10*1), only a single 0x01 byte is XORed at pos — there
+// is no trailing 0x80 at Rate-1. Resets pos to 0.
+func (s *State1) PadStarPermute() {
+	xorByteInWord(&s.a[s.pos>>3], s.pos, 0x01)
+	s.Permute12()
+	s.pos = 0
+}
+
+// SetPos sets the internal position counter.
+func (s *State1) SetPos(pos int) { s.pos = pos }
+
+// EncryptBytesAt performs XOR encryption starting at byte position pos.
+func (s *State1) EncryptBytesAt(pos int, src, dst []byte) { s.encryptBytesAt(pos, src, dst) }
+
+// DecryptBytesAt performs overwrite-mode decryption starting at byte position pos.
+func (s *State1) DecryptBytesAt(pos int, src, dst []byte) { s.decryptBytesAt(pos, src, dst) }
+
+// BodyEncryptLoop encrypts full 168-byte body blocks with capacity framing.
+// XORs 0x01 into lane 21 before each permute. Returns bytes processed.
+func (s *State1) BodyEncryptLoop(src, dst []byte) int {
+	n := (len(src) / Rate) * Rate
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
+			base := lane << 3
+			w := binary.LittleEndian.Uint64(src[off+base : off+base+8])
+			s.a[lane] ^= w
+			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], s.a[lane])
+		}
+		s.a[21] ^= 0x01
+		s.Permute12()
+	}
+	return n
+}
+
+// BodyDecryptLoop decrypts full 168-byte body blocks with capacity framing.
+// XORs 0x01 into lane 21 before each permute. Returns bytes processed.
+func (s *State1) BodyDecryptLoop(src, dst []byte) int {
+	n := (len(src) / Rate) * Rate
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
+			base := lane << 3
+			ct := binary.LittleEndian.Uint64(src[off+base : off+base+8])
+			pt := ct ^ s.a[lane]
+			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], pt)
+			s.a[lane] = ct
+		}
+		s.a[21] ^= 0x01
+		s.Permute12()
+	}
+	return n
+}
+
+// BodyEncrypt XOR-encrypts plaintext with capacity framing (body blocks have
+// a 0x01 byte in the first capacity position before each permute). The caller
+// must ensure len(dst) >= len(src).
+func (s *State1) BodyEncrypt(dst, src []byte) {
+	// Finish any partial block at current position.
+	if s.pos > 0 && len(src) > 0 {
+		n := min(Rate-s.pos, len(src))
+		s.encryptBytesAt(s.pos, src[:n], dst[:n])
+		s.pos += n
+		src = src[n:]
+		dst = dst[n:]
+		if s.pos == Rate {
+			s.a[21] ^= 0x01
+			s.Permute12()
+			s.pos = 0
+		}
+	}
+
+	// Encrypt full blocks with capacity framing.
+	if s.pos == 0 && len(src) >= Rate {
+		done := s.BodyEncryptLoop(src, dst)
+		src = src[done:]
+		dst = dst[done:]
+	}
+
+	// Encrypt remaining partial block.
+	if len(src) > 0 {
+		s.encryptBytesAt(s.pos, src, dst)
+		s.pos += len(src)
+	}
+}
+
+// BodyDecrypt XOR-decrypts ciphertext with capacity framing. The caller must
+// ensure len(dst) >= len(src).
+func (s *State1) BodyDecrypt(dst, src []byte) {
+	// Finish any partial block at current position.
+	if s.pos > 0 && len(src) > 0 {
+		n := min(Rate-s.pos, len(src))
+		s.decryptBytesAt(s.pos, src[:n], dst[:n])
+		s.pos += n
+		src = src[n:]
+		dst = dst[n:]
+		if s.pos == Rate {
+			s.a[21] ^= 0x01
+			s.Permute12()
+			s.pos = 0
+		}
+	}
+
+	// Decrypt full blocks with capacity framing.
+	if s.pos == 0 && len(src) >= Rate {
+		done := s.BodyDecryptLoop(src, dst)
+		src = src[done:]
+		dst = dst[done:]
+	}
+
+	// Decrypt remaining partial block.
+	if len(src) > 0 {
+		s.decryptBytesAt(s.pos, src, dst)
+		s.pos += len(src)
+	}
+}
+
+// BodyPadStarPermute applies pad10* and capacity framing to finalize a body
+// phase: XOR 0x01 at current pos (pad10*), XOR 0x01 into lane 21 (capacity),
+// permute, reset pos.
+func (s *State1) BodyPadStarPermute() {
+	xorByteInWord(&s.a[s.pos>>3], s.pos, 0x01)
+	s.a[21] ^= 0x01
+	s.Permute12()
+	s.pos = 0
+}
+
 // Squeeze extracts bytes from the sponge state into dst, permuting at rate
 // boundaries for multi-block output.
 func (s *State1) Squeeze(dst []byte) {

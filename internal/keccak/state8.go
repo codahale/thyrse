@@ -33,35 +33,6 @@ func (s *state8) reset() {
 	s.pos = 0
 }
 
-// SetAll sets all 8 instances to be identical copies of base.
-func (s *state8) setAll(base *State1) {
-	for lane := range lanes {
-		for inst := range 8 {
-			s.a[lane][inst] = base.a[lane]
-		}
-	}
-	s.pos = base.pos
-}
-
-// AbsorbWords XORs words[i] into instance i at the current byte position,
-// encoding each word as 8 little-endian bytes.
-func (s *state8) absorbWords(words [8]uint64) {
-	byteInLane := s.pos & 7
-	laneIdx := s.pos >> 3
-	if byteInLane == 0 {
-		for inst := range 8 {
-			s.a[laneIdx][inst] ^= words[inst]
-		}
-	} else {
-		shift := uint(byteInLane) * 8
-		for inst := range 8 {
-			s.a[laneIdx][inst] ^= words[inst] << shift
-			s.a[laneIdx+1][inst] ^= words[inst] >> (64 - shift)
-		}
-	}
-	s.pos += 8
-}
-
 // fastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes.
 func (s *state8) fastLoopEncrypt168(src, dst []byte, stride int) int {
 	n := max(len(src)-7*stride, 0)
@@ -97,22 +68,6 @@ func (s *state8) fastLoopDecrypt168(src, dst []byte, stride int) int {
 		s.permute12()
 	}
 	return n
-}
-
-// PadPermute applies pad10*1 padding (ds at s.pos, 0x80 at Rate-1) and permutes all instances.
-func (s *state8) padPermute(ds byte) {
-	shift := uint((s.pos & 7) << 3)
-	dsMask := uint64(ds) << shift
-	posLane := s.pos >> 3
-	endShift := uint(((Rate - 1) & 7) << 3)
-	endMask := uint64(0x80) << endShift
-	endLane := (Rate - 1) >> 3
-	for inst := range 8 {
-		s.a[posLane][inst] ^= dsMask
-		s.a[endLane][inst] ^= endMask
-	}
-	s.permute12()
-	s.pos = 0
 }
 
 // encryptBytes performs SpongeWrap encryption on a partial block for instance inst.
@@ -158,30 +113,65 @@ func (s *state8) decryptBytes(inst int, src, dst []byte) {
 	}
 }
 
-// encryptAll encrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
-func (s *state8) encryptAll(src, dst []byte, stride int, ds byte) {
-	done := s.fastLoopEncrypt168(src, dst, stride)
-	tail := stride - done
-	if tail > 0 {
-		for inst := range 8 {
-			off := inst*stride + done
-			s.encryptBytes(inst, src[off:off+tail], dst[off:off+tail])
-		}
-	}
-	s.pos = tail
-	s.padPermute(ds)
+// bodyEncryptAll8 encrypts all of src into dst (8 instances at stride) with capacity framing.
+// Each rate block gets s.a[21][inst] ^= 0x01 before permute (body block framing).
+func (s *state8) bodyEncryptAll8(src, dst []byte, stride int) {
+	s.bodyFastLoopEncrypt168(src, dst, stride)
 }
 
-// decryptAll decrypts all of src into dst (8 instances at stride), applies padding with ds, and permutes.
-func (s *state8) decryptAll(src, dst []byte, stride int, ds byte) {
-	done := s.fastLoopDecrypt168(src, dst, stride)
-	tail := stride - done
-	if tail > 0 {
-		for inst := range 8 {
-			off := inst*stride + done
-			s.decryptBytes(inst, src[off:off+tail], dst[off:off+tail])
-		}
+// bodyDecryptAll8 decrypts all of src into dst (8 instances at stride) with capacity framing.
+func (s *state8) bodyDecryptAll8(src, dst []byte, stride int) {
+	s.bodyFastLoopDecrypt168(src, dst, stride)
+}
+
+// bodyPadStarPermute applies pad10* and capacity framing to finalize a body
+// phase across all 8 instances, then permutes and resets pos.
+func (s *state8) bodyPadStarPermute() {
+	for inst := range 8 {
+		xorByteInWord(&s.a[s.pos>>3][inst], s.pos, 0x01)
+		s.a[21][inst] ^= 0x01
 	}
-	s.pos = tail
-	s.padPermute(ds)
+	s.permute12()
+	s.pos = 0
+}
+
+// bodyFastLoopEncrypt168 encrypts full 168-byte stripes with capacity framing.
+func (s *state8) bodyFastLoopEncrypt168(src, dst []byte, stride int) {
+	n := max(len(src)-7*stride, 0)
+	n = (n / Rate) * Rate
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
+			base := lane << 3
+			for inst := range 8 {
+				w := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
+				s.a[lane][inst] ^= w
+				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.a[lane][inst])
+			}
+		}
+		for inst := range 8 {
+			s.a[21][inst] ^= 0x01
+		}
+		s.permute12()
+	}
+}
+
+// bodyFastLoopDecrypt168 decrypts full 168-byte stripes with capacity framing.
+func (s *state8) bodyFastLoopDecrypt168(src, dst []byte, stride int) {
+	n := max(len(src)-7*stride, 0)
+	n = (n / Rate) * Rate
+	for off := 0; off < n; off += Rate {
+		for lane := range 21 {
+			base := lane << 3
+			for inst := range 8 {
+				ct := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
+				pt := ct ^ s.a[lane][inst]
+				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], pt)
+				s.a[lane][inst] = ct
+			}
+		}
+		for inst := range 8 {
+			s.a[21][inst] ^= 0x01
+		}
+		s.permute12()
+	}
 }

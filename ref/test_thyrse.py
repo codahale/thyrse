@@ -196,9 +196,9 @@ class TestMask(unittest.TestCase):
         p.init(b"test.vector")
         p.mix(b"key", b"test-key-material")
         masked = p.mask(b"unauthenticated", b"mask this data")
-        self.assertEqual(masked.hex(), "dc27b27d7d5bd93935ef35f9f3e1")
+        self.assertEqual(masked.hex(), "584e8f15ffffbb2ebc7edf2c5418")
         sealed = p.seal(b"authenticated", b"seal this data")
-        self.assertEqual(sealed.hex(), "c32f614cad9498d547fec901f492d41977e4a507e454ecc6e648a6b5acec3bedd8359e4b4008bf8720f0d18c7de9")
+        self.assertEqual(sealed.hex(), "0a1aed26fc427845b38f958434f4291416386e660c8384eecdd092155edbeb36627e33df52d2b1a2e5789edd7437")
 
     def test_mask_unmask_roundtrip(self):
         """Mask then Unmask with identical transcripts recovers plaintext."""
@@ -221,9 +221,9 @@ class TestSeal(unittest.TestCase):
         p.init(b"test.vector")
         p.mix(b"key", b"test-key-material")
         sealed = p.seal(b"message", b"hello, world!")
-        self.assertEqual(sealed.hex(), "a47534a760edf2b24077a2211900cc4db7a97036337d22bdf17fb0a285e99e7ea122e6e5bf94804371089bdb67")
+        self.assertEqual(sealed.hex(), "284aa6fe3d849c1cf0b9dd99935412a4057afd6dc450d440da81868c87d641f3705fff71a02df59da4874877af")
         output = p.derive(b"output", 32)
-        self.assertEqual(output.hex(), "72d797a1cc50197c6c4a28c3ba9722f7ea2da5be4debe6af8e0eac3989ab1333")
+        self.assertEqual(output.hex(), "f3e4860fc7cb87788f6b477ceca9687a8de678f85b482674feec1b96032a9c13")
 
     def test_seal_open_roundtrip_16_7(self):
         """§16.7: Seal + Open round-trip."""
@@ -233,7 +233,7 @@ class TestSeal(unittest.TestCase):
         sender.mix(b"nonce", b"test-nonce-value")
         sender.mix(b"ad", b"associated data")
         sealed = sender.seal(b"message", b"hello, world!")
-        self.assertEqual(sealed.hex(), "9761c8e0370bf42d6a3c8e16e343276d93da7d0ec9546fda99d53d5f8319981248c2106145d10c439e2451cb31")
+        self.assertEqual(sealed.hex(), "f2cc9a1674ec78e5e82b78ef683fc24d967896e8d45ed93db53946ce098e8b090caf6f14e3113126278cf995c9")
 
         receiver = Protocol()
         receiver.init(b"test.vector")
@@ -255,7 +255,7 @@ class TestSeal(unittest.TestCase):
         sender.mix(b"key", b"test-key-material")
         sender.mix(b"nonce", b"test-nonce-value")
         sealed = sender.seal(b"message", b"hello, world!")
-        self.assertEqual(sealed.hex(), "104ba934631d8ff29731c4046aa6838924074bcd1e2d096b079c7ed031ea2f3f67a453e389e1292c813ea2fc0e")
+        self.assertEqual(sealed.hex(), "842992737788a7f37995ecb31bb3e6c95d688cfb687b1f3965439c82fe1e1bd9b65428e747b44bb8ac7a0b6b77")
 
         receiver = Protocol()
         receiver.init(b"test.vector")
@@ -278,11 +278,11 @@ class TestSeal(unittest.TestCase):
         p.mix(b"key", b"test-key-material")
         p.mix(b"nonce", b"test-nonce-value")
         s1 = p.seal(b"msg", b"first message")
-        self.assertEqual(s1.hex(), "50e36d935a8014535ee39956c4eea213eace89c1e07e1d23a79540a7cb2deb7dbb9327c30ac435d3d30119a9bb")
+        self.assertEqual(s1.hex(), "2adba32ed642a0ec036aa094c2a344dfd80d8b52c718e78804fe502d0d959a368ab7daac222426789f7904c3b9")
         s2 = p.seal(b"msg", b"second message")
-        self.assertEqual(s2.hex(), "b698325983a038f4bacfa830c7ee664fa0d03500bdfab70b61fdbb411e845f14d7505c6931db7ab7addae5295796")
+        self.assertEqual(s2.hex(), "03ffcfa6c610cf3e9596ecb4c3e8e05653dbe4ce0ca899c380ae08d26b2854a4c1b9f9748c6a515e44f60c90a9c2")
         s3 = p.seal(b"msg", b"third message")
-        self.assertEqual(s3.hex(), "8bbfd161b5e2b24cfed595f9efa93c8b813a499e2d774f3938227b501fb7fc0fa43442d88409687e1d217062ce")
+        self.assertEqual(s3.hex(), "4bdb8acc212c782a866a8fb041bd80005cadbcfab8eeb427e34ea70fe7149b2e78b16375efa5ec2bd42c784c83")
 
 
 import json

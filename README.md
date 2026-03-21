@@ -53,8 +53,8 @@ All schemes are in `schemes/basic/` and `schemes/complex/` respectively.
 ## Performance
 
 Under the hood, Thyrse accelerates large messages with [TW128] — a tree-parallel authenticated encryption layer
-using Sakura flat-tree encoding with kangaroo hopping. TW128 processes leaf chunks 8-wide on x86-64 and 4-wide on
-ARM64, saturating available vector units automatically.
+based on keyed duplexes. TW128 processes leaf chunks 8-wide on x86-64 and 4-wide on ARM64, saturating available
+vector units automatically.
 
 | Platform | SIMD | Parallel lanes |
 |----------|------|----------------|
@@ -64,7 +64,7 @@ ARM64, saturating available vector units automatically.
 
 Build with `-tags purego` to disable assembly on any platform.
 
-[TW128]: docs/tw128-spec.md
+[TW128]: https://github.com/codahale/treewrap
 
 ## The Protocol API
 
