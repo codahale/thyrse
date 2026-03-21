@@ -152,7 +152,7 @@ func TestPermuteVectorsState1(t *testing.T) {
 		in := mustHex(t, tc.In)
 		want := mustHex(t, tc.Out)
 		s := state1FromBytes(t, in)
-		s.Permute12()
+		s.permute12()
 		got := state1Bytes(&s)
 		if string(got) != string(want) {
 			t.Fatalf("permute1[%d] mismatch", i)
@@ -167,7 +167,7 @@ func TestPermuteVectorsState2(t *testing.T) {
 		wants := stateNFromHex(t, tc.Out, 2)
 		for inst := range 2 {
 			s := state1FromBytes(t, ins[inst])
-			s.Permute12()
+			s.permute12()
 			got := state1Bytes(&s)
 			if string(got) != string(wants[inst]) {
 				t.Fatalf("permute2[%d] inst %d mismatch", i, inst)
@@ -188,7 +188,7 @@ func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
 		enc.Absorb([]byte("test-key"))
 		enc.PadPermute(0x08)
 		ct := make([]byte, size)
-		enc.Encrypt(ct, pt)
+		enc.encrypt(ct, pt)
 		encPos := enc.pos
 
 		// Decrypt with same init.
@@ -196,7 +196,7 @@ func TestDuplexEncryptDecryptRoundTrip(t *testing.T) {
 		dec.Absorb([]byte("test-key"))
 		dec.PadPermute(0x08)
 		recovered := make([]byte, size)
-		dec.Decrypt(recovered, ct)
+		dec.decrypt(recovered, ct)
 		decPos := dec.pos
 
 		if string(recovered) != string(pt) {

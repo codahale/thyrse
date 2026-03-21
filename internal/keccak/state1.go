@@ -12,7 +12,7 @@ func permute12x1Generic(s *State1) {
 	keccakP1600x12(&s.a)
 }
 
-func (s *State1) Permute12() {
+func (s *State1) permute12() {
 	if permute12x1Arch(s) {
 		return
 	}
@@ -23,10 +23,6 @@ func (s *State1) Reset() {
 	clear(s.a[:])
 	s.pos = 0
 }
-
-// Clone returns a copy of the state. State1 is a value type,
-// so the struct copy is a deep copy.
-func (s *State1) Clone() State1 { return *s }
 
 // fastLoopAbsorb168 absorbs and permutes as many full 168-byte stripes as possible.
 func (s *State1) fastLoopAbsorb168(in []byte) int {
@@ -40,7 +36,7 @@ func (s *State1) fastLoopAbsorb168(in []byte) int {
 			base := lane << 3
 			s.a[lane] ^= binary.LittleEndian.Uint64(p[base : base+8])
 		}
-		s.Permute12()
+		s.permute12()
 	}
 	return n
 }
@@ -78,7 +74,7 @@ func (s *State1) fastLoopEncrypt168(src, dst []byte) int {
 			s.a[lane] ^= w
 			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], s.a[lane])
 		}
-		s.Permute12()
+		s.permute12()
 	}
 	return n
 }
@@ -98,7 +94,7 @@ func (s *State1) fastLoopDecrypt168(src, dst []byte) int {
 			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], pt)
 			s.a[lane] = ct
 		}
-		s.Permute12()
+		s.permute12()
 	}
 	return n
 }
@@ -107,7 +103,7 @@ func (s *State1) fastLoopDecrypt168(src, dst []byte) int {
 func (s *State1) padPermute(pos int, ds byte) {
 	xorByteInWord(&s.a[pos>>3], pos, ds)
 	xorByteInWord(&s.a[(Rate-1)>>3], Rate-1, 0x80)
-	s.Permute12()
+	s.permute12()
 }
 
 // encryptBytesAt performs overwrite-mode encryption starting at byte position pos:
@@ -186,25 +182,7 @@ func (s *State1) decryptBytesAt(pos int, src, dst []byte) {
 func (s *State1) AbsorbAll(in []byte, ds byte) {
 	done := s.fastLoopAbsorb168(in)
 	s.absorbFinal(in[done:], ds)
-	s.Permute12()
-	s.pos = 0
-}
-
-// EncryptAll encrypts all of src into dst, applies padding with ds, and permutes.
-func (s *State1) EncryptAll(src, dst []byte, ds byte) {
-	done := s.fastLoopEncrypt168(src, dst)
-	s.encryptBytesAt(0, src[done:], dst[done:])
-	s.pos = len(src) - done
-	s.padPermute(s.pos, ds)
-	s.pos = 0
-}
-
-// DecryptAll decrypts all of src into dst, applies padding with ds, and permutes.
-func (s *State1) DecryptAll(src, dst []byte, ds byte) {
-	done := s.fastLoopDecrypt168(src, dst)
-	s.decryptBytesAt(0, src[done:], dst[done:])
-	s.pos = len(src) - done
-	s.padPermute(s.pos, ds)
+	s.permute12()
 	s.pos = 0
 }
 
@@ -225,7 +203,7 @@ func (s *State1) Absorb(data []byte) {
 		s.pos += need
 		data = data[need:]
 		if s.pos == Rate {
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 	}
@@ -242,7 +220,7 @@ func (s *State1) Absorb(data []byte) {
 		s.pos += 8
 		data = data[8:]
 		if s.pos == Rate {
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 	}
@@ -291,7 +269,7 @@ func (s *State1) absorbCVlanes(w0, w1, w2, w3 uint64) {
 		s.a[lane+3] ^= w3
 		s.pos += 32
 		if s.pos == Rate {
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 		return
@@ -300,7 +278,7 @@ func (s *State1) absorbCVlanes(w0, w1, w2, w3 uint64) {
 	for i := range remaining {
 		s.a[lane+i] ^= words[i]
 	}
-	s.Permute12()
+	s.permute12()
 	s.pos = 0
 	for i := remaining; i < 4; i++ {
 		s.a[i-remaining] ^= words[i]
@@ -308,9 +286,9 @@ func (s *State1) absorbCVlanes(w0, w1, w2, w3 uint64) {
 	}
 }
 
-// Encrypt XOR-encrypts plaintext from src into dst, permuting at rate
+// encrypt XOR-encrypts plaintext from src into dst, permuting at rate
 // boundaries. The caller must ensure len(dst) >= len(src).
-func (s *State1) Encrypt(dst, src []byte) {
+func (s *State1) encrypt(dst, src []byte) {
 	// Finish any partial block at current position.
 	if s.pos > 0 && len(src) > 0 {
 		n := min(Rate-s.pos, len(src))
@@ -319,7 +297,7 @@ func (s *State1) Encrypt(dst, src []byte) {
 		src = src[n:]
 		dst = dst[n:]
 		if s.pos == Rate {
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 	}
@@ -338,9 +316,9 @@ func (s *State1) Encrypt(dst, src []byte) {
 	}
 }
 
-// Decrypt XOR-decrypts ciphertext from src into dst, permuting at rate
+// decrypt XOR-decrypts ciphertext from src into dst, permuting at rate
 // boundaries. The caller must ensure len(dst) >= len(src).
-func (s *State1) Decrypt(dst, src []byte) {
+func (s *State1) decrypt(dst, src []byte) {
 	// Finish any partial block at current position.
 	if s.pos > 0 && len(src) > 0 {
 		n := min(Rate-s.pos, len(src))
@@ -349,7 +327,7 @@ func (s *State1) Decrypt(dst, src []byte) {
 		src = src[n:]
 		dst = dst[n:]
 		if s.pos == Rate {
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 	}
@@ -425,7 +403,7 @@ func (s *State1) InitKeyed(key, iv []byte) {
 	for lane := range 21 {
 		s.a[4+lane] = binary.LittleEndian.Uint64(iv[lane<<3 : lane<<3+8])
 	}
-	s.Permute12()
+	s.permute12()
 	s.pos = 0
 }
 
@@ -434,7 +412,7 @@ func (s *State1) InitKeyed(key, iv []byte) {
 // is no trailing 0x80 at Rate-1. Resets pos to 0.
 func (s *State1) PadStarPermute() {
 	xorByteInWord(&s.a[s.pos>>3], s.pos, 0x01)
-	s.Permute12()
+	s.permute12()
 	s.pos = 0
 }
 
@@ -459,7 +437,7 @@ func (s *State1) BodyEncryptLoop(src, dst []byte) int {
 			binary.LittleEndian.PutUint64(dst[off+base:off+base+8], s.a[lane])
 		}
 		s.a[21] ^= 0x01
-		s.Permute12()
+		s.permute12()
 	}
 	return n
 }
@@ -477,7 +455,7 @@ func (s *State1) BodyDecryptLoop(src, dst []byte) int {
 			s.a[lane] = ct
 		}
 		s.a[21] ^= 0x01
-		s.Permute12()
+		s.permute12()
 	}
 	return n
 }
@@ -495,7 +473,7 @@ func (s *State1) BodyEncrypt(dst, src []byte) {
 		dst = dst[n:]
 		if s.pos == Rate {
 			s.a[21] ^= 0x01
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 	}
@@ -526,7 +504,7 @@ func (s *State1) BodyDecrypt(dst, src []byte) {
 		dst = dst[n:]
 		if s.pos == Rate {
 			s.a[21] ^= 0x01
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 	}
@@ -551,7 +529,7 @@ func (s *State1) BodyDecrypt(dst, src []byte) {
 func (s *State1) BodyPadStarPermute() {
 	xorByteInWord(&s.a[s.pos>>3], s.pos, 0x01)
 	s.a[21] ^= 0x01
-	s.Permute12()
+	s.permute12()
 	s.pos = 0
 }
 
@@ -560,7 +538,7 @@ func (s *State1) BodyPadStarPermute() {
 func (s *State1) Squeeze(dst []byte) {
 	for len(dst) > 0 {
 		if s.pos == Rate {
-			s.Permute12()
+			s.permute12()
 			s.pos = 0
 		}
 		// Squeeze from the current lane.

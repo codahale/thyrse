@@ -7,7 +7,7 @@ func BenchmarkPermute12Selected(b *testing.B) {
 		var s State1
 		b.SetBytes(stateBytes)
 		for b.Loop() {
-			s.Permute12()
+			s.permute12()
 		}
 	})
 

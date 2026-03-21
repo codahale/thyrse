@@ -28,48 +28,6 @@ func (s *state8) permute12() {
 	permute12x8Generic(s)
 }
 
-func (s *state8) reset() {
-	clear(s.a[:])
-	s.pos = 0
-}
-
-// fastLoopEncrypt168 XORs plaintext into state, outputs ciphertext, and permutes.
-func (s *state8) fastLoopEncrypt168(src, dst []byte, stride int) int {
-	n := max(len(src)-7*stride, 0)
-	n = (n / Rate) * Rate
-	for off := 0; off < n; off += Rate {
-		for lane := range 21 {
-			base := lane << 3
-			for inst := range 8 {
-				w := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
-				s.a[lane][inst] ^= w
-				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], s.a[lane][inst])
-			}
-		}
-		s.permute12()
-	}
-	return n
-}
-
-// fastLoopDecrypt168 decrypts ciphertext and permutes.
-func (s *state8) fastLoopDecrypt168(src, dst []byte, stride int) int {
-	n := max(len(src)-7*stride, 0)
-	n = (n / Rate) * Rate
-	for off := 0; off < n; off += Rate {
-		for lane := range 21 {
-			base := lane << 3
-			for inst := range 8 {
-				ct := binary.LittleEndian.Uint64(src[inst*stride+off+base : inst*stride+off+base+8])
-				pt := ct ^ s.a[lane][inst]
-				binary.LittleEndian.PutUint64(dst[inst*stride+off+base:inst*stride+off+base+8], pt)
-				s.a[lane][inst] = ct
-			}
-		}
-		s.permute12()
-	}
-	return n
-}
-
 // encryptBytes performs SpongeWrap encryption on a partial block for instance inst.
 func (s *state8) encryptBytes(inst int, src, dst []byte) {
 	full := len(src) >> 3
