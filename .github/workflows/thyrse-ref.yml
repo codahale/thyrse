@@ -2,20 +2,20 @@ name: Thyrse Spec Validation
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'docs/thyrse-spec.md'
-      - 'docs/thyrse-test-vectors.json'
-      - 'ref/**'
-      - 'tools/embed.py'
-  pull_request:
-    branches: [ "main" ]
-    paths:
-      - 'docs/thyrse-spec.md'
-      - 'docs/thyrse-test-vectors.json'
-      - 'ref/**'
-      - 'tools/embed.py'
+  # push:
+  #   branches: [ "main" ]
+  #   paths:
+  #     - 'docs/thyrse-spec.md'
+  #     - 'docs/thyrse-test-vectors.json'
+  #     - 'ref/**'
+  #     - 'tools/embed.py'
+  # pull_request:
+  #   branches: [ "main" ]
+  #   paths:
+  #     - 'docs/thyrse-spec.md'
+  #     - 'docs/thyrse-test-vectors.json'
+  #     - 'ref/**'
+  #     - 'tools/embed.py'
 
 permissions:
   contents: read
