@@ -30,14 +30,14 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 // Operations append TKDF frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal)
 // evaluate KT128 over the transcript, derive outputs, and reset the transcript with a chain value.
 type Protocol struct {
-	h          *kt128.KT128
+	h          *kt128.Hasher
 	frameStart uint64
 }
 
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	p := &Protocol{h: kt128.New()}
+	p := &Protocol{h: kt128.New([]byte{dsRatchet})}
 	p.beginFrame(opInit, label)
 	p.endFrame()
 	return p
@@ -318,14 +318,14 @@ func (p *Protocol) Clear() {
 
 // finalize performs KT128 finalization.
 //
-// For Derive, Mask, and Seal: two KT128 evaluations via [kt128.KT128.Chain]
+// For Derive, Mask, and Seal: two KT128 evaluations via [kt128.Hasher.Chain]
 // produce the chain value (dsChain) and the output (outputDS) in parallel.
 //
 // For Ratchet: a single KT128 evaluation produces the chain value (dsRatchet).
 func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
 	if outputDS == dsRatchet {
-		_, _ = p.h.ReadCustom([]byte{dsRatchet}, cv[:])
+		_, _ = p.h.Read(cv[:])
 	} else {
 		p.h.Chain(dsChain, cv[:], outputDS, dst)
 	}

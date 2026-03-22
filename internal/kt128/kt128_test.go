@@ -173,7 +173,7 @@ var rfcVectors = []struct {
 func TestKT128RFCVectors(t *testing.T) {
 	for _, tc := range rfcVectors {
 		t.Run(tc.name, func(t *testing.T) {
-			h := New()
+			h := New(tc.custom)
 
 			if tc.msg != nil {
 				_, _ = h.Write(tc.msg)
@@ -181,7 +181,7 @@ func TestKT128RFCVectors(t *testing.T) {
 
 			out := make([]byte, tc.outLen)
 			if len(tc.custom) > 0 {
-				_, _ = h.ReadCustom(tc.custom, out)
+				_, _ = h.Read(out)
 			} else {
 				_, _ = h.Read(out)
 			}
@@ -208,17 +208,17 @@ func TestClone(t *testing.T) {
 			msg := ptn(size)
 
 			// Write all data, clone, verify both produce the same output.
-			h := New()
+			h := New([]byte("test"))
 			_, _ = h.Write(msg)
 
 			clone := h.Clone()
 
 			// Use readCustom with a custom string to test clone + custom finalization.
 			want := make([]byte, 64)
-			_, _ = h.ReadCustom([]byte("test"), want)
+			_, _ = h.Read(want)
 
 			got := make([]byte, 64)
-			_, _ = clone.ReadCustom([]byte("test"), got)
+			_, _ = clone.Read(got)
 
 			if !bytes.Equal(got, want) {
 				t.Errorf("size=%d: clone output mismatch", size)
@@ -227,7 +227,7 @@ func TestClone(t *testing.T) {
 	}
 
 	t.Run("independent after clone", func(t *testing.T) {
-		h := New()
+		h := New([]byte("test"))
 		_, _ = h.Write(ptn(BlockSize + 1))
 
 		clone := h.Clone()
@@ -236,10 +236,10 @@ func TestClone(t *testing.T) {
 		_, _ = h.Write([]byte("extra"))
 
 		out1 := make([]byte, 64)
-		_, _ = h.ReadCustom([]byte("test"), out1)
+		_, _ = h.Read(out1)
 
 		out2 := make([]byte, 64)
-		_, _ = clone.ReadCustom([]byte("test"), out2)
+		_, _ = clone.Read(out2)
 
 		if bytes.Equal(out1, out2) {
 			t.Error("clone and original produced identical output after diverging")
@@ -249,7 +249,7 @@ func TestClone(t *testing.T) {
 
 func TestChain(t *testing.T) {
 	t.Run("different customizations produce different outputs", func(t *testing.T) {
-		h := New()
+		h := New(nil)
 		_, _ = h.Write(ptn(100))
 
 		dstA := make([]byte, 32)
@@ -263,14 +263,14 @@ func TestChain(t *testing.T) {
 
 	t.Run("swapped customizations swap outputs", func(t *testing.T) {
 		// Chain with (1, 2).
-		h1 := New()
+		h1 := New(nil)
 		_, _ = h1.Write(ptn(100))
 		ab1 := make([]byte, 32)
 		ab2 := make([]byte, 32)
 		h1.Chain(0x01, ab1, 0x02, ab2)
 
 		// Chain with (2, 1).
-		h2 := New()
+		h2 := New(nil)
 		_, _ = h2.Write(ptn(100))
 		ba1 := make([]byte, 32)
 		ba2 := make([]byte, 32)
@@ -288,22 +288,22 @@ func TestChain(t *testing.T) {
 		// Single-node: message fits in one chunk.
 		msg := ptn(100)
 
-		h := New()
+		h := New(nil)
 		_, _ = h.Write(msg)
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
 		h.Chain(0x20, dstA, 0x21, dstB)
 
 		// Compare with sequential readCustom.
-		hA := New()
+		hA := New([]byte{0x20})
 		_, _ = hA.Write(msg)
 		wantA := make([]byte, 32)
-		_, _ = hA.ReadCustom([]byte{0x20}, wantA)
+		_, _ = hA.Read(wantA)
 
-		hB := New()
+		hB := New([]byte{0x21})
 		_, _ = hB.Write(msg)
 		wantB := make([]byte, 32)
-		_, _ = hB.ReadCustom([]byte{0x21}, wantB)
+		_, _ = hB.Read(wantB)
 
 		if !bytes.Equal(dstA, wantA) {
 			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
@@ -317,22 +317,22 @@ func TestChain(t *testing.T) {
 		// Tree-mode: message > 8192 bytes.
 		msg := ptn(BlockSize*3 + 500)
 
-		h := New()
+		h := New(nil)
 		_, _ = h.Write(msg)
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
 		h.Chain(0x20, dstA, 0x21, dstB)
 
 		// Compare with sequential readCustom.
-		hA := New()
+		hA := New([]byte{0x20})
 		_, _ = hA.Write(msg)
 		wantA := make([]byte, 32)
-		_, _ = hA.ReadCustom([]byte{0x20}, wantA)
+		_, _ = hA.Read(wantA)
 
-		hB := New()
+		hB := New([]byte{0x21})
 		_, _ = hB.Write(msg)
 		wantB := make([]byte, 32)
-		_, _ = hB.ReadCustom([]byte{0x21}, wantB)
+		_, _ = hB.Read(wantB)
 
 		if !bytes.Equal(dstA, wantA) {
 			t.Errorf("Chain dstA mismatch with sequential\ngot  %x\nwant %x", dstA, wantA)
@@ -346,7 +346,7 @@ func TestChain(t *testing.T) {
 		// Test with a message that exercises multi-leaf tree hashing.
 		msg := ptn(83521)
 
-		h := New()
+		h := New(nil)
 		_, _ = h.Write(msg)
 		dstA := make([]byte, 32)
 		dstB := make([]byte, 32)
@@ -357,10 +357,10 @@ func TestChain(t *testing.T) {
 		}
 
 		// Verify against sequential.
-		hA := New()
+		hA := New([]byte{0x30})
 		_, _ = hA.Write(msg)
 		wantA := make([]byte, 32)
-		_, _ = hA.ReadCustom([]byte{0x30}, wantA)
+		_, _ = hA.Read(wantA)
 
 		if !bytes.Equal(dstA, wantA) {
 			t.Errorf("Chain dstA mismatch with sequential for large message\ngot  %x\nwant %x", dstA, wantA)
@@ -368,7 +368,7 @@ func TestChain(t *testing.T) {
 	})
 
 	t.Run("clone before chain preserves original", func(t *testing.T) {
-		h := New()
+		h := New(nil)
 		_, _ = h.Write(ptn(100))
 
 		// Chain on a clone, then chain on another clone — results must match.
@@ -401,7 +401,7 @@ func BenchmarkWrite(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
-				h := New()
+				h := New(nil)
 				_, _ = h.Write(msg)
 				_, _ = h.Read(out)
 			}
@@ -421,7 +421,7 @@ func BenchmarkWriteStreaming(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				h := New()
+				h := New(nil)
 				for i := 0; i < len(msg); i += BlockSize {
 					end := min(i+BlockSize, len(msg))
 					_, _ = h.Write(msg[i:end])
@@ -440,7 +440,7 @@ func BenchmarkRead(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				h := New()
+				h := New(nil)
 				_, _ = h.Write(ptn(BlockSize + 1))
 				_, _ = io.ReadFull(h, out)
 			}
