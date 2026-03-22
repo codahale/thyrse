@@ -1,6 +1,8 @@
 package tw128
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
 
 const (
 	tw128ChunkSize     = ChunkSize
@@ -49,13 +51,8 @@ func initChunksTW128(s *state8, key, nonce []byte, baseIndex uint64) {
 	// Since all instances share the same nonce prefix, most lanes are identical.
 	// Only the lanes containing ν(j) differ.
 	for inst := range 8 {
-		var ivBuf [rate]byte
 		j := baseIndex + uint64(inst)
-		var nu [10]byte // max right_encode size
-		nuLen := rightEncodeInto(nu[:], j)
-		off := rate - 16 - nuLen
-		copy(ivBuf[off:], nonce)
-		copy(ivBuf[off+16:], nu[:nuLen])
+		ivBuf := iv(nonce, j)
 		for lane := range 21 {
 			s.a[4+lane][inst] = binary.LittleEndian.Uint64(ivBuf[lane<<3 : lane<<3+8])
 		}
@@ -63,29 +60,6 @@ func initChunksTW128(s *state8, key, nonce []byte, baseIndex uint64) {
 
 	s.permute12()
 	s.pos = 0
-}
-
-// rightEncodeInto encodes value as right_encode into buf and returns the length used.
-func rightEncodeInto(buf []byte, value uint64) int {
-	if value == 0 {
-		buf[0] = 0x00
-		buf[1] = 0x01
-		return 2
-	}
-	// Count bytes needed.
-	n := 0
-	v := value
-	for v > 0 {
-		n++
-		v >>= 8
-	}
-	// Write big-endian.
-	for i := n - 1; i >= 0; i-- {
-		buf[i] = byte(value)
-		value >>= 8
-	}
-	buf[n] = byte(n)
-	return n + 1
 }
 
 func extractChunkTagsTW128(s *state8, tags *[256]byte) {
