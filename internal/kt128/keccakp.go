@@ -1,4 +1,4 @@
-package tw128
+package kt128
 
 import "math/bits"
 

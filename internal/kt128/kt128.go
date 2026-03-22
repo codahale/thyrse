@@ -10,7 +10,6 @@ import (
 	"slices"
 
 	"github.com/codahale/thyrse/internal/enc"
-	"github.com/codahale/thyrse/internal/keccak"
 )
 
 const (
@@ -27,12 +26,12 @@ const (
 
 // KT128 is an incremental KT128 instance.
 type KT128 struct {
-	buf       []byte        // buffered message/leaf data
-	ts        keccak.State1 // final-node sponge state
-	pos       uint64        // total bytes written via Write
-	leafCount uint64        // total leaf CVs written to ts so far
-	state     uint8         // lifecycle: stateSingle -> stateTree -> stateFinalized
-	ds        byte          // KT128 customization byte for finalization (0x07 single-node, 0x06 tree-mode)
+	buf       []byte // buffered message/leaf data
+	ts        sponge // final-node sponge state
+	pos       uint64 // total bytes written via Write
+	leafCount uint64 // total leaf CVs written to ts so far
+	state     uint8  // lifecycle: stateSingle -> stateTree -> stateFinalized
+	ds        byte   // KT128 customization byte for finalization (0x07 single-node, 0x06 tree-mode)
 }
 
 // New returns a new KT128 with empty customization.
@@ -148,7 +147,7 @@ func (h *KT128) processLeafBatch(data []byte, nLeaves int) {
 
 	// Small remainder via x1.
 	for idx < nLeaves {
-		var s1 keccak.State1
+		var s1 sponge
 		off := idx * BlockSize
 		leafStateX1(data[off:off+BlockSize], &s1)
 		h.ts.AbsorbCV(&s1)
@@ -297,7 +296,7 @@ func (h *KT128) absorbMessage() {
 	}
 
 	if partial := len(buf) - fullLeaves*BlockSize; partial > 0 {
-		var s1 keccak.State1
+		var s1 sponge
 		leafStateX1(buf[fullLeaves*BlockSize:], &s1)
 		h.ts.AbsorbCV(&s1)
 		h.leafCount++
@@ -313,7 +312,7 @@ func (h *KT128) absorbMessage() {
 var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 // leafStateX1 computes a single KT128 leaf state.
-func leafStateX1(data []byte, s *keccak.State1) {
+func leafStateX1(data []byte, s *sponge) {
 	s.Reset()
 	s.AbsorbAll(data, leafDS)
 }
