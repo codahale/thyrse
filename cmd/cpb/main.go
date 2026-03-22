@@ -1,4 +1,4 @@
-// Command cpb measures TW128 encrypt and decrypt performance in cycles per byte.
+// Command cpb measures TW128 and AES-128-GCM performance in cycles per byte.
 //
 // On AMD64, it reads the RDTSC counter directly (reference cycles, no scaling).
 // On ARM64, it reads CNTVCT_EL0 and scales to CPU cycles using CNTFRQ_EL0 and
@@ -6,6 +6,8 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"encoding/csv"
 	"encoding/json"
 	"flag"
@@ -20,6 +22,7 @@ import (
 )
 
 type result struct {
+	Alg   string  `json:"alg"`
 	Op    string  `json:"op"`
 	Size  string  `json:"size"`
 	Bytes int     `json:"bytes"`
@@ -42,10 +45,14 @@ func main() {
 
 	var results []result
 
+	gcmKey := make([]byte, 16)
+	gcmNonce := make([]byte, 12)
+
 	for _, size := range testdata.Sizes {
 		src := make([]byte, size.N)
 		dst := make([]byte, size.N)
 
+		// TW128 encrypt.
 		encFn := func() {
 			e := tw128.NewEncryptor(key, nonce, nil)
 			e.XORKeyStream(dst, src)
@@ -53,10 +60,11 @@ func main() {
 		}
 		iters := calibrate(encFn, *target)
 		results = append(results, result{
-			Op: "encrypt", Size: size.Name, Bytes: size.N,
+			Alg: "tw128", Op: "encrypt", Size: size.Name, Bytes: size.N,
 			CPB: measure(encFn, iters, *nSamples, scale, size.N),
 		})
 
+		// TW128 decrypt.
 		decFn := func() {
 			d := tw128.NewDecryptor(key, nonce, nil)
 			d.XORKeyStream(dst, src)
@@ -64,8 +72,37 @@ func main() {
 		}
 		iters = calibrate(decFn, *target)
 		results = append(results, result{
-			Op: "decrypt", Size: size.Name, Bytes: size.N,
+			Alg: "tw128", Op: "decrypt", Size: size.Name, Bytes: size.N,
 			CPB: measure(decFn, iters, *nSamples, scale, size.N),
+		})
+
+		// AES-128-GCM seal (key schedule included in measurement).
+		gcmDst := make([]byte, 0, size.N+16)
+		sealFn := func() {
+			block, _ := aes.NewCipher(gcmKey)
+			gcm, _ := cipher.NewGCM(block)
+			gcmDst = gcm.Seal(gcmDst[:0], gcmNonce, src, nil)
+		}
+		iters = calibrate(sealFn, *target)
+		results = append(results, result{
+			Alg: "aes128gcm", Op: "seal", Size: size.Name, Bytes: size.N,
+			CPB: measure(sealFn, iters, *nSamples, scale, size.N),
+		})
+
+		// AES-128-GCM open (key schedule included in measurement).
+		block, _ := aes.NewCipher(gcmKey)
+		gcm, _ := cipher.NewGCM(block)
+		ct := gcm.Seal(nil, gcmNonce, src, nil)
+		openDst := make([]byte, 0, size.N)
+		openFn := func() {
+			block, _ := aes.NewCipher(gcmKey)
+			gcm, _ := cipher.NewGCM(block)
+			openDst, _ = gcm.Open(openDst[:0], gcmNonce, ct, nil)
+		}
+		iters = calibrate(openFn, *target)
+		results = append(results, result{
+			Alg: "aes128gcm", Op: "open", Size: size.Name, Bytes: size.N,
+			CPB: measure(openFn, iters, *nSamples, scale, size.N),
 		})
 	}
 
@@ -114,39 +151,55 @@ func measure(fn func(), iters, nSamples int, scale float64, bytes int) float64 {
 }
 
 func outputTable(results []result, freqGHz float64) {
-	fmt.Printf("TW128 cycles/byte (%s/%s", runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("cycles/byte (%s/%s", runtime.GOOS, runtime.GOARCH)
 	if freqGHz > 0 {
 		fmt.Printf(", %.2f GHz", freqGHz)
 	}
 	fmt.Println(")")
 	fmt.Println()
 
-	// Collect ordered unique sizes.
+	// Collect ordered unique sizes and row keys.
 	var sizes []string
-	seen := make(map[string]bool)
+	sizeSeen := make(map[string]bool)
+	var rows []string
+	rowSeen := make(map[string]bool)
 	for _, r := range results {
-		if !seen[r.Size] {
+		if !sizeSeen[r.Size] {
 			sizes = append(sizes, r.Size)
-			seen[r.Size] = true
+			sizeSeen[r.Size] = true
+		}
+		key := r.Alg + " " + r.Op
+		if !rowSeen[key] {
+			rows = append(rows, key)
+			rowSeen[key] = true
 		}
 	}
 
 	cpb := make(map[string]float64)
 	for _, r := range results {
-		cpb[r.Op+"/"+r.Size] = r.CPB
+		cpb[r.Alg+" "+r.Op+"/"+r.Size] = r.CPB
 	}
 
+	// Find the widest row label.
+	labelW := 0
+	for _, row := range rows {
+		if len(row) > labelW {
+			labelW = len(row)
+		}
+	}
+	labelW += 2
+
 	colW := 10
-	fmt.Printf("%-10s", "")
+	fmt.Printf("%-*s", labelW, "")
 	for _, s := range sizes {
 		fmt.Printf("%*s", colW, s)
 	}
 	fmt.Println()
 
-	for _, op := range []string{"encrypt", "decrypt"} {
-		fmt.Printf("%-10s", op)
+	for _, row := range rows {
+		fmt.Printf("%-*s", labelW, row)
 		for _, s := range sizes {
-			v := cpb[op+"/"+s]
+			v := cpb[row+"/"+s]
 			if v >= 100 {
 				fmt.Printf("%*.0f", colW, v)
 			} else {
@@ -159,9 +212,9 @@ func outputTable(results []result, freqGHz float64) {
 
 func outputCSV(results []result) {
 	w := csv.NewWriter(os.Stdout)
-	_ = w.Write([]string{"operation", "size", "bytes", "cpb"})
+	_ = w.Write([]string{"alg", "operation", "size", "bytes", "cpb"})
 	for _, r := range results {
-		_ = w.Write([]string{r.Op, r.Size, fmt.Sprint(r.Bytes), fmt.Sprintf("%.2f", r.CPB)})
+		_ = w.Write([]string{r.Alg, r.Op, r.Size, fmt.Sprint(r.Bytes), fmt.Sprintf("%.2f", r.CPB)})
 	}
 	w.Flush()
 }
