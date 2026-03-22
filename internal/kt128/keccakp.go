@@ -16,12 +16,6 @@ func loadPartialLE(in []byte) uint64 {
 	return v
 }
 
-func storePartialLE(out []byte, v uint64) {
-	for i := range out {
-		out[i] = byte(v >> (8 * i))
-	}
-}
-
 func xorByteInWord(w *uint64, pos int, b byte) {
 	shift := uint((pos & 7) << 3)
 	*w ^= uint64(b) << shift
