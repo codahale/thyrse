@@ -3,11 +3,17 @@ package thyrse
 import (
 	"bytes"
 	"crypto/cipher"
-	"encoding/hex"
 	"errors"
 	"io"
 	"testing"
 )
+
+// newKeyed returns a Protocol initialized with label and a single Mix("key", key).
+func newKeyed(label string, key []byte) *Protocol {
+	p := New(label)
+	p.Mix("key", key)
+	return p
+}
 
 func TestDerive(t *testing.T) {
 	t.Run("minimal", func(t *testing.T) {
@@ -29,7 +35,7 @@ func TestDerive(t *testing.T) {
 		out2 := p2.Derive("output", nil, 32)
 
 		if !bytes.Equal(out1, out2) {
-			t.Fatalf("not deterministic:\n  %s\n  %s", hex.EncodeToString(out1), hex.EncodeToString(out2))
+			t.Fatalf("not deterministic:\n  got  %x\n  want %x", out1, out2)
 		}
 	})
 
@@ -92,6 +98,17 @@ func TestDerive(t *testing.T) {
 
 		p := New("test")
 		p.Derive("output", nil, 0)
+	})
+
+	t.Run("panics on negative length", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("Derive(-1) did not panic")
+			}
+		}()
+
+		p := New("test")
+		p.Derive("output", nil, -1)
 	})
 }
 
@@ -187,19 +204,21 @@ func TestSeal(t *testing.T) {
 }
 
 func TestOpen(t *testing.T) {
+	key := []byte("32-byte-key-material-for-testing!")
+
+	// Shared seal setup for tamper tests.
+	seal := func() []byte {
+		enc := newKeyed("test.seal", key)
+		return enc.Seal("message", nil, []byte("secret"))
+	}
+
 	t.Run("tampered ciphertext", func(t *testing.T) {
-		key := []byte("32-byte-key-material-for-testing!")
-
-		enc := New("test.seal")
-		enc.Mix("key", key)
-		sealed := enc.Seal("message", nil, []byte("secret"))
-
+		sealed := seal()
 		tampered := make([]byte, len(sealed))
 		copy(tampered, sealed)
 		tampered[0] ^= 0xFF
 
-		dec := New("test.seal")
-		dec.Mix("key", key)
+		dec := newKeyed("test.seal", key)
 		_, err := dec.Open("message", nil, tampered)
 		if !errors.Is(err, ErrInvalidCiphertext) {
 			t.Fatalf("got %v, want ErrInvalidCiphertext", err)
@@ -207,18 +226,12 @@ func TestOpen(t *testing.T) {
 	})
 
 	t.Run("tampered tag", func(t *testing.T) {
-		key := []byte("32-byte-key-material-for-testing!")
-
-		enc := New("test.seal")
-		enc.Mix("key", key)
-		sealed := enc.Seal("message", nil, []byte("secret"))
-
+		sealed := seal()
 		tampered := make([]byte, len(sealed))
 		copy(tampered, sealed)
 		tampered[len(tampered)-1] ^= 0xFF
 
-		dec := New("test.seal")
-		dec.Mix("key", key)
+		dec := newKeyed("test.seal", key)
 		_, err := dec.Open("message", nil, tampered)
 		if !errors.Is(err, ErrInvalidCiphertext) {
 			t.Fatalf("got %v, want ErrInvalidCiphertext", err)
@@ -654,6 +667,155 @@ func TestClone(t *testing.T) {
 
 		if bytes.Equal(out1, out2) {
 			t.Fatal("Clone and original produced identical output after diverging")
+		}
+	})
+}
+
+func TestEqual(t *testing.T) {
+	t.Run("same state", func(t *testing.T) {
+		p1 := New("test")
+		p1.Mix("key", []byte("secret"))
+
+		p2 := New("test")
+		p2.Mix("key", []byte("secret"))
+
+		if p1.Equal(p2) != 1 {
+			t.Fatal("identical protocols should be equal")
+		}
+	})
+
+	t.Run("different label", func(t *testing.T) {
+		p1 := New("protocol-a")
+		p2 := New("protocol-b")
+
+		if p1.Equal(p2) != 0 {
+			t.Fatal("different labels should not be equal")
+		}
+	})
+
+	t.Run("diverged mix", func(t *testing.T) {
+		p1 := New("test")
+		p1.Mix("key", []byte("a"))
+
+		p2 := New("test")
+		p2.Mix("key", []byte("b"))
+
+		if p1.Equal(p2) != 0 {
+			t.Fatal("diverged protocols should not be equal")
+		}
+	})
+
+	t.Run("clone", func(t *testing.T) {
+		p := New("test")
+		p.Mix("key", []byte("secret"))
+		clone := p.Clone()
+
+		if p.Equal(clone) != 1 {
+			t.Fatal("protocol and its clone should be equal")
+		}
+	})
+
+	t.Run("diverged clone", func(t *testing.T) {
+		p := New("test")
+		p.Mix("key", []byte("secret"))
+		clone := p.Clone()
+
+		p.Mix("extra", []byte("a"))
+		clone.Mix("extra", []byte("b"))
+
+		if p.Equal(clone) != 0 {
+			t.Fatal("diverged clone should not be equal")
+		}
+	})
+}
+
+func TestString(t *testing.T) {
+	t.Run("non-empty", func(t *testing.T) {
+		p := New("test")
+		s := p.String()
+		if s == "" {
+			t.Fatal("String() should not be empty")
+		}
+	})
+
+	t.Run("same state same string", func(t *testing.T) {
+		p1 := New("test")
+		p1.Mix("key", []byte("secret"))
+
+		p2 := New("test")
+		p2.Mix("key", []byte("secret"))
+
+		if p1.String() != p2.String() {
+			t.Fatal("identical protocols should produce same String()")
+		}
+	})
+
+	t.Run("different state different string", func(t *testing.T) {
+		p1 := New("test")
+		p1.Mix("key", []byte("a"))
+
+		p2 := New("test")
+		p2.Mix("key", []byte("b"))
+
+		if p1.String() == p2.String() {
+			t.Fatal("different protocols should produce different String()")
+		}
+	})
+
+	t.Run("non-mutating", func(t *testing.T) {
+		p := New("test")
+		p.Mix("key", []byte("secret"))
+		clone := p.Clone()
+
+		_ = p.String()
+
+		if p.Equal(clone) != 1 {
+			t.Fatal("String() should not mutate protocol state")
+		}
+	})
+}
+
+func TestForkN(t *testing.T) {
+	t.Run("three values", func(t *testing.T) {
+		p := New("test")
+		p.Mix("key", []byte("shared"))
+
+		clones := p.ForkN("role", []byte("alice"), []byte("bob"), []byte("carol"))
+		if got, want := len(clones), 3; got != want {
+			t.Fatalf("ForkN() len = %d, want %d", got, want)
+		}
+
+		outBase := p.Derive("out", nil, 32)
+		outA := clones[0].Derive("out", nil, 32)
+		outB := clones[1].Derive("out", nil, 32)
+		outC := clones[2].Derive("out", nil, 32)
+
+		all := [][]byte{outBase, outA, outB, outC}
+		for i := range all {
+			for j := i + 1; j < len(all); j++ {
+				if bytes.Equal(all[i], all[j]) {
+					t.Fatalf("outputs %d and %d are identical", i, j)
+				}
+			}
+		}
+	})
+
+	t.Run("deterministic", func(t *testing.T) {
+		fork := func() ([]byte, []byte, []byte, []byte) {
+			p := New("test")
+			p.Mix("key", []byte("shared"))
+			clones := p.ForkN("role", []byte("a"), []byte("b"), []byte("c"))
+			return p.Derive("out", nil, 32),
+				clones[0].Derive("out", nil, 32),
+				clones[1].Derive("out", nil, 32),
+				clones[2].Derive("out", nil, 32)
+		}
+
+		b1, a1, b1b, c1 := fork()
+		b2, a2, b2b, c2 := fork()
+
+		if !bytes.Equal(b1, b2) || !bytes.Equal(a1, a2) || !bytes.Equal(b1b, b2b) || !bytes.Equal(c1, c2) {
+			t.Fatal("ForkN is not deterministic")
 		}
 	})
 }

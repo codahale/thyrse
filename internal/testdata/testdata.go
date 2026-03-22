@@ -3,10 +3,40 @@ package testdata
 
 import (
 	"crypto/sha3"
+	"encoding/hex"
 	"io"
+	"strings"
 
 	"github.com/gtank/ristretto255"
 )
+
+// Seq returns a byte slice of length n where b[i] = byte(i).
+func Seq(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(i)
+	}
+	return b
+}
+
+// Pattern returns a byte slice of length n where b[i] = start + byte(i).
+func Pattern(n int, start byte) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = start + byte(i)
+	}
+	return b
+}
+
+// MustHex decodes a hex string, stripping any spaces, and panics on error.
+func MustHex(s string) []byte {
+	s = strings.ReplaceAll(s, " ", "")
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
 
 // DRBG is a deterministic random bit generator based on SHAKE128.
 type DRBG struct {

@@ -5,7 +5,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/subtle"
-	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -28,21 +27,8 @@ func testNonce() []byte {
 	return nonce
 }
 
-func seq(n int) []byte {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = byte(i % 256)
-	}
-	return b
-}
-
-func pattern(length int, start byte) []byte {
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = start + byte(i)
-	}
-	return b
-}
+func seq(n int) []byte                 { return testdata.Seq(n) }
+func pattern(n int, start byte) []byte { return testdata.Pattern(n, start) }
 
 // encrypt is a convenience helper for tests: single-call encrypt via streaming API.
 func encrypt(key, nonce, ad, pt []byte) ([]byte, [TagSize]byte) {
@@ -141,13 +127,7 @@ var vectors = []vector{
 	},
 }
 
-func mustHex(s string) []byte {
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
+func mustHex(s string) []byte { return testdata.MustHex(s) }
 
 func TestVectors(t *testing.T) {
 	for _, v := range vectors {
@@ -343,17 +323,57 @@ func TestNilNonce(t *testing.T) {
 
 }
 
+func TestWrongKey(t *testing.T) {
+	keyA := testKey()
+	keyB := make([]byte, KeySize)
+	for i := range keyB {
+		keyB[i] = byte(i + 0x80)
+	}
+	nonce := testNonce()
+	pt := seq(1000)
+
+	ctA, tagA := encrypt(keyA, nonce, nil, pt)
+	ctB, tagB := encrypt(keyB, nonce, nil, pt)
+
+	if bytes.Equal(ctA, ctB) {
+		t.Fatal("different keys should produce different ciphertext")
+	}
+	if subtle.ConstantTimeCompare(tagA[:], tagB[:]) == 1 {
+		t.Fatal("different keys should produce different tags")
+	}
+}
+
+func TestNonceSensitivity(t *testing.T) {
+	key := testKey()
+	nonceA := make([]byte, NonceSize)
+	nonceB := make([]byte, NonceSize)
+	for i := range nonceB {
+		nonceB[i] = 0xFF
+	}
+	pt := seq(1000)
+
+	ctA, tagA := encrypt(key, nonceA, nil, pt)
+	ctB, tagB := encrypt(key, nonceB, nil, pt)
+
+	if bytes.Equal(ctA, ctB) {
+		t.Fatal("different nonces should produce different ciphertext")
+	}
+	if subtle.ConstantTimeCompare(tagA[:], tagB[:]) == 1 {
+		t.Fatal("different nonces should produce different tags")
+	}
+}
+
 func BenchmarkEncrypt(b *testing.B) {
 	key := testKey()
 	nonce := testNonce()
 
-	for _, size := range []int{64, 1024, ChunkSize, ChunkSize * 8} {
-		b.Run(fmt.Sprintf("%dB", size), func(b *testing.B) {
-			pt := make([]byte, size)
-			ct := make([]byte, size)
-			b.SetBytes(int64(size))
-			b.ResetTimer()
-			for range b.N {
+	for _, size := range testdata.Sizes {
+		pt := make([]byte, size.N)
+		ct := make([]byte, size.N)
+		b.Run(size.Name, func(b *testing.B) {
+			b.SetBytes(int64(size.N))
+			b.ReportAllocs()
+			for b.Loop() {
 				e := NewEncryptor(key, nonce, nil)
 				e.XORKeyStream(ct, pt)
 				e.Finalize()
