@@ -43,7 +43,7 @@ var (
 func loadVectors(t *testing.T) vectorFile {
 	t.Helper()
 	vectorsOnce.Do(func() {
-		path := filepath.Join("testdata", "legacy_vectors.json")
+		path := filepath.Join("testdata", "keccakp_vectors.json")
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			vectorsErr = err
