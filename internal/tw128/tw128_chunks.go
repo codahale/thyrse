@@ -72,11 +72,9 @@ func extractChunkTagsTW128(s *state8, tags *[256]byte) {
 }
 
 func finishEncryptChunksTW128(s *state8, src, dst []byte, tags *[256]byte) {
-	if tw128ChunkTailSize > 0 {
-		for inst := range 8 {
-			off := inst*tw128ChunkSize + tw128ChunkBodySize
-			s.encryptBytes(inst, src[off:off+tw128ChunkTailSize], dst[off:off+tw128ChunkTailSize])
-		}
+	for inst := range 8 {
+		off := inst*tw128ChunkSize + tw128ChunkBodySize
+		s.encryptBytes(inst, src[off:off+tw128ChunkTailSize], dst[off:off+tw128ChunkTailSize])
 	}
 	s.pos = tw128ChunkTailSize
 	s.bodyPadStarPermute()
@@ -84,11 +82,9 @@ func finishEncryptChunksTW128(s *state8, src, dst []byte, tags *[256]byte) {
 }
 
 func finishDecryptChunksTW128(s *state8, src, dst []byte, tags *[256]byte) {
-	if tw128ChunkTailSize > 0 {
-		for inst := range 8 {
-			off := inst*tw128ChunkSize + tw128ChunkBodySize
-			s.decryptBytes(inst, src[off:off+tw128ChunkTailSize], dst[off:off+tw128ChunkTailSize])
-		}
+	for inst := range 8 {
+		off := inst*tw128ChunkSize + tw128ChunkBodySize
+		s.decryptBytes(inst, src[off:off+tw128ChunkTailSize], dst[off:off+tw128ChunkTailSize])
 	}
 	s.pos = tw128ChunkTailSize
 	s.bodyPadStarPermute()
