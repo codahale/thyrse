@@ -73,13 +73,15 @@ type cryptor struct {
 	chunkOff  int    // bytes processed in current chunk
 	leafMode  bool   // true after chunk 0 body complete
 	finalized bool
+	decrypt   bool
 }
 
-func (c *cryptor) initCryptor(key, nonce, ad []byte) {
+func (c *cryptor) initCryptor(key, nonce, ad []byte, decrypt bool) {
 	copy(c.key[:], key)
 	if len(nonce) > 0 {
 		copy(c.nonce[:], nonce)
 	}
+	c.decrypt = decrypt
 	initTrunk(&c.trunk, c.key[:], c.nonce[:], ad)
 }
 
@@ -127,33 +129,25 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 	return tag
 }
 
-// Encryptor incrementally encrypts data and computes the authentication tag.
-type Encryptor struct {
-	cryptor
-}
-
-// NewEncryptor returns a new Encryptor initialized with the given key, nonce, and associated data.
-func NewEncryptor(key, nonce, ad []byte) (e Encryptor) {
-	e.initCryptor(key, nonce, ad)
-	return e
-}
-
-// XORKeyStream encrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
-func (e *Encryptor) XORKeyStream(dst, src []byte) {
+func (c *cryptor) xorKeyStream(dst, src []byte) {
 	if len(src) == 0 {
 		return
 	}
 
-	if !e.leafMode {
-		// Still on chunk 0: encrypt into trunk.
-		n := min(len(src), ChunkSize-e.chunkOff)
-		e.trunk.bodyEncrypt(dst[:n], src[:n])
-		e.chunkOff += n
+	if !c.leafMode {
+		// Still on chunk 0.
+		n := min(len(src), ChunkSize-c.chunkOff)
+		if c.decrypt {
+			c.trunk.bodyDecrypt(dst[:n], src[:n])
+		} else {
+			c.trunk.bodyEncrypt(dst[:n], src[:n])
+		}
+		c.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
-		if e.chunkOff == ChunkSize && len(src) > 0 {
-			e.transitionToLeafMode()
+		if c.chunkOff == ChunkSize && len(src) > 0 {
+			c.transitionToLeafMode()
 		}
 
 		if len(src) == 0 {
@@ -164,44 +158,56 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	// Leaf mode: processing chunks 1..n-1.
 
 	// Continue an in-progress partial leaf chunk.
-	if e.chunkOff > 0 {
-		n := min(len(src), ChunkSize-e.chunkOff)
-		e.leaf.bodyEncrypt(dst[:n], src[:n])
-		e.chunkOff += n
+	if c.chunkOff > 0 {
+		n := min(len(src), ChunkSize-c.chunkOff)
+		if c.decrypt {
+			c.leaf.bodyDecrypt(dst[:n], src[:n])
+		} else {
+			c.leaf.bodyEncrypt(dst[:n], src[:n])
+		}
+		c.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
 
-		if e.chunkOff == ChunkSize {
-			e.finalizeLeaf()
+		if c.chunkOff == ChunkSize {
+			c.finalizeLeaf()
 		}
 	}
 
 	// Process complete leaf chunks via SIMD cascade.
 	if nComplete := len(src) / ChunkSize; nComplete > 0 {
-		e.encryptComplete(dst[:nComplete*ChunkSize], src[:nComplete*ChunkSize], nComplete)
+		c.processComplete(dst[:nComplete*ChunkSize], src[:nComplete*ChunkSize], nComplete)
 		dst = dst[nComplete*ChunkSize:]
 		src = src[nComplete*ChunkSize:]
 	}
 
 	// Start a new partial leaf chunk with remaining bytes.
 	if len(src) > 0 {
-		initLeaf(&e.leaf, e.key[:], e.nonce[:], uint64(e.nLeaves+1))
-		e.chunkOff = 0
-		e.leaf.bodyEncrypt(dst[:len(src)], src)
-		e.chunkOff += len(src)
+		initLeaf(&c.leaf, c.key[:], c.nonce[:], uint64(c.nLeaves+1))
+		c.chunkOff = 0
+		if c.decrypt {
+			c.leaf.bodyDecrypt(dst[:len(src)], src)
+		} else {
+			c.leaf.bodyEncrypt(dst[:len(src)], src)
+		}
+		c.chunkOff += len(src)
 	}
 }
 
-// encryptComplete processes nFlush complete leaf chunks via x8 SIMD with padding for remainders.
-func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
+// processComplete processes nFlush complete leaf chunks via x8 SIMD with padding for remainders.
+func (c *cryptor) processComplete(dst, src []byte, nFlush int) {
 	idx := 0
 
 	var tags [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		encryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
-		e.trunk.absorbCVs(tags[:])
-		e.nLeaves += 8
+		if c.decrypt {
+			decryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+		} else {
+			encryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+		}
+		c.trunk.absorbCVs(tags[:])
+		c.nLeaves += 8
 		idx += 8
 	}
 
@@ -211,22 +217,44 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		encryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), padSrc[:], padDst[:], &tags)
+		if c.decrypt {
+			decryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), padSrc[:], padDst[:], &tags)
+		} else {
+			encryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), padSrc[:], padDst[:], &tags)
+		}
 		copy(dst[off:off+realBytes], padDst[:realBytes])
-		e.trunk.absorbCVs(tags[:rem*leafTagSize])
-		e.nLeaves += rem
+		c.trunk.absorbCVs(tags[:rem*leafTagSize])
+		c.nLeaves += rem
 		idx += rem
 	}
 
 	// Small remainder via x1.
 	for idx < nFlush {
 		off := idx * ChunkSize
-		encryptX1(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &e.leaf)
-		e.trunk.absorbCV(&e.leaf)
-		e.nLeaves++
+		if c.decrypt {
+			decryptX1(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &c.leaf)
+		} else {
+			encryptX1(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &c.leaf)
+		}
+		c.trunk.absorbCV(&c.leaf)
+		c.nLeaves++
 		idx++
 	}
 }
+
+// Encryptor incrementally encrypts data and computes the authentication tag.
+type Encryptor struct {
+	cryptor
+}
+
+// NewEncryptor returns a new Encryptor initialized with the given key, nonce, and associated data.
+func NewEncryptor(key, nonce, ad []byte) (e Encryptor) {
+	e.initCryptor(key, nonce, ad, false)
+	return e
+}
+
+// XORKeyStream encrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
+func (e *Encryptor) XORKeyStream(dst, src []byte) { e.xorKeyStream(dst, src) }
 
 // Finalize returns the authentication tag.
 func (e *Encryptor) Finalize() [TagSize]byte {
@@ -240,99 +268,12 @@ type Decryptor struct {
 
 // NewDecryptor returns a new Decryptor initialized with the given key, nonce, and associated data.
 func NewDecryptor(key, nonce, ad []byte) (d Decryptor) {
-	d.initCryptor(key, nonce, ad)
+	d.initCryptor(key, nonce, ad, true)
 	return d
 }
 
 // XORKeyStream decrypts src into dst. Dst and src must overlap entirely or not at all. Len(dst) must be >= len(src).
-func (d *Decryptor) XORKeyStream(dst, src []byte) {
-	if len(src) == 0 {
-		return
-	}
-
-	if !d.leafMode {
-		// Still on chunk 0: decrypt from trunk.
-		n := min(len(src), ChunkSize-d.chunkOff)
-		d.trunk.bodyDecrypt(dst[:n], src[:n])
-		d.chunkOff += n
-		dst = dst[n:]
-		src = src[n:]
-
-		if d.chunkOff == ChunkSize && len(src) > 0 {
-			d.transitionToLeafMode()
-		}
-
-		if len(src) == 0 {
-			return
-		}
-	}
-
-	// Leaf mode: processing chunks 1..n-1.
-
-	// Continue an in-progress partial leaf chunk.
-	if d.chunkOff > 0 {
-		n := min(len(src), ChunkSize-d.chunkOff)
-		d.leaf.bodyDecrypt(dst[:n], src[:n])
-		d.chunkOff += n
-		dst = dst[n:]
-		src = src[n:]
-
-		if d.chunkOff == ChunkSize {
-			d.finalizeLeaf()
-		}
-	}
-
-	// Process complete leaf chunks via SIMD cascade.
-	if nComplete := len(src) / ChunkSize; nComplete > 0 {
-		d.decryptComplete(dst[:nComplete*ChunkSize], src[:nComplete*ChunkSize], nComplete)
-		dst = dst[nComplete*ChunkSize:]
-		src = src[nComplete*ChunkSize:]
-	}
-
-	// Start a new partial leaf chunk with remaining bytes.
-	if len(src) > 0 {
-		initLeaf(&d.leaf, d.key[:], d.nonce[:], uint64(d.nLeaves+1))
-		d.chunkOff = 0
-		d.leaf.bodyDecrypt(dst[:len(src)], src)
-		d.chunkOff += len(src)
-	}
-}
-
-// decryptComplete processes nFlush complete leaf chunks via x8 SIMD with padding for remainders.
-func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
-	idx := 0
-
-	var tags [256]byte
-	for idx+8 <= nFlush {
-		off := idx * ChunkSize
-		decryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
-		d.trunk.absorbCVs(tags[:])
-		d.nLeaves += 8
-		idx += 8
-	}
-
-	// Remainder: pad to 8 and use x8 when utilization is high enough.
-	if rem := nFlush - idx; rem >= 5 {
-		off := idx * ChunkSize
-		realBytes := rem * ChunkSize
-		var padSrc, padDst [8 * ChunkSize]byte
-		copy(padSrc[:realBytes], src[off:off+realBytes])
-		decryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), padSrc[:], padDst[:], &tags)
-		copy(dst[off:off+realBytes], padDst[:realBytes])
-		d.trunk.absorbCVs(tags[:rem*leafTagSize])
-		d.nLeaves += rem
-		idx += rem
-	}
-
-	// Small remainder via x1.
-	for idx < nFlush {
-		off := idx * ChunkSize
-		decryptX1(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &d.leaf)
-		d.trunk.absorbCV(&d.leaf)
-		d.nLeaves++
-		idx++
-	}
-}
+func (d *Decryptor) XORKeyStream(dst, src []byte) { d.xorKeyStream(dst, src) }
 
 // Finalize returns the expected authentication tag.
 func (d *Decryptor) Finalize() [TagSize]byte {
