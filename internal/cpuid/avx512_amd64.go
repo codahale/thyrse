@@ -1,7 +1,7 @@
 //go:build amd64 && !purego && !thyrse_disable_avx512
 
-package keccak
+package cpuid
 
 func hasAVX512VL() bool
 
-var hasAVX512 = hasAVX512VL()
+var HasAVX512 = hasAVX512VL()

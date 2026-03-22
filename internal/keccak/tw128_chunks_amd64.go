@@ -2,7 +2,11 @@
 
 package keccak
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/codahale/thyrse/internal/cpuid"
+)
 
 //go:noescape
 func encryptChunksTW128AVX512(s *state8, src, dst *byte, tags *byte)
@@ -17,7 +21,7 @@ func decryptChunksTW128AVX512(s *state8, src, dst *byte, tags *byte)
 func decryptChunksTW128BodyAVX2(s *state8, src, dst *byte)
 
 func encryptChunksTW128Arch(s *state8, src, dst []byte, tags *[256]byte) bool {
-	if hasAVX512 {
+	if cpuid.HasAVX512 {
 		encryptChunksTW128AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), &tags[0])
 	} else {
 		encryptChunksTW128BodyAVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst))
@@ -27,7 +31,7 @@ func encryptChunksTW128Arch(s *state8, src, dst []byte, tags *[256]byte) bool {
 }
 
 func decryptChunksTW128Arch(s *state8, src, dst []byte, tags *[256]byte) bool {
-	if hasAVX512 {
+	if cpuid.HasAVX512 {
 		decryptChunksTW128AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), &tags[0])
 	} else {
 		decryptChunksTW128BodyAVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst))

@@ -2,6 +2,8 @@
 
 package keccak
 
+import "github.com/codahale/thyrse/internal/cpuid"
+
 //go:noescape
 func p1600x8Lane(a *state8)
 
@@ -9,12 +11,10 @@ func p1600x8Lane(a *state8)
 func p1600x8AVX512State(a *state8)
 
 func permute12x8Arch(s *state8) bool {
-	if hasAVX512 {
+	if cpuid.HasAVX512 {
 		p1600x8AVX512State(s)
 	} else {
 		p1600x8Lane(s)
 	}
 	return true
 }
-
-const AvailableLanes = 8

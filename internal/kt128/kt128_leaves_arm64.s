@@ -6,7 +6,7 @@
 //go:build !purego
 
 #include "textflag.h"
-#include "permute_arm64.h"
+#include "../keccak/permute_arm64.h"
 
 // ABSORB_STRIPE_X2 XORs one 168-byte stripe from two input pointers (IN0, IN1)
 // into state registers V0-V20 (21 rate lanes). Uses V25-V26 as temps.
@@ -171,7 +171,7 @@ TEXT ·processLeavesKT128ARM64(SB), NOSPLIT, $32-16
 leaves_arm64_loop_01:
 	ABSORB_STRIPE_X2(R2, R3)
 
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
@@ -205,7 +205,7 @@ leaves_arm64_loop_01:
 	VEOR	V25.B16, V20.B16, V20.B16
 
 	// Final permutation.
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
@@ -256,7 +256,7 @@ leaves_arm64_loop_01:
 leaves_arm64_loop_23:
 	ABSORB_STRIPE_X2(R2, R3)
 
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
@@ -288,7 +288,7 @@ leaves_arm64_loop_23:
 	VDUP	R9, V25.D2
 	VEOR	V25.B16, V20.B16, V20.B16
 
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
@@ -338,7 +338,7 @@ leaves_arm64_loop_23:
 leaves_arm64_loop_45:
 	ABSORB_STRIPE_X2(R2, R3)
 
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
@@ -370,7 +370,7 @@ leaves_arm64_loop_45:
 	VDUP	R9, V25.D2
 	VEOR	V25.B16, V20.B16, V20.B16
 
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
@@ -420,7 +420,7 @@ leaves_arm64_loop_45:
 leaves_arm64_loop_67:
 	ABSORB_STRIPE_X2(R2, R3)
 
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 
@@ -452,7 +452,7 @@ leaves_arm64_loop_67:
 	VDUP	R9, V25.D2
 	VEOR	V25.B16, V20.B16, V20.B16
 
-	MOVD	$round_consts(SB), R1
+	MOVD	$kt128_round_consts(SB), R1
 	ADD	$96, R1
 	KECCAK_12_ROUNDS
 

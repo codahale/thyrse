@@ -1,4 +1,4 @@
-package keccak
+package kt128
 
 import (
 	"encoding/binary"
@@ -16,11 +16,11 @@ func TestProcessLeavesKT128(t *testing.T) {
 
 	// Compute expected CVs via generic path.
 	var want [256]byte
-	processLeavesKT128Generic(input, &want)
+	processLeavesGeneric(input, &want)
 
 	// Compute CVs via arch-dispatched path.
 	var got [256]byte
-	ProcessLeavesKT128(input, &got)
+	processLeaves(input, &got)
 
 	if got != want {
 		for inst := range 8 {
@@ -46,6 +46,6 @@ func BenchmarkProcessLeavesKT128(b *testing.B) {
 	var cvs [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		ProcessLeavesKT128(input, &cvs)
+		processLeaves(input, &cvs)
 	}
 }

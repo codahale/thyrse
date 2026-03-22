@@ -1,6 +1,5 @@
 //go:build !amd64 || purego || thyrse_disable_avx512
 
-package keccak
+package cpuid
 
-var hasAVX512 = false
-var _ = hasAVX512
+var HasAVX512 = false

@@ -1,13 +1,15 @@
 //go:build arm64 && !purego
 
-package keccak
+package kt128
 
 import "unsafe"
+
+const availableLanes = 8
 
 //go:noescape
 func processLeavesKT128ARM64(input *byte, cvs *byte)
 
-func processLeavesKT128Arch(input []byte, cvs *[256]byte) bool {
+func processLeavesArch(input []byte, cvs *[256]byte) bool {
 	processLeavesKT128ARM64(unsafe.SliceData(input), &cvs[0])
 	return true
 }

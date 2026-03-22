@@ -9,5 +9,3 @@ func permute12x8Arch(s *state8) bool {
 	p1600x8Lane(s)
 	return true
 }
-
-const AvailableLanes = 8

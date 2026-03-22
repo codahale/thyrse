@@ -2,7 +2,11 @@
 
 package keccak
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/codahale/thyrse/internal/cpuid"
+)
 
 //go:noescape
 func p1600(a *State1)
@@ -11,7 +15,7 @@ func p1600(a *State1)
 func p1600AVX512(a *State1)
 
 func permute12x1Arch(s *State1) bool {
-	if hasAVX512 {
+	if cpuid.HasAVX512 {
 		p1600AVX512(s)
 	} else {
 		p1600(s)
@@ -26,7 +30,7 @@ func fastLoopAbsorb168x1(s *State1, in *byte, n int)
 func fastLoopAbsorb168x1AVX512(s *State1, in *byte, n int)
 
 func fastLoopAbsorb168x1Arch(s *State1, in []byte) bool {
-	if hasAVX512 {
+	if cpuid.HasAVX512 {
 		fastLoopAbsorb168x1AVX512(s, unsafe.SliceData(in), len(in))
 	} else {
 		fastLoopAbsorb168x1(s, unsafe.SliceData(in), len(in))

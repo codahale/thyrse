@@ -72,7 +72,7 @@ func (h *KT128) Write(p []byte) (int, error) {
 		h.state = stateTree
 	}
 
-	lanes := keccak.AvailableLanes
+	lanes := availableLanes
 
 	// Large-write fast path: process chunks directly from p to avoid copying.
 	if len(p) > lanes*BlockSize {
@@ -131,7 +131,7 @@ func (h *KT128) processLeafBatch(data []byte, nLeaves int) {
 	var cvs [256]byte
 	for idx+8 <= nLeaves {
 		off := idx * BlockSize
-		keccak.ProcessLeavesKT128(data[off:off+8*BlockSize], &cvs)
+		processLeaves(data[off:off+8*BlockSize], &cvs)
 		h.ts.AbsorbCVs(cvs[:])
 		idx += 8
 	}
@@ -141,7 +141,7 @@ func (h *KT128) processLeafBatch(data []byte, nLeaves int) {
 		off := idx * BlockSize
 		var padData [8 * BlockSize]byte
 		copy(padData[:rem*BlockSize], data[off:off+rem*BlockSize])
-		keccak.ProcessLeavesKT128(padData[:], &cvs)
+		processLeaves(padData[:], &cvs)
 		h.ts.AbsorbCVs(cvs[:rem*32])
 		idx += rem
 	}

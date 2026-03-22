@@ -6,8 +6,8 @@
 //go:build !purego
 
 #include "textflag.h"
-#include "permute_amd64_avx2.h"
-#include "permute_amd64_avx512.h"
+#include "../keccak/permute_amd64_avx2.h"
+#include "../keccak/permute_amd64_avx512.h"
 
 // ABSORB_LANE_X8_GATHER gathers one uint64 from 8 instances at the given byte
 // offset from BX (data base pointer) using Z28 as the index vector
@@ -119,7 +119,7 @@ leaves_avx512_loop:
 	ABSORB_LANE_X8_GATHER(20*8, Z20)
 
 	// Permute: 12 rounds = 3 × 4 rounds.
-	LEAQ	round_consts_2x+192(SB), R11
+	LEAQ	kt128_round_consts_2x+192(SB), R11
 	X8_4ROUNDS_AVX512(0, 16, 32, 48)
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
@@ -155,7 +155,7 @@ leaves_avx512_loop:
 	VPXORQ	Z25, Z20, Z20
 
 	// Final permutation.
-	LEAQ	round_consts_2x+192(SB), R11
+	LEAQ	kt128_round_consts_2x+192(SB), R11
 	X8_4ROUNDS_AVX512(0, 16, 32, 48)
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
@@ -288,7 +288,7 @@ leaves_avx2_loop_a:
 	// Permute.
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	kt128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -342,7 +342,7 @@ leaves_avx2_final_a:
 	// Final permutation.
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	kt128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -461,7 +461,7 @@ leaves_avx2_loop_b:
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	kt128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -515,7 +515,7 @@ leaves_avx2_final_b:
 	// Final permutation.
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	kt128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16
