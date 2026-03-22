@@ -14,8 +14,8 @@ func testChunkNonce() []byte {
 	return nonce
 }
 
-func TestEncryptChunksTW128(t *testing.T) {
-	const blockSize = tw128ChunkSize
+func TestEncryptChunks(t *testing.T) {
+	const blockSize = chunkSize
 	key := testKey()
 	nonce := testChunkNonce()
 
@@ -27,15 +27,15 @@ func TestEncryptChunksTW128(t *testing.T) {
 
 	// Run generic path: init + encrypt + extract tags.
 	var s1 state8
-	initChunksTW128(&s1, key, nonce, 1)
+	initChunks(&s1, key, nonce, 1)
 	dst1 := make([]byte, 8*blockSize)
 	var tags1 [256]byte
-	encryptChunksTW128Generic(&s1, src, dst1, &tags1)
+	encryptChunksGeneric(&s1, src, dst1, &tags1)
 
 	// Run arch-dispatched path.
 	dst2 := make([]byte, 8*blockSize)
 	var tags2 [256]byte
-	encryptChunksTW128(key, nonce, 1, src, dst2, &tags2)
+	encryptChunks(key, nonce, 1, src, dst2, &tags2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("ciphertext mismatch between generic and arch paths")
@@ -53,8 +53,8 @@ func TestEncryptChunksTW128(t *testing.T) {
 	}
 }
 
-func TestDecryptChunksTW128(t *testing.T) {
-	const blockSize = tw128ChunkSize
+func TestDecryptChunks(t *testing.T) {
+	const blockSize = chunkSize
 	key := testKey()
 	nonce := testChunkNonce()
 
@@ -66,15 +66,15 @@ func TestDecryptChunksTW128(t *testing.T) {
 
 	// Run generic path.
 	var s1 state8
-	initChunksTW128(&s1, key, nonce, 1)
+	initChunks(&s1, key, nonce, 1)
 	dst1 := make([]byte, 8*blockSize)
 	var tags1 [256]byte
-	decryptChunksTW128Generic(&s1, src, dst1, &tags1)
+	decryptChunksGeneric(&s1, src, dst1, &tags1)
 
 	// Run arch-dispatched path.
 	dst2 := make([]byte, 8*blockSize)
 	var tags2 [256]byte
-	decryptChunksTW128(key, nonce, 1, src, dst2, &tags2)
+	decryptChunks(key, nonce, 1, src, dst2, &tags2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("plaintext mismatch between generic and arch paths")
@@ -92,8 +92,8 @@ func TestDecryptChunksTW128(t *testing.T) {
 	}
 }
 
-func BenchmarkEncryptChunksTW128(b *testing.B) {
-	const blockSize = tw128ChunkSize
+func BenchmarkEncryptChunks(b *testing.B) {
+	const blockSize = chunkSize
 	key := testKey()
 	nonce := testChunkNonce()
 	src := make([]byte, 8*blockSize)
@@ -104,12 +104,12 @@ func BenchmarkEncryptChunksTW128(b *testing.B) {
 	var tags [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		encryptChunksTW128(key, nonce, 1, src, dst, &tags)
+		encryptChunks(key, nonce, 1, src, dst, &tags)
 	}
 }
 
-func BenchmarkDecryptChunksTW128(b *testing.B) {
-	const blockSize = tw128ChunkSize
+func BenchmarkDecryptChunks(b *testing.B) {
+	const blockSize = chunkSize
 	key := testKey()
 	nonce := testChunkNonce()
 	src := make([]byte, 8*blockSize)
@@ -120,6 +120,6 @@ func BenchmarkDecryptChunksTW128(b *testing.B) {
 	var tags [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		decryptChunksTW128(key, nonce, 1, src, dst, &tags)
+		decryptChunks(key, nonce, 1, src, dst, &tags)
 	}
 }

@@ -105,7 +105,7 @@
 	VMOVDQU	24*32(SP), Y0; VMOVDQU	Y0, 24*64+32(BASE)
 
 
-// func encryptChunksTW128AVX512(s *state8, src, dst *byte, tags *byte)
+// func encryptChunksAVX512(s *state8, src, dst *byte, tags *byte)
 //
 // Processes 8 × 8128-byte chunks end-to-end, including the 64-byte tail,
 // final body padding, and tag extraction.
@@ -114,7 +114,7 @@
 //   Rate = 168, BlockSize = 8128 = 48 × 168 + 64
 //
 // Frame: 64 bytes local (gather indices), 32 bytes args.
-TEXT ·encryptChunksTW128AVX512(SB), $64-32
+TEXT ·encryptChunksAVX512(SB), $64-32
 	MOVQ	s+0(FP), AX
 	MOVQ	src+8(FP), BX
 	MOVQ	dst+16(FP), R14
@@ -246,8 +246,8 @@ tw128_enc_avx512_loop:
 	RET
 
 
-// func decryptChunksTW128AVX512(s *state8, src, dst *byte, tags *byte)
-TEXT ·decryptChunksTW128AVX512(SB), $64-32
+// func decryptChunksAVX512(s *state8, src, dst *byte, tags *byte)
+TEXT ·decryptChunksAVX512(SB), $64-32
 	MOVQ	s+0(FP), AX
 	MOVQ	src+8(FP), BX
 	MOVQ	dst+16(FP), R14
@@ -373,14 +373,14 @@ tw128_dec_avx512_loop:
 	RET
 
 
-// func encryptChunksTW128BodyAVX2(s *state8, src, dst *byte)
+// func encryptChunksBodyAVX2(s *state8, src, dst *byte)
 //
 // 2× x4 approach (half 0: instances 0-3, half 1: instances 4-7).
 //
 // Frame: 1688 bytes local (0-799 = buffer A, 800-1599 = buffer B,
 //   1600-1631 = 4 src ptrs, 1632-1663 = 4 dst ptrs,
 //   1664 = count, 1672 = saved state ptr), 24 bytes args.
-TEXT ·encryptChunksTW128BodyAVX2(SB), $1688-24
+TEXT ·encryptChunksBodyAVX2(SB), $1688-24
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9
@@ -646,8 +646,8 @@ tw128_enc_avx2_final_b:
 	RET
 
 
-// func decryptChunksTW128BodyAVX2(s *state8, src, dst *byte)
-TEXT ·decryptChunksTW128BodyAVX2(SB), $1688-24
+// func decryptChunksBodyAVX2(s *state8, src, dst *byte)
+TEXT ·decryptChunksBodyAVX2(SB), $1688-24
 	MOVQ	s+0(FP), DI
 	MOVQ	src+8(FP), AX
 	MOVQ	dst+16(FP), R9

@@ -114,13 +114,13 @@
 	VDUP	V3.D[1], V25.D2; VST1 [V25.D1], (R6); ADD $8, R6
 
 
-// func encryptChunksTW128ARM64(s *State8, src, dst *byte, cvs *byte)
+// func encryptChunksARM64(s *State8, src, dst *byte, cvs *byte)
 //
 // Processes 8 × 8128-byte chunks using 4× x2 pairs,
 // encrypting and writing 8 × 32-byte tags.
 //
 // Frame: 32 bytes local (0=State8 ptr, 8=src base, 16=dst base, 24=tags ptr).
-TEXT ·encryptChunksTW128ARM64(SB), NOSPLIT, $32-32
+TEXT ·encryptChunksARM64(SB), NOSPLIT, $32-32
 	MOVD	s+0(FP), R0		// State8 pointer
 	MOVD	src+8(FP), R7		// src base
 	MOVD	dst+16(FP), R8		// dst base
@@ -247,8 +247,8 @@ tw128_enc_arm64_loop_67:
 	RET
 
 
-// func decryptChunksTW128ARM64(s *State8, src, dst *byte, cvs *byte)
-TEXT ·decryptChunksTW128ARM64(SB), NOSPLIT, $32-32
+// func decryptChunksARM64(s *State8, src, dst *byte, cvs *byte)
+TEXT ·decryptChunksARM64(SB), NOSPLIT, $32-32
 	MOVD	s+0(FP), R0
 	MOVD	src+8(FP), R7
 	MOVD	dst+16(FP), R8

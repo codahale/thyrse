@@ -2,6 +2,6 @@
 
 package tw128
 
-func encryptChunksTW128Arch(_ *state8, _, _ []byte, _ *[256]byte) bool { return false }
+func encryptChunksArch(_ *state8, _, _ []byte, _ *[256]byte) bool { return false }
 
-func decryptChunksTW128Arch(_ *state8, _, _ []byte, _ *[256]byte) bool { return false }
+func decryptChunksArch(_ *state8, _, _ []byte, _ *[256]byte) bool { return false }

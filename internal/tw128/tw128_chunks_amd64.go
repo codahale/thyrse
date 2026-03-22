@@ -9,33 +9,33 @@ import (
 )
 
 //go:noescape
-func encryptChunksTW128AVX512(s *state8, src, dst *byte, tags *byte)
+func encryptChunksAVX512(s *state8, src, dst *byte, tags *byte)
 
 //go:noescape
-func encryptChunksTW128BodyAVX2(s *state8, src, dst *byte)
+func encryptChunksBodyAVX2(s *state8, src, dst *byte)
 
 //go:noescape
-func decryptChunksTW128AVX512(s *state8, src, dst *byte, tags *byte)
+func decryptChunksAVX512(s *state8, src, dst *byte, tags *byte)
 
 //go:noescape
-func decryptChunksTW128BodyAVX2(s *state8, src, dst *byte)
+func decryptChunksBodyAVX2(s *state8, src, dst *byte)
 
-func encryptChunksTW128Arch(s *state8, src, dst []byte, tags *[256]byte) bool {
+func encryptChunksArch(s *state8, src, dst []byte, tags *[256]byte) bool {
 	if cpuid.HasAVX512 {
-		encryptChunksTW128AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), &tags[0])
+		encryptChunksAVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), &tags[0])
 	} else {
-		encryptChunksTW128BodyAVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst))
-		finishEncryptChunksTW128(s, src, dst, tags)
+		encryptChunksBodyAVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst))
+		finishEncryptChunks(s, src, dst, tags)
 	}
 	return true
 }
 
-func decryptChunksTW128Arch(s *state8, src, dst []byte, tags *[256]byte) bool {
+func decryptChunksArch(s *state8, src, dst []byte, tags *[256]byte) bool {
 	if cpuid.HasAVX512 {
-		decryptChunksTW128AVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), &tags[0])
+		decryptChunksAVX512(s, unsafe.SliceData(src), unsafe.SliceData(dst), &tags[0])
 	} else {
-		decryptChunksTW128BodyAVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst))
-		finishDecryptChunksTW128(s, src, dst, tags)
+		decryptChunksBodyAVX2(s, unsafe.SliceData(src), unsafe.SliceData(dst))
+		finishDecryptChunks(s, src, dst, tags)
 	}
 	return true
 }

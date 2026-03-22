@@ -190,9 +190,9 @@ func (c *cryptor) processComplete(dst, src []byte, nFlush int) {
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
 		if c.decrypt {
-			decryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+			decryptChunks(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
 		} else {
-			encryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+			encryptChunks(c.key[:], c.nonce[:], uint64(c.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
 		}
 		c.trunk.absorbCVs(tags[:])
 		c.nLeaves += 8
@@ -206,9 +206,9 @@ func (c *cryptor) processComplete(dst, src []byte, nFlush int) {
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
 		if c.decrypt {
-			decryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), padSrc[:], padDst[:], &tags)
+			decryptChunks(c.key[:], c.nonce[:], uint64(c.nLeaves+1), padSrc[:], padDst[:], &tags)
 		} else {
-			encryptChunksTW128(c.key[:], c.nonce[:], uint64(c.nLeaves+1), padSrc[:], padDst[:], &tags)
+			encryptChunks(c.key[:], c.nonce[:], uint64(c.nLeaves+1), padSrc[:], padDst[:], &tags)
 		}
 		copy(dst[off:off+realBytes], padDst[:realBytes])
 		c.trunk.absorbCVs(tags[:rem*leafTagSize])

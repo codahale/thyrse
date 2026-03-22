@@ -5,39 +5,39 @@ import (
 )
 
 const (
-	tw128ChunkSize     = ChunkSize
-	tw128ChunkBodySize = (tw128ChunkSize / rate) * rate
-	tw128ChunkTailSize = tw128ChunkSize - tw128ChunkBodySize
+	chunkSize     = ChunkSize
+	chunkBodySize = (chunkSize / rate) * rate
+	chunkTailSize = chunkSize - chunkBodySize
 )
 
-// encryptChunksTW128 encrypts 8 × 8128-byte chunks from src into dst,
+// encryptChunks encrypts 8 × 8128-byte chunks from src into dst,
 // initializing 8 parallel leaf duplexes with key and iv(nonce, baseIndex+i),
 // and writing the 8×32-byte leaf tags to tags.
 // Src and dst must each be exactly 8×8128 = 65024 bytes.
-func encryptChunksTW128(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
+func encryptChunks(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
 	var s state8
-	initChunksTW128(&s, key, nonce, baseIndex)
-	if encryptChunksTW128Arch(&s, src, dst, tags) {
+	initChunks(&s, key, nonce, baseIndex)
+	if encryptChunksArch(&s, src, dst, tags) {
 		return
 	}
-	encryptChunksTW128Generic(&s, src, dst, tags)
+	encryptChunksGeneric(&s, src, dst, tags)
 }
 
-// decryptChunksTW128 decrypts 8 × 8128-byte chunks from src into dst,
+// decryptChunks decrypts 8 × 8128-byte chunks from src into dst,
 // initializing 8 parallel leaf duplexes with key and iv(nonce, baseIndex+i),
 // and writing the 8×32-byte leaf tags to tags.
 // Src and dst must each be exactly 8×8128 = 65024 bytes.
-func decryptChunksTW128(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
+func decryptChunks(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
 	var s state8
-	initChunksTW128(&s, key, nonce, baseIndex)
-	if decryptChunksTW128Arch(&s, src, dst, tags) {
+	initChunks(&s, key, nonce, baseIndex)
+	if decryptChunksArch(&s, src, dst, tags) {
 		return
 	}
-	decryptChunksTW128Generic(&s, src, dst, tags)
+	decryptChunksGeneric(&s, src, dst, tags)
 }
 
-// initChunksTW128 initializes 8 parallel leaf duplexes: S[i] = K || iv(nonce, baseIndex+i), then permute.
-func initChunksTW128(s *state8, key, nonce []byte, baseIndex uint64) {
+// initChunks initializes 8 parallel leaf duplexes: S[i] = K || iv(nonce, baseIndex+i), then permute.
+func initChunks(s *state8, key, nonce []byte, baseIndex uint64) {
 	// Load key into lanes 0-3 (shared across all 8 instances).
 	for lane := range 4 {
 		w := binary.LittleEndian.Uint64(key[lane<<3 : lane<<3+8])
@@ -62,7 +62,7 @@ func initChunksTW128(s *state8, key, nonce []byte, baseIndex uint64) {
 	s.pos = 0
 }
 
-func extractChunkTagsTW128(s *state8, tags *[256]byte) {
+func extractChunkTags(s *state8, tags *[256]byte) {
 	for inst := range 8 {
 		binary.LittleEndian.PutUint64(tags[inst*32:], s.a[0][inst])
 		binary.LittleEndian.PutUint64(tags[inst*32+8:], s.a[1][inst])
@@ -71,34 +71,34 @@ func extractChunkTagsTW128(s *state8, tags *[256]byte) {
 	}
 }
 
-func finishEncryptChunksTW128(s *state8, src, dst []byte, tags *[256]byte) {
+func finishEncryptChunks(s *state8, src, dst []byte, tags *[256]byte) {
 	for inst := range 8 {
-		off := inst*tw128ChunkSize + tw128ChunkBodySize
-		s.encryptBytes(inst, src[off:off+tw128ChunkTailSize], dst[off:off+tw128ChunkTailSize])
+		off := inst*chunkSize + chunkBodySize
+		s.encryptBytes(inst, src[off:off+chunkTailSize], dst[off:off+chunkTailSize])
 	}
-	s.pos = tw128ChunkTailSize
+	s.pos = chunkTailSize
 	s.bodyPadStarPermute()
-	extractChunkTagsTW128(s, tags)
+	extractChunkTags(s, tags)
 }
 
-func finishDecryptChunksTW128(s *state8, src, dst []byte, tags *[256]byte) {
+func finishDecryptChunks(s *state8, src, dst []byte, tags *[256]byte) {
 	for inst := range 8 {
-		off := inst*tw128ChunkSize + tw128ChunkBodySize
-		s.decryptBytes(inst, src[off:off+tw128ChunkTailSize], dst[off:off+tw128ChunkTailSize])
+		off := inst*chunkSize + chunkBodySize
+		s.decryptBytes(inst, src[off:off+chunkTailSize], dst[off:off+chunkTailSize])
 	}
-	s.pos = tw128ChunkTailSize
+	s.pos = chunkTailSize
 	s.bodyPadStarPermute()
-	extractChunkTagsTW128(s, tags)
+	extractChunkTags(s, tags)
 }
 
-func encryptChunksTW128Generic(s *state8, src, dst []byte, tags *[256]byte) {
+func encryptChunksGeneric(s *state8, src, dst []byte, tags *[256]byte) {
 	// Body: 48 full rate stripes followed by a 64-byte tail.
-	s.bodyEncryptAll8(src, dst, tw128ChunkSize)
-	finishEncryptChunksTW128(s, src, dst, tags)
+	s.bodyEncryptAll8(src, dst, chunkSize)
+	finishEncryptChunks(s, src, dst, tags)
 }
 
-func decryptChunksTW128Generic(s *state8, src, dst []byte, tags *[256]byte) {
+func decryptChunksGeneric(s *state8, src, dst []byte, tags *[256]byte) {
 	// Body: 48 full rate stripes followed by a 64-byte tail.
-	s.bodyDecryptAll8(src, dst, tw128ChunkSize)
-	finishDecryptChunksTW128(s, src, dst, tags)
+	s.bodyDecryptAll8(src, dst, chunkSize)
+	finishDecryptChunks(s, src, dst, tags)
 }
