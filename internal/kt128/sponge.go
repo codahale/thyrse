@@ -54,8 +54,8 @@ func (s *sponge) absorbAll(in []byte, ds byte) {
 		base := full << 3
 		s.a[full] ^= loadPartialLE(tail[base : base+rem])
 	}
-	s.padPermute(len(tail), ds)
-	s.pos = 0
+	s.pos = len(tail)
+	s.padPermute(ds)
 }
 
 func (s *sponge) absorb(data []byte) {
@@ -148,14 +148,10 @@ func (s *sponge) absorbCVlanes(w0, w1, w2, w3 uint64) {
 	}
 }
 
-func (s *sponge) padPermute(pos int, ds byte) {
-	xorByteInWord(&s.a[pos>>3], pos, ds)
+func (s *sponge) padPermute(ds byte) {
+	xorByteInWord(&s.a[s.pos>>3], s.pos, ds)
 	xorByteInWord(&s.a[(rate-1)>>3], rate-1, 0x80)
 	s.permute12()
-}
-
-func (s *sponge) PadPermute(ds byte) {
-	s.padPermute(s.pos, ds)
 	s.pos = 0
 }
 

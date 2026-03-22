@@ -168,7 +168,7 @@ func (h *Hasher) Read(p []byte) (int, error) {
 	if h.state != stateFinalized {
 		h.buf = customSuffix(h.buf, h.c)
 		h.absorbMessage()
-		h.final.PadPermute(h.ds)
+		h.final.padPermute(h.ds)
 		h.state = stateFinalized
 	}
 	h.final.squeeze(p)
@@ -179,7 +179,7 @@ func (h *Hasher) Read(p []byte) (int, error) {
 // squeezes independent output into dstA and dstB. The Hasher is consumed and
 // must not be used after Chain (call Reset to reuse).
 //
-// The final PadPermute is performed in parallel using the 2x permutation.
+// The final pad and permute is performed in parallel using the 2x permutation.
 func (h *Hasher) Chain(customA uint8, dstA []byte, customB uint8, dstB []byte) {
 	if h.state == stateFinalized {
 		return

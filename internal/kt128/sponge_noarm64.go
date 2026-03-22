@@ -3,6 +3,6 @@
 package kt128
 
 func padPermute2(a, b *sponge, ds byte) {
-	a.padPermute(a.pos, ds)
-	b.padPermute(b.pos, ds)
+	a.padPermute(ds)
+	b.padPermute(ds)
 }
