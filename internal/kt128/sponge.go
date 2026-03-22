@@ -192,7 +192,7 @@ func (s *sponge) Equal(other *sponge) int {
 	posAcc |= posAcc >> 4
 	posAcc |= posAcc >> 2
 	posAcc |= posAcc >> 1
-	posEq := int(1 - (posAcc & 1))
+	posEq := 1 - (posAcc & 1)
 
 	return lanesEq & posEq
 }
