@@ -10,7 +10,6 @@ package tw128
 
 import (
 	"github.com/codahale/thyrse/internal/enc"
-	"github.com/codahale/thyrse/internal/keccak"
 )
 
 const (
@@ -38,41 +37,41 @@ const (
 
 // iv computes the IV for duplex index j: 0^{168-16-|ν(j)|} || nonce || ν(j).
 // Nonce must be NonceSize bytes (or nil, treated as all zeros).
-func iv(nonce []byte, j uint64) [keccak.Rate]byte {
-	var buf [keccak.Rate]byte
+func iv(nonce []byte, j uint64) [rate]byte {
+	var buf [rate]byte
 	var nu [enc.MaxIntSize + 1]byte
 	nuSlice := enc.RightEncode(nu[:0], j)
-	off := keccak.Rate - NonceSize - len(nuSlice)
+	off := rate - NonceSize - len(nuSlice)
 	copy(buf[off:], nonce)
 	copy(buf[off+NonceSize:], nuSlice)
 	return buf
 }
 
 // initTrunk initializes a trunk duplex with K, iv(U,0), and optional AD absorption.
-func initTrunk(s *keccak.State1, key, nonce, ad []byte) {
+func initTrunk(s *duplex, key, nonce, ad []byte) {
 	ivBuf := iv(nonce, 0)
-	s.InitKeyed(key, ivBuf[:])
+	s.initKeyed(key, ivBuf[:])
 	if len(ad) > 0 {
-		s.Absorb(ad)
-		s.Absorb([]byte{trailerAD})
-		s.PadStarPermute()
+		s.absorb(ad)
+		s.absorb([]byte{trailerAD})
+		s.padStarPermute()
 	}
 }
 
 // initLeaf initializes a leaf duplex with K, iv(U,j).
-func initLeaf(s *keccak.State1, key, nonce []byte, j uint64) {
+func initLeaf(s *duplex, key, nonce []byte, j uint64) {
 	ivBuf := iv(nonce, j)
-	s.InitKeyed(key, ivBuf[:])
+	s.initKeyed(key, ivBuf[:])
 }
 
 type cryptor struct {
 	key       [KeySize]byte
 	nonce     [NonceSize]byte
-	trunk     keccak.State1 // trunk duplex state
-	leaf      keccak.State1 // current leaf duplex state (chunks 1+)
-	nLeaves   int           // number of completed leaves
-	chunkOff  int           // bytes processed in current chunk
-	leafMode  bool          // true after chunk 0 body complete
+	trunk     duplex // trunk duplex state
+	leaf      duplex // current leaf duplex state (chunks 1+)
+	nLeaves   int    // number of completed leaves
+	chunkOff  int    // bytes processed in current chunk
+	leafMode  bool   // true after chunk 0 body complete
 	finalized bool
 }
 
@@ -88,15 +87,15 @@ func (c *cryptor) initCryptor(key, nonce, ad []byte) {
 // Uses AbsorbCV to read directly from the leaf's lane-major state, avoiding
 // byte serialization.
 func (c *cryptor) finalizeLeaf() {
-	c.leaf.BodyPadStarPermute()
-	c.trunk.AbsorbCV(&c.leaf)
+	c.leaf.bodyPadStarPermute()
+	c.trunk.absorbCV(&c.leaf)
 	c.nLeaves++
 	c.chunkOff = 0
 }
 
 // transitionToLeafMode finalizes the trunk body phase and enters leaf mode.
 func (c *cryptor) transitionToLeafMode() {
-	c.trunk.BodyPadStarPermute()
+	c.trunk.bodyPadStarPermute()
 	c.leafMode = true
 	c.chunkOff = 0
 }
@@ -109,7 +108,7 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 
 	// If still on chunk 0 and body data was written, finalize the trunk body phase.
 	if !c.leafMode && c.chunkOff > 0 {
-		c.trunk.BodyPadStarPermute()
+		c.trunk.bodyPadStarPermute()
 	}
 
 	// Finalize the last leaf if a partial chunk is in progress.
@@ -119,12 +118,12 @@ func (c *cryptor) finalizeInternal() [TagSize]byte {
 
 	// Tag-absorb phase: leaf tags were absorbed incrementally; finalize with trailer.
 	if c.nLeaves > 0 {
-		c.trunk.Absorb([]byte{trailerTC})
-		c.trunk.PadStarPermute()
+		c.trunk.absorb([]byte{trailerTC})
+		c.trunk.padStarPermute()
 	}
 
 	var tag [TagSize]byte
-	c.trunk.Squeeze(tag[:])
+	c.trunk.squeeze(tag[:])
 	return tag
 }
 
@@ -148,7 +147,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	if !e.leafMode {
 		// Still on chunk 0: encrypt into trunk.
 		n := min(len(src), ChunkSize-e.chunkOff)
-		e.trunk.BodyEncrypt(dst[:n], src[:n])
+		e.trunk.bodyEncrypt(dst[:n], src[:n])
 		e.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -167,7 +166,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	// Continue an in-progress partial leaf chunk.
 	if e.chunkOff > 0 {
 		n := min(len(src), ChunkSize-e.chunkOff)
-		e.leaf.BodyEncrypt(dst[:n], src[:n])
+		e.leaf.bodyEncrypt(dst[:n], src[:n])
 		e.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -188,7 +187,7 @@ func (e *Encryptor) XORKeyStream(dst, src []byte) {
 	if len(src) > 0 {
 		initLeaf(&e.leaf, e.key[:], e.nonce[:], uint64(e.nLeaves+1))
 		e.chunkOff = 0
-		e.leaf.BodyEncrypt(dst[:len(src)], src)
+		e.leaf.bodyEncrypt(dst[:len(src)], src)
 		e.chunkOff += len(src)
 	}
 }
@@ -201,7 +200,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
 		encryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
-		e.trunk.AbsorbCVs(tags[:])
+		e.trunk.absorbCVs(tags[:])
 		e.nLeaves += 8
 		idx += 8
 	}
@@ -214,7 +213,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		copy(padSrc[:realBytes], src[off:off+realBytes])
 		encryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), padSrc[:], padDst[:], &tags)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
-		e.trunk.AbsorbCVs(tags[:rem*leafTagSize])
+		e.trunk.absorbCVs(tags[:rem*leafTagSize])
 		e.nLeaves += rem
 		idx += rem
 	}
@@ -223,7 +222,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		encryptX1(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &e.leaf)
-		e.trunk.AbsorbCV(&e.leaf)
+		e.trunk.absorbCV(&e.leaf)
 		e.nLeaves++
 		idx++
 	}
@@ -254,7 +253,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	if !d.leafMode {
 		// Still on chunk 0: decrypt from trunk.
 		n := min(len(src), ChunkSize-d.chunkOff)
-		d.trunk.BodyDecrypt(dst[:n], src[:n])
+		d.trunk.bodyDecrypt(dst[:n], src[:n])
 		d.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -273,7 +272,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	// Continue an in-progress partial leaf chunk.
 	if d.chunkOff > 0 {
 		n := min(len(src), ChunkSize-d.chunkOff)
-		d.leaf.BodyDecrypt(dst[:n], src[:n])
+		d.leaf.bodyDecrypt(dst[:n], src[:n])
 		d.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -294,7 +293,7 @@ func (d *Decryptor) XORKeyStream(dst, src []byte) {
 	if len(src) > 0 {
 		initLeaf(&d.leaf, d.key[:], d.nonce[:], uint64(d.nLeaves+1))
 		d.chunkOff = 0
-		d.leaf.BodyDecrypt(dst[:len(src)], src)
+		d.leaf.bodyDecrypt(dst[:len(src)], src)
 		d.chunkOff += len(src)
 	}
 }
@@ -307,7 +306,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
 		decryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
-		d.trunk.AbsorbCVs(tags[:])
+		d.trunk.absorbCVs(tags[:])
 		d.nLeaves += 8
 		idx += 8
 	}
@@ -320,7 +319,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		copy(padSrc[:realBytes], src[off:off+realBytes])
 		decryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), padSrc[:], padDst[:], &tags)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
-		d.trunk.AbsorbCVs(tags[:rem*leafTagSize])
+		d.trunk.absorbCVs(tags[:rem*leafTagSize])
 		d.nLeaves += rem
 		idx += rem
 	}
@@ -329,7 +328,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	for idx < nFlush {
 		off := idx * ChunkSize
 		decryptX1(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+ChunkSize], dst[off:off+ChunkSize], &d.leaf)
-		d.trunk.AbsorbCV(&d.leaf)
+		d.trunk.absorbCV(&d.leaf)
 		d.nLeaves++
 		idx++
 	}
@@ -340,18 +339,18 @@ func (d *Decryptor) Finalize() [TagSize]byte {
 	return d.finalizeInternal()
 }
 
-func encryptX1(key, nonce []byte, index uint64, pt, ct []byte, d *keccak.State1) {
+func encryptX1(key, nonce []byte, index uint64, pt, ct []byte, d *duplex) {
 	initLeaf(d, key, nonce, index)
-	done := d.BodyEncryptLoop(pt, ct)
-	d.EncryptBytesAt(0, pt[done:], ct[done:])
-	d.SetPos(len(pt) - done)
-	d.BodyPadStarPermute()
+	done := d.bodyEncryptLoop(pt, ct)
+	d.encryptBytesAt(0, pt[done:], ct[done:])
+	d.setPos(len(pt) - done)
+	d.bodyPadStarPermute()
 }
 
-func decryptX1(key, nonce []byte, index uint64, ct, pt []byte, d *keccak.State1) {
+func decryptX1(key, nonce []byte, index uint64, ct, pt []byte, d *duplex) {
 	initLeaf(d, key, nonce, index)
-	done := d.BodyDecryptLoop(ct, pt)
-	d.DecryptBytesAt(0, ct[done:], pt[done:])
-	d.SetPos(len(ct) - done)
-	d.BodyPadStarPermute()
+	done := d.bodyDecryptLoop(ct, pt)
+	d.decryptBytesAt(0, ct[done:], pt[done:])
+	d.setPos(len(ct) - done)
+	d.bodyPadStarPermute()
 }
