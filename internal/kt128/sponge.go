@@ -7,15 +7,11 @@ type sponge struct {
 	pos int
 }
 
-func permute12x1Generic(s *sponge) {
-	keccakP1600x12(&s.a)
-}
-
 func (s *sponge) permute12() {
 	if permute12x1Arch(s) {
 		return
 	}
-	permute12x1Generic(s)
+	keccakP1600x12(&s.a)
 }
 
 func (s *sponge) reset() {
@@ -159,7 +155,22 @@ func (s *sponge) padPermute2(b *sponge, ds byte) {
 	if s.pos != b.pos {
 		panic("kt128: padPermute2 with mismatched positions")
 	}
-	padPermute2(s, b, ds)
+	pos := s.pos
+	var buf [lanes][2]uint64
+	for i := range lanes {
+		buf[i][0] = s.a[i]
+		buf[i][1] = b.a[i]
+	}
+	xorByteInWord(&buf[pos>>3][0], pos, ds)
+	xorByteInWord(&buf[pos>>3][1], pos, ds)
+	endLane := (rate - 1) >> 3
+	xorByteInWord(&buf[endLane][0], rate-1, 0x80)
+	xorByteInWord(&buf[endLane][1], rate-1, 0x80)
+	p1600x2Lane(&buf)
+	for i := range lanes {
+		s.a[i] = buf[i][0]
+		b.a[i] = buf[i][1]
+	}
 	s.pos = 0
 	b.pos = 0
 }
