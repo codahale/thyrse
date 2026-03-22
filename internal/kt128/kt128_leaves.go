@@ -15,8 +15,8 @@ func processLeavesGeneric(input []byte, cvs *[256]byte) {
 	for inst := range 8 {
 		var s sponge
 		off := inst * BlockSize
-		s.AbsorbAll(input[off:off+BlockSize], leafDS)
+		s.absorbAll(input[off:off+BlockSize], leafDS)
 		// Extract CV = first 4 lanes (32 bytes).
-		s.Squeeze(cvs[inst*32 : inst*32+32])
+		s.squeeze(cvs[inst*32 : inst*32+32])
 	}
 }

@@ -66,10 +66,10 @@ func (h *Hasher) Write(p []byte) (int, error) {
 		// Enter tree mode: flush S_0 from buf + start of p.
 		h.buf = append(h.buf, p[:need]...)
 		p = p[need:]
-		h.final.Reset()
+		h.final.reset()
 		h.ds = 0x06
-		h.final.Absorb(h.buf[:BlockSize])
-		h.final.Absorb(kt12Marker[:])
+		h.final.absorb(h.buf[:BlockSize])
+		h.final.absorb(kt12Marker[:])
 		// Keep the one overflow byte.
 		h.buf[0] = h.buf[BlockSize]
 		h.buf = h.buf[:1]
@@ -136,7 +136,7 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 	for idx+8 <= nLeaves {
 		off := idx * BlockSize
 		processLeaves(data[off:off+8*BlockSize], &cvs)
-		h.final.AbsorbCVs(cvs[:])
+		h.final.absorbCVs(cvs[:])
 		idx += 8
 	}
 
@@ -146,7 +146,7 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 		var padData [8 * BlockSize]byte
 		copy(padData[:rem*BlockSize], data[off:off+rem*BlockSize])
 		processLeaves(padData[:], &cvs)
-		h.final.AbsorbCVs(cvs[:rem*32])
+		h.final.absorbCVs(cvs[:rem*32])
 		idx += rem
 	}
 
@@ -155,7 +155,7 @@ func (h *Hasher) processLeafBatch(data []byte, nLeaves int) {
 		var s1 sponge
 		off := idx * BlockSize
 		leafStateX1(data[off:off+BlockSize], &s1)
-		h.final.AbsorbCV(&s1)
+		h.final.absorbCV(&s1)
 		idx++
 	}
 
@@ -171,7 +171,7 @@ func (h *Hasher) Read(p []byte) (int, error) {
 		h.final.PadPermute(h.ds)
 		h.state = stateFinalized
 	}
-	h.final.Squeeze(p)
+	h.final.squeeze(p)
 	return len(p), nil
 }
 
@@ -203,10 +203,10 @@ func (h *Hasher) Chain(customA uint8, dstA []byte, customB uint8, dstB []byte) {
 	b.absorbMessage()
 
 	// Both suffixes are the same length, so positions always match.
-	a.final.PadPermute2(&b.final, a.ds)
+	a.final.padPermute2(&b.final, a.ds)
 
-	a.final.Squeeze(dstA)
-	b.final.Squeeze(dstB)
+	a.final.squeeze(dstA)
+	b.final.squeeze(dstB)
 }
 
 // Clone returns an independent copy of the Hasher. The original and clone evolve independently.
@@ -226,7 +226,7 @@ func (h *Hasher) Clone() *Hasher {
 func (h *Hasher) Reset() {
 	clear(h.buf)
 	h.buf = h.buf[:0]
-	h.final.Reset()
+	h.final.reset()
 	h.pos = 0
 	h.ds = 0
 	h.leafCount = 0
@@ -237,7 +237,7 @@ func (h *Hasher) Reset() {
 // The comparison is constant-time with respect to buffered data and the
 // underlying sponge state.
 func (h *Hasher) Equal(other *Hasher) int {
-	eq := h.final.Equal(&other.final)
+	eq := h.final.equal(&other.final)
 	eq &= subtle.ConstantTimeCompare(h.buf, other.buf)
 	eq &= subtle.ConstantTimeEq(int32(h.pos>>32), int32(other.pos>>32))
 	eq &= subtle.ConstantTimeEq(int32(h.pos), int32(other.pos))
@@ -261,17 +261,17 @@ func (h *Hasher) absorbMessage() {
 	if h.state == stateSingle {
 		if len(buf) <= BlockSize {
 			// Single-node: KT128 single-node finalization.
-			h.final.Reset()
+			h.final.reset()
 			h.ds = 0x07
-			h.final.Absorb(buf)
+			h.final.absorb(buf)
 			return
 		}
 
 		// Enter tree mode: flush S_0.
-		h.final.Reset()
+		h.final.reset()
 		h.ds = 0x06
-		h.final.Absorb(buf[:BlockSize])
-		h.final.Absorb(kt12Marker[:])
+		h.final.absorb(buf[:BlockSize])
+		h.final.absorb(kt12Marker[:])
 		buf = buf[BlockSize:]
 	}
 
@@ -284,14 +284,14 @@ func (h *Hasher) absorbMessage() {
 	if partial := len(buf) - fullLeaves*BlockSize; partial > 0 {
 		var s1 sponge
 		leafStateX1(buf[fullLeaves*BlockSize:], &s1)
-		h.final.AbsorbCV(&s1)
+		h.final.absorbCV(&s1)
 		h.leafCount++
 	}
 
 	// Terminator: LengthEncode(leafCount) || 0xFF || 0xFF.
 	var leBuf [9]byte
-	h.final.Absorb(enc.LengthEncode(leBuf[:0], h.leafCount))
-	h.final.Absorb([]byte{0xFF, 0xFF})
+	h.final.absorb(enc.LengthEncode(leBuf[:0], h.leafCount))
+	h.final.absorb([]byte{0xFF, 0xFF})
 }
 
 // kt12Marker is the 8-byte KangarooTwelve marker written after S_0.
@@ -299,8 +299,8 @@ var kt12Marker = [8]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 // leafStateX1 computes a single KT128 leaf state.
 func leafStateX1(data []byte, s *sponge) {
-	s.Reset()
-	s.AbsorbAll(data, leafDS)
+	s.reset()
+	s.absorbAll(data, leafDS)
 }
 
 var _ hash.XOF = (*Hasher)(nil)

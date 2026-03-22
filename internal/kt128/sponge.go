@@ -18,7 +18,7 @@ func (s *sponge) permute12() {
 	permute12x1Generic(s)
 }
 
-func (s *sponge) Reset() {
+func (s *sponge) reset() {
 	clear(s.a[:])
 	s.pos = 0
 }
@@ -39,7 +39,7 @@ func (s *sponge) fastLoopAbsorb168(in []byte) int {
 	return n
 }
 
-func (s *sponge) AbsorbAll(in []byte, ds byte) {
+func (s *sponge) absorbAll(in []byte, ds byte) {
 	done := s.fastLoopAbsorb168(in)
 	tail := in[done:]
 	if len(tail) >= rate {
@@ -58,7 +58,7 @@ func (s *sponge) AbsorbAll(in []byte, ds byte) {
 	s.pos = 0
 }
 
-func (s *sponge) Absorb(data []byte) {
+func (s *sponge) absorb(data []byte) {
 	if rem := s.pos & 7; rem != 0 {
 		need := 8 - rem
 		if len(data) < need {
@@ -98,16 +98,16 @@ func (s *sponge) Absorb(data []byte) {
 	}
 }
 
-func (s *sponge) AbsorbCV(src *sponge) {
+func (s *sponge) absorbCV(src *sponge) {
 	if s.pos&7 != 0 {
-		panic("kt128: AbsorbCV on non-lane-aligned state")
+		panic("kt128: absorbCV on non-lane-aligned state")
 	}
 	s.absorbCVlanes(src.a[0], src.a[1], src.a[2], src.a[3])
 }
 
-func (s *sponge) AbsorbCVs(cvs []byte) {
+func (s *sponge) absorbCVs(cvs []byte) {
 	if s.pos&7 != 0 {
-		panic("kt128: AbsorbCVs on non-lane-aligned state")
+		panic("kt128: absorbCVs on non-lane-aligned state")
 	}
 	for len(cvs) >= 32 {
 		s.absorbCVlanes(
@@ -159,16 +159,16 @@ func (s *sponge) PadPermute(ds byte) {
 	s.pos = 0
 }
 
-func (a *sponge) PadPermute2(b *sponge, ds byte) {
-	if a.pos != b.pos {
-		panic("kt128: PadPermute2 with mismatched positions")
+func (s *sponge) padPermute2(b *sponge, ds byte) {
+	if s.pos != b.pos {
+		panic("kt128: padPermute2 with mismatched positions")
 	}
-	padPermute2(a, b, ds)
-	a.pos = 0
+	padPermute2(s, b, ds)
+	s.pos = 0
 	b.pos = 0
 }
 
-func (s *sponge) Equal(other *sponge) int {
+func (s *sponge) equal(other *sponge) int {
 	var acc uint64
 	for i := range lanes {
 		acc |= s.a[i] ^ other.a[i]
@@ -192,7 +192,7 @@ func (s *sponge) Equal(other *sponge) int {
 	return lanesEq & posEq
 }
 
-func (s *sponge) Squeeze(dst []byte) {
+func (s *sponge) squeeze(dst []byte) {
 	for len(dst) > 0 {
 		if s.pos == rate {
 			s.permute12()
