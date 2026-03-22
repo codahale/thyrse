@@ -28,7 +28,7 @@
 	MOVQ	$0x8000000000000000, AX; \
 	VPBROADCASTQ	AX, Zdst
 
-// func processLeavesKT128AVX512(input *byte, cvs *byte)
+// func processLeavesAVX512(input *byte, cvs *byte)
 //
 // Processes 8 × 8192-byte chunks, writing 8 × 32-byte CVs to cvs.
 // Input: 8 contiguous 8192-byte blocks (total 65536 bytes).
@@ -47,7 +47,7 @@
 //   Z0-Z24  = Keccak state (persistent)
 //   Z25-Z31 = scratch
 //   Z28     = gather index vector
-TEXT ·processLeavesKT128AVX512(SB), $64-16
+TEXT ·processLeavesAVX512(SB), $64-16
 	MOVQ	input+0(FP), BX
 	MOVQ	cvs+8(FP), DI
 
@@ -192,13 +192,13 @@ leaves_avx512_loop:
 	MOVQ	i*8(DX), R10; XORQ	R10, i*32+16(R8); \
 	MOVQ	i*8(BX), R10; XORQ	R10, i*32+24(R8)
 
-// func processLeavesKT128AVX2(input *byte, cvs *byte)
+// func processLeavesAVX2(input *byte, cvs *byte)
 //
 // Processes 8 × 8192-byte chunks via 2× x4 AVX2, writing 8 × 32-byte CVs.
 //
 // Frame: 1648 bytes local (0-799 = buffer A, 800-1599 = buffer B,
 //        1600-1647 = 4 input ptrs + count + saved output ptr), 16 bytes args.
-TEXT ·processLeavesKT128AVX2(SB), $1648-16
+TEXT ·processLeavesAVX2(SB), $1648-16
 	MOVQ	input+0(FP), AX
 	MOVQ	cvs+8(FP), DI
 	MOVQ	DI, 1640(SP)		// save output pointer

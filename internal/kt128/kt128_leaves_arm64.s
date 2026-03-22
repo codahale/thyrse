@@ -117,7 +117,7 @@
 	VZIP1	V26.D2, V25.D2, V25.D2; \
 	VEOR	V25.B16, V20.B16, V20.B16
 
-// func processLeavesKT128ARM64(input *byte, cvs *byte)
+// func processLeavesARM64(input *byte, cvs *byte)
 //
 // Processes 8 × 8192-byte chunks, writing 8 × 32-byte CVs to cvs.
 // Uses 4× x2 pairs: (0,1), (2,3), (4,5), (6,7).
@@ -129,7 +129,7 @@
 //   Suffix 0x0B at lane 16, pad10*1 end 0x80 at lane 20
 //
 // Frame: 32 bytes local.
-TEXT ·processLeavesKT128ARM64(SB), NOSPLIT, $32-16
+TEXT ·processLeavesARM64(SB), NOSPLIT, $32-16
 	MOVD	input+0(FP), R0		// input base
 	MOVD	cvs+8(FP), R6		// output CVs base
 

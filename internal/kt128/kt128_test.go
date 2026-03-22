@@ -170,7 +170,7 @@ var rfcVectors = []struct {
 	},
 }
 
-func TestKT128RFCVectors(t *testing.T) {
+func TestRFCVectors(t *testing.T) {
 	for _, tc := range rfcVectors {
 		t.Run(tc.name, func(t *testing.T) {
 			h := New(tc.custom)

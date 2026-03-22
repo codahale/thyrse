@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestProcessLeavesKT128(t *testing.T) {
+func TestProcessLeaves(t *testing.T) {
 	const blockSize = 8192
 
 	// Build deterministic input: 8 × 8192 bytes.
@@ -37,7 +37,7 @@ func TestProcessLeavesKT128(t *testing.T) {
 	}
 }
 
-func BenchmarkProcessLeavesKT128(b *testing.B) {
+func BenchmarkProcessLeaves(b *testing.B) {
 	const blockSize = 8192
 	input := make([]byte, 8*blockSize)
 	for i := range input {
