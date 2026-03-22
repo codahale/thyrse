@@ -39,7 +39,9 @@ func (s *sponge) fastLoopAbsorb168(in []byte) int {
 	return n
 }
 
-func (s *sponge) absorbFinal(tail []byte, ds byte) {
+func (s *sponge) AbsorbAll(in []byte, ds byte) {
+	done := s.fastLoopAbsorb168(in)
+	tail := in[done:]
 	if len(tail) >= rate {
 		panic("kt128: invalid final tail length")
 	}
@@ -52,14 +54,7 @@ func (s *sponge) absorbFinal(tail []byte, ds byte) {
 		base := full << 3
 		s.a[full] ^= loadPartialLE(tail[base : base+rem])
 	}
-	xorByteInWord(&s.a[len(tail)>>3], len(tail), ds)
-	xorByteInWord(&s.a[(rate-1)>>3], rate-1, 0x80)
-}
-
-func (s *sponge) AbsorbAll(in []byte, ds byte) {
-	done := s.fastLoopAbsorb168(in)
-	s.absorbFinal(in[done:], ds)
-	s.permute12()
+	s.padPermute(len(tail), ds)
 	s.pos = 0
 }
 
