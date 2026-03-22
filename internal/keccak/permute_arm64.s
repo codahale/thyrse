@@ -79,49 +79,6 @@ TEXT ·p1600x2Lane(SB), NOSPLIT, $0-8
 
 	RET
 
-// func p1600x8Lane(a *State8)
-TEXT ·p1600x8Lane(SB), NOSPLIT, $0-8
-	MOVD	a+0(FP), R0
-
-	// Pair (0,1): offset 0, stride 64 bytes per lane.
-	MOVD	R0, R2
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	LOAD25_STRIDE(R2, 64)
-	KECCAK_12_ROUNDS
-	MOVD	R0, R2
-	STORE25_STRIDE(R2, 64)
-
-	// Pair (2,3): offset 16, stride 64 bytes per lane.
-	ADD	$16, R0, R2
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	LOAD25_STRIDE(R2, 64)
-	KECCAK_12_ROUNDS
-	ADD	$16, R0, R2
-	STORE25_STRIDE(R2, 64)
-
-	// Pair (4,5): offset 32, stride 64 bytes per lane.
-	ADD	$32, R0, R2
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	LOAD25_STRIDE(R2, 64)
-	KECCAK_12_ROUNDS
-	ADD	$32, R0, R2
-	STORE25_STRIDE(R2, 64)
-
-	// Pair (6,7): offset 48, stride 64 bytes per lane.
-	ADD	$48, R0, R2
-	MOVD	$round_consts(SB), R1
-	ADD	$96, R1
-	LOAD25_STRIDE(R2, 64)
-	KECCAK_12_ROUNDS
-	ADD	$48, R0, R2
-	STORE25_STRIDE(R2, 64)
-
-	RET
-
-
 DATA	round_consts+0x00(SB)/8, $0x0000000000000001
 DATA	round_consts+0x08(SB)/8, $0x0000000000008082
 DATA	round_consts+0x10(SB)/8, $0x800000000000808a

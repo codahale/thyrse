@@ -7,7 +7,7 @@
 //go:build !purego
 
 #include "textflag.h"
-#include "permute_arm64.h"
+#include "../keccak/permute_arm64.h"
 
 // ENCRYPT_STRIPE_X2 encrypts 21 full lanes from two input
 // pointers (SRC0, SRC1) into state registers V0-V20 (.D2), writing ciphertext
@@ -88,7 +88,7 @@
 	MOVD	$1, R9; \
 	VDUP	R9, V25.D2; \
 	VEOR	V25.B16, V21.B16, V21.B16; \
-	MOVD	$round_consts(SB), R1; \
+	MOVD	$tw128_round_consts(SB), R1; \
 	ADD	$96, R1; \
 	KECCAK_12_ROUNDS
 
@@ -98,7 +98,7 @@
 	VDUP	R9, V25.D2; \
 	VEOR	V25.B16, V8.B16, V8.B16; \
 	VEOR	V25.B16, V21.B16, V21.B16; \
-	MOVD	$round_consts(SB), R1; \
+	MOVD	$tw128_round_consts(SB), R1; \
 	ADD	$96, R1; \
 	KECCAK_12_ROUNDS
 

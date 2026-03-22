@@ -7,8 +7,8 @@
 //go:build !purego
 
 #include "textflag.h"
-#include "permute_amd64_avx2.h"
-#include "permute_amd64_avx512.h"
+#include "../keccak/permute_amd64_avx2.h"
+#include "../keccak/permute_amd64_avx512.h"
 
 // ENCRYPT_LANE_X8_GS encrypts one full lane using gather (from BX+Z28) and scatter (to R14+Z28).
 // XORs gathered data into Zlane, then scatters the result.
@@ -190,7 +190,7 @@ tw128_enc_avx512_loop:
 	VPBROADCASTQ	AX, Z25
 	VPXORQ	Z25, Z21, Z21
 
-	LEAQ	round_consts_2x+192(SB), R11
+	LEAQ	tw128_round_consts_2x+192(SB), R11
 	X8_4ROUNDS_AVX512(0, 16, 32, 48)
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
@@ -217,7 +217,7 @@ tw128_enc_avx512_loop:
 	VPXORQ	Z25, Z8, Z8
 	VPXORQ	Z25, Z21, Z21
 
-	LEAQ	round_consts_2x+192(SB), R11
+	LEAQ	tw128_round_consts_2x+192(SB), R11
 	X8_4ROUNDS_AVX512(0, 16, 32, 48)
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
@@ -320,7 +320,7 @@ tw128_dec_avx512_loop:
 	VPBROADCASTQ	AX, Z25
 	VPXORQ	Z25, Z21, Z21
 
-	LEAQ	round_consts_2x+192(SB), R11
+	LEAQ	tw128_round_consts_2x+192(SB), R11
 	X8_4ROUNDS_AVX512(0, 16, 32, 48)
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
@@ -345,7 +345,7 @@ tw128_dec_avx512_loop:
 	VPXORQ	Z25, Z8, Z8
 	VPXORQ	Z25, Z21, Z21
 
-	LEAQ	round_consts_2x+192(SB), R11
+	LEAQ	tw128_round_consts_2x+192(SB), R11
 	X8_4ROUNDS_AVX512(0, 16, 32, 48)
 	X8_4ROUNDS_AVX512(64, 80, 96, 112)
 	X8_4ROUNDS_AVX512(128, 144, 160, 176)
@@ -495,7 +495,7 @@ tw128_enc_avx2_loop_a:
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	tw128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -625,7 +625,7 @@ tw128_enc_avx2_loop_b:
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	tw128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -759,7 +759,7 @@ tw128_dec_avx2_loop_a:
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	tw128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16
@@ -888,7 +888,7 @@ tw128_dec_avx2_loop_b:
 
 	LEAQ	0(SP), R8
 	LEAQ	800(SP), R9
-	LEAQ	round_consts_4x+384(SB), R11
+	LEAQ	tw128_round_consts_4x+384(SB), R11
 	MOVQ	$12, R10
 
 	PCALIGN	$16

@@ -200,7 +200,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 	var tags [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		keccak.EncryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+		encryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
 		e.trunk.AbsorbCVs(tags[:])
 		e.nLeaves += 8
 		idx += 8
@@ -212,7 +212,7 @@ func (e *Encryptor) encryptComplete(dst, src []byte, nFlush int) {
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		keccak.EncryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), padSrc[:], padDst[:], &tags)
+		encryptChunksTW128(e.key[:], e.nonce[:], uint64(e.nLeaves+1), padSrc[:], padDst[:], &tags)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
 		e.trunk.AbsorbCVs(tags[:rem*leafTagSize])
 		e.nLeaves += rem
@@ -306,7 +306,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 	var tags [256]byte
 	for idx+8 <= nFlush {
 		off := idx * ChunkSize
-		keccak.DecryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
+		decryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), src[off:off+8*ChunkSize], dst[off:off+8*ChunkSize], &tags)
 		d.trunk.AbsorbCVs(tags[:])
 		d.nLeaves += 8
 		idx += 8
@@ -318,7 +318,7 @@ func (d *Decryptor) decryptComplete(dst, src []byte, nFlush int) {
 		realBytes := rem * ChunkSize
 		var padSrc, padDst [8 * ChunkSize]byte
 		copy(padSrc[:realBytes], src[off:off+realBytes])
-		keccak.DecryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), padSrc[:], padDst[:], &tags)
+		decryptChunksTW128(d.key[:], d.nonce[:], uint64(d.nLeaves+1), padSrc[:], padDst[:], &tags)
 		copy(dst[off:off+realBytes], padDst[:realBytes])
 		d.trunk.AbsorbCVs(tags[:rem*leafTagSize])
 		d.nLeaves += rem

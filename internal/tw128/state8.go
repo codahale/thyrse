@@ -1,4 +1,4 @@
-package keccak
+package tw128
 
 import "encoding/binary"
 
@@ -9,14 +9,14 @@ type state8 struct {
 }
 
 func permute12x8Generic(s *state8) {
-	var t State1
+	var t [lanes]uint64
 	for inst := range 8 {
 		for lane := range lanes {
-			t.a[lane] = s.a[lane][inst]
+			t[lane] = s.a[lane][inst]
 		}
-		keccakP1600x12(&t.a)
+		keccakP1600x12(&t)
 		for lane := range lanes {
-			s.a[lane][inst] = t.a[lane]
+			s.a[lane][inst] = t[lane]
 		}
 	}
 }
@@ -96,8 +96,8 @@ func (s *state8) bodyPadStarPermute() {
 // bodyFastLoopEncrypt168 encrypts full 168-byte stripes with capacity framing.
 func (s *state8) bodyFastLoopEncrypt168(src, dst []byte, stride int) {
 	n := max(len(src)-7*stride, 0)
-	n = (n / Rate) * Rate
-	for off := 0; off < n; off += Rate {
+	n = (n / rate) * rate
+	for off := 0; off < n; off += rate {
 		for lane := range 21 {
 			base := lane << 3
 			for inst := range 8 {
@@ -116,8 +116,8 @@ func (s *state8) bodyFastLoopEncrypt168(src, dst []byte, stride int) {
 // bodyFastLoopDecrypt168 decrypts full 168-byte stripes with capacity framing.
 func (s *state8) bodyFastLoopDecrypt168(src, dst []byte, stride int) {
 	n := max(len(src)-7*stride, 0)
-	n = (n / Rate) * Rate
-	for off := 0; off < n; off += Rate {
+	n = (n / rate) * rate
+	for off := 0; off < n; off += rate {
 		for lane := range 21 {
 			base := lane << 3
 			for inst := range 8 {

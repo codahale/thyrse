@@ -1,4 +1,4 @@
-package keccak
+package tw128
 
 import (
 	"bytes"
@@ -43,7 +43,7 @@ func TestEncryptChunksTW128(t *testing.T) {
 	// Run arch-dispatched path.
 	dst2 := make([]byte, 8*blockSize)
 	var tags2 [256]byte
-	EncryptChunksTW128(key, nonce, 1, src, dst2, &tags2)
+	encryptChunksTW128(key, nonce, 1, src, dst2, &tags2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("ciphertext mismatch between generic and arch paths")
@@ -82,7 +82,7 @@ func TestDecryptChunksTW128(t *testing.T) {
 	// Run arch-dispatched path.
 	dst2 := make([]byte, 8*blockSize)
 	var tags2 [256]byte
-	DecryptChunksTW128(key, nonce, 1, src, dst2, &tags2)
+	decryptChunksTW128(key, nonce, 1, src, dst2, &tags2)
 
 	if !bytes.Equal(dst1, dst2) {
 		t.Error("plaintext mismatch between generic and arch paths")
@@ -112,7 +112,7 @@ func BenchmarkEncryptChunksTW128(b *testing.B) {
 	var tags [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		EncryptChunksTW128(key, nonce, 1, src, dst, &tags)
+		encryptChunksTW128(key, nonce, 1, src, dst, &tags)
 	}
 }
 
@@ -128,6 +128,6 @@ func BenchmarkDecryptChunksTW128(b *testing.B) {
 	var tags [256]byte
 	b.SetBytes(8 * blockSize)
 	for b.Loop() {
-		DecryptChunksTW128(key, nonce, 1, src, dst, &tags)
+		decryptChunksTW128(key, nonce, 1, src, dst, &tags)
 	}
 }

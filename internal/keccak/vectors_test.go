@@ -31,8 +31,6 @@ type spongeCase struct {
 type vectorFile struct {
 	Permute1 []permuteCase1 `json:"permute1"`
 	Permute2 []permuteCaseN `json:"permute2"`
-	Permute4 []permuteCaseN `json:"permute4"`
-	Permute8 []permuteCaseN `json:"permute8"`
 	Sponge   []spongeCase   `json:"sponge"`
 }
 
@@ -97,19 +95,6 @@ func stateNSetBytes[T ~int](slices [][]byte, width T, set func(inst, lane int, v
 			set(inst, lane, binary.LittleEndian.Uint64(slices[inst][base:base+8]))
 		}
 	}
-}
-
-func stateNBytes(width int, get func(inst, lane int) uint64) [][]byte {
-	out := make([][]byte, width)
-	for inst := range width {
-		b := make([]byte, stateBytes)
-		for lane := range lanes {
-			base := lane * 8
-			binary.LittleEndian.PutUint64(b[base:base+8], get(inst, lane))
-		}
-		out[inst] = b
-	}
-	return out
 }
 
 func stateNFromHex[T ~int](t *testing.T, in []string, width T) [][]byte {
@@ -248,21 +233,5 @@ func TestDuplexEqual(t *testing.T) {
 	b.Absorb([]byte("x"))
 	if got, want := a.Equal(&b), 0; got != want {
 		t.Fatalf("Equal() = %d, want %d", got, want)
-	}
-}
-
-func TestPermuteVectorsstate8(t *testing.T) {
-	vectors := loadVectors(t)
-	for i, tc := range vectors.Permute8 {
-		ins := stateNFromHex(t, tc.In, 8)
-		wants := stateNFromHex(t, tc.Out, 8)
-		var s state8
-		stateNSetBytes(ins, 8, func(inst, lane int, v uint64) { s.a[lane][inst] = v })
-		s.permute12()
-		for inst, got := range stateNBytes(8, func(i, lane int) uint64 { return s.a[lane][i] }) {
-			if string(got) != string(wants[inst]) {
-				t.Fatalf("permute8[%d] lane %d mismatch", i, inst)
-			}
-		}
 	}
 }

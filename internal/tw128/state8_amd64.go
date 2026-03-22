@@ -1,6 +1,6 @@
 //go:build amd64 && !purego
 
-package keccak
+package tw128
 
 import "github.com/codahale/thyrse/internal/cpuid"
 

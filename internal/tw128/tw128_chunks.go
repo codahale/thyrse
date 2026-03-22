@@ -1,18 +1,18 @@
-package keccak
+package tw128
 
 import "encoding/binary"
 
 const (
-	tw128ChunkSize     = 8128
-	tw128ChunkBodySize = (tw128ChunkSize / Rate) * Rate
+	tw128ChunkSize     = ChunkSize
+	tw128ChunkBodySize = (tw128ChunkSize / rate) * rate
 	tw128ChunkTailSize = tw128ChunkSize - tw128ChunkBodySize
 )
 
-// EncryptChunksTW128 encrypts 8 × 8128-byte chunks from src into dst,
+// encryptChunksTW128 encrypts 8 × 8128-byte chunks from src into dst,
 // initializing 8 parallel leaf duplexes with key and iv(nonce, baseIndex+i),
 // and writing the 8×32-byte leaf tags to tags.
 // Src and dst must each be exactly 8×8128 = 65024 bytes.
-func EncryptChunksTW128(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
+func encryptChunksTW128(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
 	var s state8
 	initChunksTW128(&s, key, nonce, baseIndex)
 	if encryptChunksTW128Arch(&s, src, dst, tags) {
@@ -21,11 +21,11 @@ func EncryptChunksTW128(key, nonce []byte, baseIndex uint64, src, dst []byte, ta
 	encryptChunksTW128Generic(&s, src, dst, tags)
 }
 
-// DecryptChunksTW128 decrypts 8 × 8128-byte chunks from src into dst,
+// decryptChunksTW128 decrypts 8 × 8128-byte chunks from src into dst,
 // initializing 8 parallel leaf duplexes with key and iv(nonce, baseIndex+i),
 // and writing the 8×32-byte leaf tags to tags.
 // Src and dst must each be exactly 8×8128 = 65024 bytes.
-func DecryptChunksTW128(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
+func decryptChunksTW128(key, nonce []byte, baseIndex uint64, src, dst []byte, tags *[256]byte) {
 	var s state8
 	initChunksTW128(&s, key, nonce, baseIndex)
 	if decryptChunksTW128Arch(&s, src, dst, tags) {
@@ -49,11 +49,11 @@ func initChunksTW128(s *state8, key, nonce []byte, baseIndex uint64) {
 	// Since all instances share the same nonce prefix, most lanes are identical.
 	// Only the lanes containing ν(j) differ.
 	for inst := range 8 {
-		var ivBuf [Rate]byte
+		var ivBuf [rate]byte
 		j := baseIndex + uint64(inst)
 		var nu [10]byte // max right_encode size
 		nuLen := rightEncodeInto(nu[:], j)
-		off := Rate - 16 - nuLen
+		off := rate - 16 - nuLen
 		copy(ivBuf[off:], nonce)
 		copy(ivBuf[off+16:], nu[:nuLen])
 		for lane := range 21 {

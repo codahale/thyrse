@@ -1,6 +1,6 @@
 //go:build arm64 && !purego
 
-package keccak
+package tw128
 
 //go:noescape
 func p1600x8Lane(a *state8)
