@@ -137,11 +137,7 @@ func (c *cryptor) xorKeyStream(dst, src []byte) {
 	if !c.leafMode {
 		// Still on chunk 0.
 		n := min(len(src), ChunkSize-c.chunkOff)
-		if c.decrypt {
-			c.trunk.bodyDecrypt(dst[:n], src[:n])
-		} else {
-			c.trunk.bodyEncrypt(dst[:n], src[:n])
-		}
+		c.trunk.bodyXOR(dst[:n], src[:n], c.decrypt)
 		c.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -160,11 +156,7 @@ func (c *cryptor) xorKeyStream(dst, src []byte) {
 	// Continue an in-progress partial leaf chunk.
 	if c.chunkOff > 0 {
 		n := min(len(src), ChunkSize-c.chunkOff)
-		if c.decrypt {
-			c.leaf.bodyDecrypt(dst[:n], src[:n])
-		} else {
-			c.leaf.bodyEncrypt(dst[:n], src[:n])
-		}
+		c.leaf.bodyXOR(dst[:n], src[:n], c.decrypt)
 		c.chunkOff += n
 		dst = dst[n:]
 		src = src[n:]
@@ -185,11 +177,7 @@ func (c *cryptor) xorKeyStream(dst, src []byte) {
 	if len(src) > 0 {
 		initLeaf(&c.leaf, c.key[:], c.nonce[:], uint64(c.nLeaves+1))
 		c.chunkOff = 0
-		if c.decrypt {
-			c.leaf.bodyDecrypt(dst[:len(src)], src)
-		} else {
-			c.leaf.bodyEncrypt(dst[:len(src)], src)
-		}
+		c.leaf.bodyXOR(dst[:len(src)], src, c.decrypt)
 		c.chunkOff += len(src)
 	}
 }

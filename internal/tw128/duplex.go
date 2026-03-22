@@ -212,10 +212,14 @@ func (d *duplex) bodyDecryptLoop(src, dst []byte) int {
 	return n
 }
 
-func (d *duplex) bodyEncrypt(dst, src []byte) {
+func (d *duplex) bodyXOR(dst, src []byte, decrypt bool) {
 	if d.pos > 0 && len(src) > 0 {
 		n := min(rate-d.pos, len(src))
-		d.encryptBytesAt(d.pos, src[:n], dst[:n])
+		if decrypt {
+			d.decryptBytesAt(d.pos, src[:n], dst[:n])
+		} else {
+			d.encryptBytesAt(d.pos, src[:n], dst[:n])
+		}
 		d.pos += n
 		src = src[n:]
 		dst = dst[n:]
@@ -227,39 +231,22 @@ func (d *duplex) bodyEncrypt(dst, src []byte) {
 	}
 
 	if d.pos == 0 && len(src) >= rate {
-		done := d.bodyEncryptLoop(src, dst)
-		src = src[done:]
-		dst = dst[done:]
-	}
-
-	if len(src) > 0 {
-		d.encryptBytesAt(d.pos, src, dst)
-		d.pos += len(src)
-	}
-}
-
-func (d *duplex) bodyDecrypt(dst, src []byte) {
-	if d.pos > 0 && len(src) > 0 {
-		n := min(rate-d.pos, len(src))
-		d.decryptBytesAt(d.pos, src[:n], dst[:n])
-		d.pos += n
-		src = src[n:]
-		dst = dst[n:]
-		if d.pos == rate {
-			d.a[21] ^= 0x01
-			d.permute12()
-			d.pos = 0
+		var done int
+		if decrypt {
+			done = d.bodyDecryptLoop(src, dst)
+		} else {
+			done = d.bodyEncryptLoop(src, dst)
 		}
-	}
-
-	if d.pos == 0 && len(src) >= rate {
-		done := d.bodyDecryptLoop(src, dst)
 		src = src[done:]
 		dst = dst[done:]
 	}
 
 	if len(src) > 0 {
-		d.decryptBytesAt(d.pos, src, dst)
+		if decrypt {
+			d.decryptBytesAt(d.pos, src, dst)
+		} else {
+			d.encryptBytesAt(d.pos, src, dst)
+		}
 		d.pos += len(src)
 	}
 }
