@@ -6,14 +6,6 @@ import (
 	"testing"
 )
 
-func testChunkKey() []byte {
-	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i)
-	}
-	return key
-}
-
 func testChunkNonce() []byte {
 	nonce := make([]byte, 16)
 	for i := range nonce {
@@ -24,7 +16,7 @@ func testChunkNonce() []byte {
 
 func TestEncryptChunksTW128(t *testing.T) {
 	const blockSize = tw128ChunkSize
-	key := testChunkKey()
+	key := testKey()
 	nonce := testChunkNonce()
 
 	// Build deterministic input.
@@ -63,7 +55,7 @@ func TestEncryptChunksTW128(t *testing.T) {
 
 func TestDecryptChunksTW128(t *testing.T) {
 	const blockSize = tw128ChunkSize
-	key := testChunkKey()
+	key := testKey()
 	nonce := testChunkNonce()
 
 	// Build deterministic input (ciphertext).
@@ -102,7 +94,7 @@ func TestDecryptChunksTW128(t *testing.T) {
 
 func BenchmarkEncryptChunksTW128(b *testing.B) {
 	const blockSize = tw128ChunkSize
-	key := testChunkKey()
+	key := testKey()
 	nonce := testChunkNonce()
 	src := make([]byte, 8*blockSize)
 	dst := make([]byte, 8*blockSize)
@@ -118,7 +110,7 @@ func BenchmarkEncryptChunksTW128(b *testing.B) {
 
 func BenchmarkDecryptChunksTW128(b *testing.B) {
 	const blockSize = tw128ChunkSize
-	key := testChunkKey()
+	key := testKey()
 	nonce := testChunkNonce()
 	src := make([]byte, 8*blockSize)
 	dst := make([]byte, 8*blockSize)
