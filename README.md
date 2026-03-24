@@ -17,7 +17,9 @@ oracle, pseudorandom function security, and collision resistance), all at a 128-
 against generic attacks). One security analysis covers the entire framework.
 
 [STROBE]: https://strobe.sourceforge.io
+
 [Noise Protocol]: http://www.noiseprotocol.org
+
 [Xoodyak]: https://keccak.team/xoodyak.html
 
 ## Schemes
@@ -26,63 +28,61 @@ Thyrse ships with a library of ready-to-use cryptographic schemes built on the c
 
 ### Basic
 
-| Scheme | What it does |
-|--------|-------------|
-| **digest** | Hash (32 bytes) and HMAC (16 bytes) via `New` / `NewKeyed` |
-| **aead** | Authenticated encryption implementing `crypto/cipher.AEAD` |
-| **siv** | Nonce-misuse-resistant AEAD (Synthetic Initialization Vector) |
+| Scheme       | What it does                                                               |
+|--------------|----------------------------------------------------------------------------|
+| **digest**   | Hash (32 bytes) and HMAC (16 bytes) via `New` / `NewKeyed`                 |
+| **aead**     | Authenticated encryption implementing `crypto/cipher.AEAD`                 |
+| **siv**      | Nonce-misuse-resistant AEAD (Synthetic Initialization Vector)              |
 | **aestream** | Streaming authenticated encryption with `io.Reader` / `io.Writer` wrappers |
-| **oae2** | Online authenticated encryption with block-based streaming |
-| **mhf** | Data-dependent memory-hard function (DEGSample, Blocki & Holman 2025) |
+| **oae2**     | Online authenticated encryption with block-based streaming                 |
+| **mhf**      | Data-dependent memory-hard function (DEGSample, Blocki & Holman 2025)      |
 
 ### Complex
 
-| Scheme | What it does |
-|--------|-------------|
-| **sig** | EdDSA-style Schnorr signatures over Ristretto255 |
-| **hpke** | Hybrid public-key encryption (static-ephemeral DH) |
+| Scheme        | What it does                                                                 |
+|---------------|------------------------------------------------------------------------------|
+| **sig**       | EdDSA-style Schnorr signatures over Ristretto255                             |
+| **hpke**      | Hybrid public-key encryption (static-ephemeral DH)                           |
 | **signcrypt** | Signcryption — confidentiality, authenticity, and signer privacy in one shot |
-| **oprf** | Oblivious pseudorandom function with blinding (RFC 9497-style) |
-| **vrf** | Verifiable random function with proofs |
-| **pake** | Password-authenticated key exchange (CPace-style) |
-| **frost** | FROST threshold signatures (Flexible Round-Optimized Schnorr Threshold) |
-| **adratchet** | Asynchronous double ratchet with forward secrecy and break-in recovery |
+| **oprf**      | Oblivious pseudorandom function with blinding (RFC 9497-style)               |
+| **vrf**       | Verifiable random function with proofs                                       |
+| **pake**      | Password-authenticated key exchange (CPace-style)                            |
+| **frost**     | FROST threshold signatures (Flexible Round-Optimized Schnorr Threshold)      |
+| **adratchet** | Asynchronous double ratchet with forward secrecy and break-in recovery       |
 
 All schemes are in `schemes/basic/` and `schemes/complex/` respectively.
 
 ## Performance
 
-Under the hood, Thyrse accelerates large messages with [TW128] — a tree-parallel authenticated encryption layer
-based on keyed duplexes. TW128 processes leaf chunks 8-wide on x86-64 and 4-wide on ARM64, saturating available
-vector units automatically.
+Under the hood, Thyrse hashes inputs with [KT128] and encrypts messages with [TW128] -- both tree-parallel,
+permutation-based constructions. They both use SIMD instructions for lower latency on short inputs and higher throughput
+on long inputs.
 
-| Platform | SIMD | Parallel lanes |
-|----------|------|----------------|
-| x86-64   | AVX-512 / AVX2 | 8-wide |
-| ARM64    | NEON / FEAT_SHA3 | up to 4-wide |
-| Any      | Pure Go | all widths (portable) |
+| Platform | SIMD             | Parallel lanes        |
+|----------|------------------|-----------------------|
+| x86-64   | AVX-512 / AVX2   | 8-wide                |
+| ARM64    | NEON / FEAT_SHA3 | up to 4-wide          |
+| Any      | Pure Go          | all widths (portable) |
 
 Build with `-tags purego` to disable assembly on any platform.
 
+[KT128]: https://github.com/codahale/kt128
 [TW128]: https://github.com/codahale/treewrap
 
 ## The Protocol API
 
-At the core is a `Protocol` — a transcript that accumulates data and derives cryptographic outputs via [KT128]
-(KangarooTwelve, RFC 9861).
+At the core is a `Protocol` — a transcript that accumulates data and derives cryptographic outputs.
 
 ```go
 p := thyrse.New("myapp.v1")
 p.Mix("user-id", userID)
 p.Mix("nonce", nonce)
-ct := p.Seal("message", nil, plaintext)   // encrypt + authenticate
+ct := p.Seal("message", nil, plaintext) // encrypt + authenticate
 ```
 
 Key operations: `Mix`, `Derive`, `Ratchet`, `Mask`/`Unmask`, `Seal`/`Open`, `Fork`/`ForkN`, `Clone`, `Clear`.
 
 See the [full specification](docs/thyrse-spec.md) for details.
-
-[KT128]: https://www.rfc-editor.org/rfc/rfc9861
 
 ## License
 
