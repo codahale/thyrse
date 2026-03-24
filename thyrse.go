@@ -12,10 +12,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/codahale/kt128"
 	"github.com/codahale/thyrse/internal/enc"
-	"github.com/codahale/thyrse/internal/kt128"
 	"github.com/codahale/thyrse/internal/mem"
-	"github.com/codahale/thyrse/internal/tw128"
+	"github.com/codahale/treewrap/tw128"
 )
 
 // TagSize is the tag size appended by Seal.

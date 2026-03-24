@@ -38,13 +38,3 @@ func EncodeString(b []byte, data []byte) []byte {
 	b = LeftEncode(b, uint64(len(data))*8)
 	return append(b, data...)
 }
-
-// LengthEncode encodes x as in KangarooTwelve (RFC 9861 Section 2.3.1):
-// big-endian with no leading zeros, followed by a byte giving the length
-// of the encoding. The result is appended to buf and returned as a slice.
-func LengthEncode(b []byte, value uint64) []byte {
-	if value == 0 {
-		return append(b, 0x00)
-	}
-	return RightEncode(b, value)
-}
