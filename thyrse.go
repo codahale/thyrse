@@ -1,12 +1,4 @@
 // Package thyrse implements a transcript-based cryptographic protocol framework.
-//
-// At each finalizing operation, KT128 is evaluated over the transcript to derive
-// a pseudorandom bundle, which is then parsed into chain values, keys, and
-// returned output. The transcript uses TKDF encoding, which is recoverable,
-// providing random-oracle-indifferentiable key derivation via the RO-KDF
-// construction.
-//
-// See docs/thyrse-spec.md for the full specification.
 package thyrse
 
 import (

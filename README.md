@@ -82,7 +82,7 @@ ct := p.Seal("message", nil, plaintext) // encrypt + authenticate
 
 Key operations: `Mix`, `Derive`, `Ratchet`, `Mask`/`Unmask`, `Seal`/`Open`, `Fork`/`ForkN`, `Clone`, `Clear`.
 
-See the [full specification](docs/thyrse-spec.md) for details.
+See the [design paper](docs/thyrse.md) for the construction and security analysis.
 
 ## License
 
