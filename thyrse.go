@@ -1,8 +1,10 @@
 // Package thyrse implements a transcript-based cryptographic protocol framework.
 //
-// At each finalizing operation, KT128 is evaluated over the transcript to derive keys, chain values, and pseudorandom
-// output. The transcript uses TKDF encoding, which is recoverable, providing random-oracle-indifferentiable key
-// derivation via the RO-KDF construction.
+// At each finalizing operation, KT128 is evaluated over the transcript to derive
+// a pseudorandom bundle, which is then parsed into chain values, keys, and
+// returned output. The transcript uses TKDF encoding, which is recoverable,
+// providing random-oracle-indifferentiable key derivation via the RO-KDF
+// construction.
 //
 // See docs/thyrse-spec.md for the full specification.
 package thyrse
@@ -22,13 +24,14 @@ import (
 const TagSize = tw128.TagSize
 
 // ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. After a failed Open, the
-// protocol's transcript has diverged from the sender's because the CHAIN frame absorbed a different tag.
+// protocol's transcript has diverged from the sender's because the chain frame absorbed a different tag.
 var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 
 // Protocol is a transcript-based cryptographic protocol instance.
 //
-// Operations append TKDF frames to an internal transcript. Finalizing operations (Derive, Ratchet, Mask, Seal)
-// evaluate KT128 over the transcript, derive outputs, and reset the transcript with a chain value.
+// Operations append TKDF frames to an internal transcript. Finalizing
+// operations evaluate KT128 over the transcript, parse the resulting bundle, and
+// reset the transcript with a chain value.
 type Protocol struct {
 	h          *kt128.Hasher
 	frameStart uint64
@@ -37,7 +40,7 @@ type Protocol struct {
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	p := &Protocol{h: kt128.New([]byte{dsRatchet})}
+	p := &Protocol{h: kt128.New(nil)}
 	p.beginFrame(opInit, label)
 	p.endFrame()
 	return p
@@ -107,7 +110,7 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(outputLen)))
 	p.endFrame()
 
-	cv := p.finalize(dsDerive, out)
+	cv := p.finalize(csDerive, out)
 	p.resetChain(opDerive, cv[:], nil)
 
 	return ret
@@ -118,7 +121,7 @@ func (p *Protocol) Ratchet(label string) {
 	p.beginFrame(opRatchet, label)
 	p.endFrame()
 
-	cv := p.finalize(dsRatchet, nil)
+	cv := p.finalize(csRatchet, nil)
 	p.resetChain(opRatchet, cv[:], nil)
 }
 
@@ -131,7 +134,7 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
-	cv := p.finalize(dsMask, twKey[:])
+	cv := p.finalize(csMask, twKey[:])
 
 	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
 	e := tw128.NewEncryptor(twKey[:], nil, nil)
@@ -150,7 +153,7 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
-	cv := p.finalize(dsMask, twKey[:])
+	cv := p.finalize(csMask, twKey[:])
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
 	d := tw128.NewDecryptor(twKey[:], nil, nil)
@@ -172,7 +175,7 @@ func (p *Protocol) MaskStream(label string) *MaskStream {
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
-	cv := p.finalize(dsMask, twKey[:])
+	cv := p.finalize(csMask, twKey[:])
 
 	ms := &MaskStream{
 		p:  p,
@@ -214,7 +217,7 @@ func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
-	cv := p.finalize(dsMask, twKey[:])
+	cv := p.finalize(csMask, twKey[:])
 
 	us := &UnmaskStream{
 		p:  p,
@@ -256,7 +259,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
-	cv := p.finalize(dsSeal, twKey[:])
+	cv := p.finalize(csSeal, twKey[:])
 
 	e := tw128.NewEncryptor(twKey[:], nil, nil)
 	e.XORKeyStream(ciphertext, plaintext)
@@ -273,7 +276,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 // appended (as returned by Seal).
 //
 // On success, returns the plaintext. On failure, returns ErrInvalidCiphertext. The protocol's transcript diverges
-// from the sender's because the CHAIN frame absorbs the computed tag before verification returns.
+// from the sender's because the chain frame absorbs the computed tag before verification returns.
 func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	var ct, tt []byte
 	if len(sealed) < TagSize {
@@ -287,7 +290,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
-	cv := p.finalize(dsSeal, twKey[:])
+	cv := p.finalize(csSeal, twKey[:])
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ct))
 	d := tw128.NewDecryptor(twKey[:], nil, nil)
@@ -317,18 +320,15 @@ func (p *Protocol) Clear() {
 	p.h = nil
 }
 
-// finalize performs KT128 finalization.
-//
-// For Derive, Mask, and Seal: two KT128 evaluations via [kt128.Hasher.Chain]
-// produce the chain value (dsChain) and the output (outputDS) in parallel.
-//
-// For Ratchet: a single KT128 evaluation produces the chain value (dsRatchet).
-func (p *Protocol) finalize(outputDS byte, dst []byte) [chainValueSize]byte {
+// finalize derives one KT128 output bundle for the current transcript. The
+// bundle is parsed as cv || dst, where cv is always chainValueSize bytes and dst
+// may be empty.
+func (p *Protocol) finalize(customization []byte, dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
-	if outputDS == dsRatchet {
-		_, _ = p.h.Read(cv[:])
-	} else {
-		p.h.Chain(dsChain, cv[:], outputDS, dst)
+	p.h.SetCustomizationString(customization)
+	_, _ = p.h.Read(cv[:])
+	if len(dst) > 0 {
+		_, _ = p.h.Read(dst)
 	}
 	return cv
 }
@@ -354,7 +354,7 @@ func (p *Protocol) endFrame() {
 	_, _ = p.h.Write(enc.RightEncode(buf[:0], p.frameStart))
 }
 
-// resetChain resets the transcript with a CHAIN frame. The chain value is always chainValueSize bytes and the tag, when
+// resetChain resets the transcript with a chain frame. The chain value is always chainValueSize bytes and the tag, when
 // present, is always tw128.TagSize bytes.
 //
 // The frame layout is assembled into a stack buffer and written in a single h.Write call. After h.Reset, the frame
@@ -413,13 +413,6 @@ const (
 	// chainValueSize is the chain value size in bytes (H).
 	chainValueSize = 64
 
-	// KT128 customization strings.
-	dsChain   = 0x20
-	dsDerive  = 0x21
-	dsMask    = 0x22
-	dsSeal    = 0x23
-	dsRatchet = 0x24
-
 	// Operation codes.
 	opInit    = 0x01
 	opMix     = 0x02
@@ -429,4 +422,11 @@ const (
 	opMask    = 0x06
 	opSeal    = 0x07
 	opChain   = 0x08
+)
+
+var (
+	csDerive  = []byte("thyrse/derive")
+	csRatchet = []byte("thyrse/ratchet")
+	csMask    = []byte("thyrse/mask")
+	csSeal    = []byte("thyrse/seal")
 )
