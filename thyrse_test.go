@@ -240,9 +240,17 @@ func TestOpen(t *testing.T) {
 
 	t.Run("input too short", func(t *testing.T) {
 		p := New("test")
+		ref := p.Clone()
+
 		_, err := p.Open("msg", nil, make([]byte, TagSize-1))
 		if !errors.Is(err, ErrInvalidCiphertext) {
 			t.Fatalf("got %v, want ErrInvalidCiphertext", err)
+		}
+
+		got := p.Derive("check", nil, 32)
+		want := ref.Derive("check", nil, 32)
+		if bytes.Equal(got, want) {
+			t.Fatal("short Open should advance and diverge state")
 		}
 	})
 }

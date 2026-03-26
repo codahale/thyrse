@@ -273,14 +273,15 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 // appended (as returned by Seal).
 //
 // On success, returns the plaintext. On failure, returns ErrInvalidCiphertext. The protocol's transcript diverges
-// from the sender's because the CHAIN frame absorbs a different computed tag.
+// from the sender's because the CHAIN frame absorbs the computed tag before verification returns.
 func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
+	var ct, tt []byte
 	if len(sealed) < TagSize {
-		return nil, ErrInvalidCiphertext
+		tt = sealed
+	} else {
+		ct = sealed[:len(sealed)-TagSize]
+		tt = sealed[len(sealed)-TagSize:]
 	}
-
-	ct := sealed[:len(sealed)-TagSize]
-	tt := sealed[len(sealed)-TagSize:]
 
 	p.beginFrame(opSeal, label)
 	p.endFrame()
