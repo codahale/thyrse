@@ -40,7 +40,7 @@ type Protocol struct {
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	p := &Protocol{h: kt128.New(nil)}
+	p := &Protocol{h: kt128.New()}
 	p.beginFrame(opInit, label)
 	p.endFrame()
 	return p
