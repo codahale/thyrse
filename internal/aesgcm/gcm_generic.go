@@ -176,7 +176,7 @@ var ghashReductionTable = []uint16{
 func ghashMul(productTable *[16]gcmFieldElement, y *gcmFieldElement) {
 	var z gcmFieldElement
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		word := y.high
 		if i == 1 {
 			word = y.low
