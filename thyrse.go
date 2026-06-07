@@ -118,11 +118,13 @@ func (p *Protocol) Ratchet(label string) {
 }
 
 // Mask encrypts plaintext without authentication. The caller is responsible for authenticating the ciphertext through
-// external mechanisms.
+// external mechanisms. The plaintext length is bound into the protocol transcript.
 //
 // Confidentiality requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
 func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
+	var buf [enc.MaxIntSize]byte
 	p.beginFrame(opMask, label)
+	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(plaintext))))
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
@@ -141,7 +143,9 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 // Unmask decrypts ciphertext encrypted with [Protocol.Mask]. Both sides must have identical transcript state at the
 // point of the Mask or Unmask call.
 func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
+	var buf [enc.MaxIntSize]byte
 	p.beginFrame(opMask, label)
+	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(ciphertext))))
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
@@ -157,13 +161,16 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	return ret
 }
 
-// Seal encrypts plaintext with authentication. Returns ciphertext with a [TagSize]-byte tag appended. Confidentiality
-// requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
+// Seal encrypts plaintext with authentication. Returns ciphertext with a [TagSize]-byte tag appended. The plaintext
+// length is bound into the protocol transcript. Confidentiality requires that the transcript contains at least one
+// unpredictable input (see [Protocol.Mix]).
 func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	ret, out := mem.SliceForAppend(dst, len(plaintext)+TagSize)
 	ciphertext, tagDst := out[:len(plaintext)], out[len(plaintext):]
 
+	var buf [enc.MaxIntSize]byte
 	p.beginFrame(opSeal, label)
+	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(plaintext))))
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
@@ -194,7 +201,9 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 		tt = sealed[len(sealed)-TagSize:]
 	}
 
+	var buf [enc.MaxIntSize]byte
 	p.beginFrame(opSeal, label)
+	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(ct))))
 	p.endFrame()
 
 	var twKey [tw128.KeySize]byte
