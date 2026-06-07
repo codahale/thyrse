@@ -6,12 +6,10 @@
 > **This code has not been audited. This design has not been analyzed.** It is experimental and should not be used for
 > production systems or critical security applications. Use at your own risk.
 
-Thyrse is a transcript-based cryptographic protocol framework built on the $\text{Keccak-}f[1600, 12]$ permutation.
+Thyrse is a transcript-based cryptographic protocol framework built on the KT128 hash function and the AES-128-GCM AEAD.
 Inspired by [STROBE], [Noise Protocol], and [Xoodyak], it replaces the usual grab-bag of hash functions, MACs, and KDFs
-with a single permutation, keys AES-128-GCM from the resulting transcript for encryption, and builds everything from
-basic AEAD to threshold signatures on top. Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3, hardware AES), Thyrse
-delivers 10+ Gb/s on modern processors at a 128-bit security level while remaining fast enough in software for embedded
-devices.
+with a single construction.  Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3, hardware AES), Thyrse
+delivers 10+ Gb/s on modern processors at a 128-bit security level.
 
 The security of every scheme reduces to the properties of the underlying sponge (indifferentiability from a random
 oracle, pseudorandom function security, and collision resistance) and the AES-128-GCM AEAD used for encryption, all at a
