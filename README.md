@@ -7,14 +7,15 @@
 > production systems or critical security applications. Use at your own risk.
 
 Thyrse is a transcript-based cryptographic protocol framework built on the $\text{Keccak-}f[1600, 12]$ permutation.
-Inspired by [STROBE], [Noise Protocol], and [Xoodyak], it replaces the usual grab-bag of hash functions, MACs, stream
-ciphers, and KDFs with a single permutation — then builds everything from basic AEAD to threshold signatures on top of
-it. Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3), Thyrse delivers 10+ Gb/s on modern processors at
-a 128-bit security level while remaining fast enough in software for embedded devices.
+Inspired by [STROBE], [Noise Protocol], and [Xoodyak], it replaces the usual grab-bag of hash functions, MACs, and KDFs
+with a single permutation, keys AES-128-GCM from the resulting transcript for encryption, and builds everything from
+basic AEAD to threshold signatures on top. Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3, hardware AES), Thyrse
+delivers 10+ Gb/s on modern processors at a 128-bit security level while remaining fast enough in software for embedded
+devices.
 
 The security of every scheme reduces to the properties of the underlying sponge (indifferentiability from a random
-oracle, pseudorandom function security, and collision resistance), all at a 128-bit security level ($2^{128}$
-against generic attacks). One security analysis covers the entire framework.
+oracle, pseudorandom function security, and collision resistance) and the AES-128-GCM AEAD used for encryption, all at a
+128-bit security level ($2^{128}$ against generic attacks). A single analysis covers the framework's transcript layer.
 
 [STROBE]: https://strobe.sourceforge.io
 
@@ -54,9 +55,8 @@ All schemes are in `schemes/basic/` and `schemes/complex/` respectively.
 
 ## Performance
 
-Under the hood, Thyrse hashes inputs with [KT128] and encrypts messages with [TW128] -- both tree-parallel,
-permutation-based constructions. They both use SIMD instructions for lower latency on short inputs and higher throughput
-on long inputs.
+Under the hood, Thyrse hashes inputs and derives keys with [KT128], a tree-parallel, permutation-based construction that
+uses SIMD instructions for lower latency on short inputs and higher throughput on long ones.
 
 | Platform | SIMD             | Parallel lanes        |
 |----------|------------------|-----------------------|
@@ -64,10 +64,12 @@ on long inputs.
 | ARM64    | NEON / FEAT_SHA3 | up to 4-wide          |
 | Any      | Pure Go          | all widths (portable) |
 
+Encryption uses AES-128-GCM via the stitched AES-CTR + GHASH assembly from the Go standard library — AES-NI and
+PCLMULQDQ on x86-64, ARMv8 AES and PMULL on ARM64 — with a constant-time portable fallback elsewhere.
+
 Build with `-tags purego` to disable assembly on any platform.
 
 [KT128]: https://github.com/codahale/kt128
-[TW128]: https://github.com/codahale/treewrap
 
 ## The Protocol API
 
@@ -81,8 +83,6 @@ ct := p.Seal("message", nil, plaintext) // encrypt + authenticate
 ```
 
 Key operations: `Mix`, `Derive`, `Ratchet`, `Mask`/`Unmask`, `Seal`/`Open`, `Fork`/`ForkN`, `Clone`, `Clear`.
-
-See the [design paper](docs/thyrse.md) for the construction and security analysis.
 
 ## License
 

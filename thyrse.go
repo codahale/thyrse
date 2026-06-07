@@ -7,13 +7,14 @@ import (
 	"fmt"
 
 	"github.com/codahale/kt128"
+	"github.com/codahale/thyrse/internal/aesgcm"
 	"github.com/codahale/thyrse/internal/enc"
 	"github.com/codahale/thyrse/internal/mem"
-	"github.com/codahale/treewrap/tw128"
 )
 
-// TagSize is the tag size appended by Seal.
-const TagSize = tw128.TagSize
+// TagSize is the size in bytes of the authentication tag appended by Seal. The tag is KT128 output committing to the
+// transcript after the AES-GCM tag is bound, not the AES-GCM tag itself.
+const TagSize = 32
 
 // ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. After a failed Open, the
 // protocol's transcript has diverged from the sender's because the chain frame absorbed a different tag.
@@ -127,16 +128,15 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(plaintext))))
 	p.endFrame()
 
-	var twKey [tw128.KeySize]byte
-	cv := p.finalize(csMask, twKey[:])
+	var keyNonce [aesgcm.KeySize + aesgcm.NonceSize]byte
+	cv := p.finalize(csMask, keyNonce[:])
+	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
 	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
-	e := tw128.NewEncryptor(twKey[:], nil, nil)
-	e.XORKeyStream(ciphertext, plaintext)
-	tag := e.Finalize()
-	clear(twKey[:])
+	_, tag := aesgcm.Encrypt(ciphertext[:0], key, nonce, plaintext)
+	clear(keyNonce[:])
 
-	p.resetChain(opMask, cv[:], tag[:])
+	p.resetChain(opMask, cv[:], tag)
 	return ret
 }
 
@@ -148,16 +148,15 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(ciphertext))))
 	p.endFrame()
 
-	var twKey [tw128.KeySize]byte
-	cv := p.finalize(csMask, twKey[:])
+	var keyNonce [aesgcm.KeySize + aesgcm.NonceSize]byte
+	cv := p.finalize(csMask, keyNonce[:])
+	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
-	d := tw128.NewDecryptor(twKey[:], nil, nil)
-	d.XORKeyStream(plaintext, ciphertext)
-	tag := d.Finalize()
-	clear(twKey[:])
+	_, tag := aesgcm.Decrypt(plaintext[:0], key, nonce, ciphertext)
+	clear(keyNonce[:])
 
-	p.resetChain(opMask, cv[:], tag[:])
+	p.resetChain(opMask, cv[:], tag)
 	return ret
 }
 
@@ -173,17 +172,21 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(plaintext))))
 	p.endFrame()
 
-	var twKey [tw128.KeySize]byte
-	cv := p.finalize(csSeal, twKey[:])
+	var keyNonce [aesgcm.KeySize + aesgcm.NonceSize]byte
+	cv := p.finalize(csSeal, keyNonce[:])
+	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
-	e := tw128.NewEncryptor(twKey[:], nil, nil)
-	e.XORKeyStream(ciphertext, plaintext)
-	fullTag := e.Finalize()
-	clear(twKey[:])
+	_, gcmTag := aesgcm.Encrypt(ciphertext[:0], key, nonce, plaintext)
+	clear(keyNonce[:])
 
-	p.resetChain(opSeal, cv[:], fullTag[:])
+	// Bind the AES-GCM tag into the transcript under opSealTag, then derive the
+	// wire tag (KT128 output) from that state instead of returning the AES-GCM
+	// tag itself. The completed seal then chains under opSeal, keeping the
+	// tag-derivation state distinct from the state subsequent operations follow.
+	p.resetChain(opSealTag, cv[:], gcmTag)
+	cv = p.finalize(csSeal, tagDst)
+	p.resetChain(opSeal, cv[:], nil)
 
-	copy(tagDst, fullTag[:])
 	return ret
 }
 
@@ -191,7 +194,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 // appended (as returned by Seal).
 //
 // On success, returns the plaintext. On failure, returns ErrInvalidCiphertext. The protocol's transcript diverges
-// from the sender's because the chain frame absorbs the computed tag before verification returns.
+// from the sender's because the chain frame absorbs the computed AES-GCM tag before verification returns.
 func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	var ct, tt []byte
 	if len(sealed) < TagSize {
@@ -206,18 +209,23 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	_, _ = p.h.Write(enc.LeftEncode(buf[:0], uint64(len(ct))))
 	p.endFrame()
 
-	var twKey [tw128.KeySize]byte
-	cv := p.finalize(csSeal, twKey[:])
+	var keyNonce [aesgcm.KeySize + aesgcm.NonceSize]byte
+	cv := p.finalize(csSeal, keyNonce[:])
+	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ct))
-	d := tw128.NewDecryptor(twKey[:], nil, nil)
-	d.XORKeyStream(plaintext, ct)
-	fullTag := d.Finalize()
-	clear(twKey[:])
+	_, gcmTag := aesgcm.Decrypt(plaintext[:0], key, nonce, ct)
+	clear(keyNonce[:])
 
-	p.resetChain(opSeal, cv[:], fullTag[:])
+	// Bind the expected AES-GCM tag into the transcript under opSealTag, then
+	// recompute the wire tag (KT128 output) from that state and compare it
+	// against the received tag. The completed open chains under opSeal.
+	p.resetChain(opSealTag, cv[:], gcmTag)
+	var tag [TagSize]byte
+	cv = p.finalize(csSeal, tag[:])
+	p.resetChain(opSeal, cv[:], nil)
 
-	if subtle.ConstantTimeCompare(fullTag[:], tt) != 1 {
+	if subtle.ConstantTimeCompare(tag[:], tt) != 1 {
 		clear(plaintext)
 		return nil, ErrInvalidCiphertext
 	}
@@ -272,20 +280,20 @@ func (p *Protocol) endFrame() {
 }
 
 // resetChain resets the transcript with a chain frame. The chain value is always chainValueSize bytes and the tag, when
-// present, is always tw128.TagSize bytes.
+// present, is always aesgcm.TagSize (16) bytes.
 //
 // The frame layout is assembled into a stack buffer and written in a single h.Write call. After h.Reset, the frame
 // starts at position 0, so right_encode(frameStart) is always [0x00, 0x01].
 //
-// No-tag layout (75 bytes, used by Derive and Ratchet):
+// No-tag layout (75 bytes, used by Derive, Ratchet, and the completed Seal/Open under opSeal):
 //
 //	opChain 0x01 0x00  originOp  0x01 0x01  0x02 0x02 0x00 [chainValue: 64B]  0x00 0x01
 //	╰─ writeOpLabel ─╯           ╰─LE(1)─╯ ╰─LE(512)──╯                      ╰─RE(0)─╯
 //
-// With-tag layout (110 bytes, used by Mask and Seal):
+// With-tag layout (93 bytes, used by Mask/Unmask under opMask and the Seal/Open tag binding under opSealTag):
 //
-//	opChain 0x01 0x00  originOp  0x01 0x02  0x02 0x02 0x00 [chainValue: 64B]  0x02 0x01 0x00 [tag: 32B]  0x00 0x01
-//	╰─ writeOpLabel ─╯           ╰─LE(2)─╯ ╰─LE(512)──╯                      ╰─LE(256)──╯              ╰─RE(0)─╯
+//	opChain 0x01 0x00  originOp  0x01 0x02  0x02 0x02 0x00 [chainValue: 64B]  0x01 0x80 [tag: 16B]  0x00 0x01
+//	╰─ writeOpLabel ─╯           ╰─LE(2)─╯ ╰─LE(512)──╯                      ╰LE(128)╯            ╰─RE(0)─╯
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset()
 
@@ -305,7 +313,7 @@ func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 		buf[74] = 1 // right_encode(0) byte count
 		_, _ = p.h.Write(buf[:])
 	} else {
-		var buf [110]byte
+		var buf [93]byte
 		buf[0] = opChain
 		buf[1] = 1
 		// buf[2] = 0
@@ -316,12 +324,11 @@ func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 		buf[7] = 2 // left_encode(512)
 		// buf[8] = 0
 		copy(buf[9:73], chainValue)
-		buf[73] = 2
-		buf[74] = 1 // left_encode(256) = [2, 1, 0]
-		// buf[75] = 0
-		copy(buf[76:108], tag)
-		// buf[108] = 0
-		buf[109] = 1 // right_encode(0)
+		buf[73] = 1
+		buf[74] = 0x80 // left_encode(128) = [1, 0x80]
+		copy(buf[75:91], tag)
+		// buf[91] = 0
+		buf[92] = 1 // right_encode(0)
 		_, _ = p.h.Write(buf[:])
 	}
 }
@@ -339,6 +346,12 @@ const (
 	opMask    = 0x06
 	opSeal    = 0x07
 	opChain   = 0x08
+
+	// opSealTag is the origin code for the chain frame Seal and Open derive the
+	// wire tag from (the AES-GCM tag binding). The completed seal chains under
+	// opSeal, so this intermediate, tag-derivation state stays distinct from the
+	// state that subsequent operations follow.
+	opSealTag = 0x09
 )
 
 var (
