@@ -57,7 +57,7 @@ func seal(dst, key, nonce, plaintext []byte) (ciphertext, tag []byte) {
 
 	ret, out := sliceForAppend(dst, len(plaintext))
 	if len(plaintext) > 0 {
-		gcmAesEnc(&productTable, out, plaintext, &counter, &tagOut, ks)
+		gcmCrypt(gcmAesEnc, &productTable, out, plaintext, &counter, &tagOut, ks)
 	}
 	gcmAesFinish(&productTable, &tagMask, &tagOut, uint64(len(plaintext)), 0)
 
@@ -81,13 +81,31 @@ func open(dst, key, nonce, ciphertext []byte) (plaintext, tag []byte) {
 	ret, out := sliceForAppend(dst, len(ciphertext))
 	if len(ciphertext) > 0 {
 		// gcmAesDec authenticates the ciphertext as it decrypts it.
-		gcmAesDec(&productTable, out, ciphertext, &counter, &tagOut, ks)
+		gcmCrypt(gcmAesDec, &productTable, out, ciphertext, &counter, &tagOut, ks)
 	}
 	gcmAesFinish(&productTable, &tagMask, &tagOut, uint64(len(ciphertext)), 0)
 
 	tag = make([]byte, TagSize)
 	copy(tag, tagOut[:])
 	return ret, tag
+}
+
+// gcmCrypt runs fn (gcmAesEnc or gcmAesDec), which stores the final block of
+// output as a full 16-byte write. When len(src) is not a whole number of
+// blocks, that store would run past dst, so the operation is performed through a
+// block-padded scratch buffer and only len(src) bytes are copied back.
+func gcmCrypt(
+	fn func(productTable *[256]byte, dst, src []byte, ctr, T *[16]byte, ks []uint32),
+	productTable *[256]byte, dst, src []byte, ctr, T *[16]byte, ks []uint32,
+) {
+	if len(src)%gcmBlockSize == 0 {
+		fn(productTable, dst, src, ctr, T, ks)
+		return
+	}
+	buf := make([]byte, (len(src)+gcmBlockSize-1)&^(gcmBlockSize-1))
+	fn(productTable, buf, src, ctr, T, ks)
+	copy(dst, buf)
+	clear(buf)
 }
 
 // deriveCounterAsm computes the pre-counter block J0 into counter, which must be
