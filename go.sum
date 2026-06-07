@@ -14,5 +14,7 @@ github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5Cc
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/trailofbits/go-fuzz-utils v0.0.0-20250830184917-b61e672bc9ed h1:aeaWPTp+EWGctO1/iehSl5jX3r75srT+iDCPfHd+Gns=
 github.com/trailofbits/go-fuzz-utils v0.0.0-20250830184917-b61e672bc9ed/go.mod h1:zh+T+w9XT/3o4E0WLEGCdmLJ8Yqx/zY3o538tQY3OjY=
+golang.org/x/sys v0.45.0 h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=
+golang.org/x/sys v0.45.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
