@@ -96,41 +96,6 @@ func BenchmarkProtocol_Mix(b *testing.B) {
 	}
 }
 
-func BenchmarkProtocol_MaskStream(b *testing.B) {
-	for _, size := range testdata.Sizes {
-		b.Run(size.Name, func(b *testing.B) {
-			p := New("bench")
-			plaintext := make([]byte, size.N)
-			ciphertext := make([]byte, size.N)
-			b.SetBytes(int64(size.N))
-			b.ReportAllocs()
-			for b.Loop() {
-				ms := p.MaskStream("msg")
-				ms.XORKeyStream(ciphertext, plaintext)
-				_ = ms.Close()
-			}
-		})
-	}
-}
-
-func BenchmarkProtocol_UnmaskStream(b *testing.B) {
-	for _, size := range testdata.Sizes {
-		b.Run(size.Name, func(b *testing.B) {
-			p := New("bench")
-			plaintext := make([]byte, size.N)
-			ciphertext := make([]byte, size.N)
-
-			b.SetBytes(int64(size.N))
-			b.ReportAllocs()
-			for b.Loop() {
-				us := p.UnmaskStream("msg")
-				us.XORKeyStream(plaintext, ciphertext)
-				_ = us.Close()
-			}
-		})
-	}
-}
-
 func BenchmarkProtocol_Ratchet(b *testing.B) {
 	p := New("bench")
 	b.ReportAllocs()
