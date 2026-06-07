@@ -3,7 +3,6 @@ package testdata
 
 import (
 	"crypto/sha3"
-	"io"
 
 	"github.com/gtank/ristretto255"
 )
@@ -32,11 +31,4 @@ func (d *DRBG) Data(n int) []byte {
 	b := make([]byte, n)
 	_, _ = d.h.Read(b)
 	return b
-}
-
-// Reader returns pseudorandom reader seeded with a value from this DRBG.
-func (d *DRBG) Reader() io.Reader {
-	h := sha3.NewSHAKE128()
-	_, _ = h.Write(d.Data(32))
-	return h
 }
