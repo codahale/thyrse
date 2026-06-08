@@ -22,9 +22,8 @@ var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
 
 // Protocol is a transcript-based cryptographic protocol instance.
 //
-// Operations append TKDF frames to an internal transcript. Finalizing
-// operations evaluate KT128 over the transcript, parse the resulting bundle, and
-// reset the transcript with a chain value.
+// Operations append frames to an internal transcript. Finalizing operations evaluate KT128 over the
+// transcript, parse the resulting bundle, and reset the transcript with a chain value.
 type Protocol struct {
 	h          *kt128.Hasher
 	frameStart uint64
