@@ -7,10 +7,10 @@
 //
 // The adaptations: the byteorder dependency is replaced with encoding/binary;
 // AES-CTR is driven through crypto/cipher (which uses the optimized AES-CTR for
-// crypto/aes); additional data is dropped; and seal/open return the ciphertext
-// and tag (or unverified plaintext and expected tag) separately rather than as
-// one appended buffer. This is the portable fallback used when the hardware
-// AES-GCM assembly is unavailable.
+// crypto/aes); additional data is dropped; and seal/open write the ciphertext
+// (or unverified plaintext) into a caller-provided buffer and return the tag
+// separately, rather than appending both to one buffer. This is the portable
+// fallback used when the hardware AES-GCM assembly is unavailable.
 
 package aesgcm
 
@@ -21,7 +21,7 @@ import (
 	"encoding/binary"
 )
 
-func sealGeneric(dst, key, nonce, plaintext []byte) (ciphertext, tag []byte) {
+func sealGeneric(dst, key, nonce, plaintext []byte) (tag []byte) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		panic("aesgcm: " + err.Error())
@@ -32,12 +32,11 @@ func sealGeneric(dst, key, nonce, plaintext []byte) (ciphertext, tag []byte) {
 	block.Encrypt(tagMask[:], counter[:]) // tagMask = E_K(J0)
 	gcmInc32(&counter)                    // CTR starts at inc32(J0)
 
-	ret, out := sliceForAppend(dst, len(plaintext))
-	cipher.NewCTR(block, counter[:]).XORKeyStream(out, plaintext)
-	return ret, gcmAuthGeneric(&H, &tagMask, out)
+	cipher.NewCTR(block, counter[:]).XORKeyStream(dst, plaintext)
+	return gcmAuthGeneric(&H, &tagMask, dst)
 }
 
-func openGeneric(dst, key, nonce, ciphertext []byte) (plaintext, tag []byte) {
+func openGeneric(dst, key, nonce, ciphertext []byte) (tag []byte) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		panic("aesgcm: " + err.Error())
@@ -47,13 +46,12 @@ func openGeneric(dst, key, nonce, ciphertext []byte) (plaintext, tag []byte) {
 	deriveCounterGeneric(&H, &counter, nonce)
 	block.Encrypt(tagMask[:], counter[:])
 
-	// Authenticate the ciphertext before it is overwritten in place.
+	// Authenticate the ciphertext before it is overwritten, in case dst aliases it.
 	expectedTag := gcmAuthGeneric(&H, &tagMask, ciphertext)
 
 	gcmInc32(&counter)
-	ret, out := sliceForAppend(dst, len(ciphertext))
-	cipher.NewCTR(block, counter[:]).XORKeyStream(out, ciphertext)
-	return ret, expectedTag
+	cipher.NewCTR(block, counter[:]).XORKeyStream(dst, ciphertext)
+	return expectedTag
 }
 
 // deriveCounterGeneric computes the pre-counter block J0 (NIST SP 800-38D §7.1).

@@ -133,7 +133,7 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
 	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
-	_, tag := aesgcm.Encrypt(ciphertext[:0], key, nonce, plaintext)
+	tag := aesgcm.Encrypt(ciphertext, key, nonce, plaintext)
 	clear(keyNonce[:])
 
 	p.resetChain(opMask, cv[:], tag)
@@ -153,7 +153,7 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
-	_, tag := aesgcm.Decrypt(plaintext[:0], key, nonce, ciphertext)
+	tag := aesgcm.Decrypt(plaintext, key, nonce, ciphertext)
 	clear(keyNonce[:])
 
 	p.resetChain(opMask, cv[:], tag)
@@ -176,7 +176,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	cv := p.finalize(csSeal, keyNonce[:])
 	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
-	_, gcmTag := aesgcm.Encrypt(ciphertext[:0], key, nonce, plaintext)
+	gcmTag := aesgcm.Encrypt(ciphertext, key, nonce, plaintext)
 	clear(keyNonce[:])
 
 	// Bind the AES-GCM tag into the transcript under opSealTag, then derive the
@@ -214,7 +214,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	key, nonce := keyNonce[:aesgcm.KeySize], keyNonce[aesgcm.KeySize:]
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ct))
-	_, gcmTag := aesgcm.Decrypt(plaintext[:0], key, nonce, ct)
+	gcmTag := aesgcm.Decrypt(plaintext, key, nonce, ct)
 	clear(keyNonce[:])
 
 	// Bind the expected AES-GCM tag into the transcript under opSealTag, then

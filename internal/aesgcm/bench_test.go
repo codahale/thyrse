@@ -14,11 +14,11 @@ func BenchmarkEncrypt(b *testing.B) {
 	nonce := fill(NonceSize, 2)
 	for _, n := range benchSizes {
 		pt := fill(n, int64(n))
-		dst := make([]byte, 0, n)
+		dst := make([]byte, n)
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			b.SetBytes(int64(n))
 			for range b.N {
-				Encrypt(dst[:0], key, nonce, pt)
+				Encrypt(dst, key, nonce, pt)
 			}
 		})
 	}
@@ -29,11 +29,11 @@ func BenchmarkDecrypt(b *testing.B) {
 	nonce := fill(NonceSize, 2)
 	for _, n := range benchSizes {
 		ct := fill(n, int64(n))
-		dst := make([]byte, 0, n)
+		dst := make([]byte, n)
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			b.SetBytes(int64(n))
 			for range b.N {
-				Decrypt(dst[:0], key, nonce, ct)
+				Decrypt(dst, key, nonce, ct)
 			}
 		})
 	}

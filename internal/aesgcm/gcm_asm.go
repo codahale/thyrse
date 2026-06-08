@@ -43,7 +43,7 @@ func gcmAesFinish(productTable *[256]byte, tagMask, T *[16]byte, pLen, dLen uint
 var supportsGCM = cpu.X86.HasAES && cpu.X86.HasPCLMULQDQ && cpu.X86.HasSSE41 && cpu.X86.HasSSSE3 ||
 	cpu.ARM64.HasAES && cpu.ARM64.HasPMULL
 
-func seal(dst, key, nonce, plaintext []byte) (ciphertext, tag []byte) {
+func seal(dst, key, nonce, plaintext []byte) (tag []byte) {
 	if !supportsGCM {
 		return sealGeneric(dst, key, nonce, plaintext)
 	}
@@ -55,18 +55,17 @@ func seal(dst, key, nonce, plaintext []byte) (ciphertext, tag []byte) {
 	deriveCounterAsm(&productTable, &counter, nonce)
 	encryptBlockAsm(aes128Rounds, &ks[0], &tagMask[0], &counter[0]) // tagMask = E_K(J0)
 
-	ret, out := sliceForAppend(dst, len(plaintext))
 	if len(plaintext) > 0 {
-		gcmCrypt(gcmAesEnc, &productTable, out, plaintext, &counter, &tagOut, ks)
+		gcmCrypt(gcmAesEnc, &productTable, dst, plaintext, &counter, &tagOut, ks)
 	}
 	gcmAesFinish(&productTable, &tagMask, &tagOut, uint64(len(plaintext)), 0)
 
 	tag = make([]byte, TagSize)
 	copy(tag, tagOut[:])
-	return ret, tag
+	return tag
 }
 
-func open(dst, key, nonce, ciphertext []byte) (plaintext, tag []byte) {
+func open(dst, key, nonce, ciphertext []byte) (tag []byte) {
 	if !supportsGCM {
 		return openGeneric(dst, key, nonce, ciphertext)
 	}
@@ -78,16 +77,15 @@ func open(dst, key, nonce, ciphertext []byte) (plaintext, tag []byte) {
 	deriveCounterAsm(&productTable, &counter, nonce)
 	encryptBlockAsm(aes128Rounds, &ks[0], &tagMask[0], &counter[0]) // tagMask = E_K(J0)
 
-	ret, out := sliceForAppend(dst, len(ciphertext))
 	if len(ciphertext) > 0 {
 		// gcmAesDec authenticates the ciphertext as it decrypts it.
-		gcmCrypt(gcmAesDec, &productTable, out, ciphertext, &counter, &tagOut, ks)
+		gcmCrypt(gcmAesDec, &productTable, dst, ciphertext, &counter, &tagOut, ks)
 	}
 	gcmAesFinish(&productTable, &tagMask, &tagOut, uint64(len(ciphertext)), 0)
 
 	tag = make([]byte, TagSize)
 	copy(tag, tagOut[:])
-	return ret, tag
+	return tag
 }
 
 // gcmCrypt runs fn (gcmAesEnc or gcmAesDec), which stores the final block of

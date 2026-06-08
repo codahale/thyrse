@@ -34,13 +34,14 @@ func sealStdlib(t *testing.T, key, nonce, pt []byte) []byte {
 }
 
 // checkOneShot validates a single (key, nonce, pt) against the stdlib oracle for
-// both Encrypt and Decrypt, and checks dst-append behavior.
+// both Encrypt and Decrypt.
 func checkOneShot(t *testing.T, key, nonce, pt []byte) {
 	t.Helper()
 	want := sealStdlib(t, key, nonce, pt)
 	wantCT, wantTag := want[:len(pt)], want[len(pt):]
 
-	ct, tag := Encrypt(nil, key, nonce, pt)
+	ct := make([]byte, len(pt))
+	tag := Encrypt(ct, key, nonce, pt)
 	if !bytes.Equal(ct, wantCT) {
 		t.Fatalf("ciphertext mismatch\n got %x\nwant %x", ct, wantCT)
 	}
@@ -49,23 +50,13 @@ func checkOneShot(t *testing.T, key, nonce, pt []byte) {
 	}
 
 	// Decrypt: expected tag must equal the real tag, plaintext must round-trip.
-	gotPT, expTag := Decrypt(nil, key, nonce, wantCT)
+	gotPT := make([]byte, len(wantCT))
+	expTag := Decrypt(gotPT, key, nonce, wantCT)
 	if !bytes.Equal(gotPT, pt) {
 		t.Fatalf("plaintext mismatch\n got %x\nwant %x", gotPT, pt)
 	}
 	if !bytes.Equal(expTag, wantTag) {
 		t.Fatalf("expected-tag mismatch\n got %x\nwant %x", expTag, wantTag)
-	}
-
-	// dst-append: a non-empty prefix must be preserved and not aliased away.
-	prefix := []byte("prefix")
-	out, _ := Encrypt(append([]byte(nil), prefix...), key, nonce, pt)
-	if !bytes.Equal(out[:len(prefix)], prefix) || !bytes.Equal(out[len(prefix):], wantCT) {
-		t.Fatalf("Encrypt did not append to dst correctly")
-	}
-	pout, _ := Decrypt(append([]byte(nil), prefix...), key, nonce, wantCT)
-	if !bytes.Equal(pout[:len(prefix)], prefix) || !bytes.Equal(pout[len(prefix):], pt) {
-		t.Fatalf("Decrypt did not append to dst correctly")
 	}
 }
 
@@ -118,7 +109,8 @@ func TestUnverifiedPlaintext(t *testing.T) {
 	tampered := append([]byte(nil), ct...)
 	tampered[0] ^= 0xff
 
-	out, expTag := Decrypt(nil, key, nonce, tampered)
+	out := make([]byte, len(tampered))
+	expTag := Decrypt(out, key, nonce, tampered)
 	if bytes.Equal(expTag, realTag) {
 		t.Fatal("expected tag unexpectedly matched the untampered tag")
 	}
@@ -159,7 +151,9 @@ func TestKAT(t *testing.T) {
 		},
 	}
 	for i, c := range cases {
-		ct, tag := Encrypt(nil, dec(c.key), dec(c.nonce), dec(c.pt))
+		pt := dec(c.pt)
+		ct := make([]byte, len(pt))
+		tag := Encrypt(ct, dec(c.key), dec(c.nonce), pt)
 		if !bytes.Equal(ct, dec(c.ct)) {
 			t.Errorf("case %d ciphertext\n got %x\nwant %s", i, ct, c.ct)
 		}

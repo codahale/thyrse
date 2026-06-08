@@ -1,12 +1,13 @@
-// Package aesgcm implements one-shot AES-128-GCM with the ciphertext and tag
-// returned separately, matching the split API this module previously used for
-// TW128.
+// Package aesgcm implements one-shot AES-128-GCM with the ciphertext written to
+// a caller-provided buffer and the authentication tag returned separately,
+// matching the split API this module previously used for TW128.
 //
-// Encrypt returns the ciphertext and authentication tag separately. Decrypt
-// returns the (unverified) plaintext and the expected tag separately; the
-// caller MUST compare the expected tag against the received tag in constant
-// time and discard the plaintext on mismatch. This package never performs that
-// comparison itself.
+// Encrypt writes the ciphertext into dst and returns the authentication tag.
+// Decrypt writes the (unverified) plaintext into dst and returns the expected
+// tag; the caller MUST compare the expected tag against the received tag in
+// constant time and discard the plaintext on mismatch. This package never
+// performs that comparison itself. In both cases dst must be exactly as long as
+// the input.
 //
 // Only AES-128 (16-byte keys) is supported. On amd64 and arm64 the stitched
 // AES-CTR+GHASH assembly from the Go standard library is used (AES-NI/PMULL +
@@ -35,40 +36,31 @@ const (
 // zero bytes, which is safe here because callers derive a fresh key per message.
 var zeroNonce [gcmStandardNonceSize]byte
 
-// Encrypt encrypts and authenticates plaintext under key and nonce, appending
-// the ciphertext to dst. It returns the appended ciphertext and the
-// authentication tag separately. The key must be KeySize bytes; a nil nonce is
-// treated as NonceSize zero bytes.
-func Encrypt(dst, key, nonce, plaintext []byte) (ciphertext, tag []byte) {
+// Encrypt encrypts and authenticates plaintext under key and nonce, writing the
+// ciphertext into dst and returning the authentication tag. dst must be exactly
+// len(plaintext) bytes. The key must be KeySize bytes; a nil nonce is treated as
+// NonceSize zero bytes.
+func Encrypt(dst, key, nonce, plaintext []byte) (tag []byte) {
 	if len(key) != KeySize {
 		panic("aesgcm: invalid key size")
+	}
+	if len(dst) != len(plaintext) {
+		panic("aesgcm: output buffer must be len(plaintext) bytes")
 	}
 	return seal(dst, key, nonce, plaintext)
 }
 
-// Decrypt decrypts ciphertext under key and nonce, appending the unverified
-// plaintext to dst. It returns the appended plaintext and the expected
-// authentication tag separately. The caller must compare the expected tag
-// against the received tag in constant time and discard the plaintext on
-// mismatch. The key must be KeySize bytes; a nil nonce is treated as NonceSize
-// zero bytes.
-func Decrypt(dst, key, nonce, ciphertext []byte) (plaintext, tag []byte) {
+// Decrypt decrypts ciphertext under key and nonce, writing the unverified
+// plaintext into dst and returning the expected authentication tag. The caller
+// must compare the expected tag against the received tag in constant time and
+// discard the plaintext on mismatch. dst must be exactly len(ciphertext) bytes.
+// The key must be KeySize bytes; a nil nonce is treated as NonceSize zero bytes.
+func Decrypt(dst, key, nonce, ciphertext []byte) (tag []byte) {
 	if len(key) != KeySize {
 		panic("aesgcm: invalid key size")
 	}
-	return open(dst, key, nonce, ciphertext)
-}
-
-// sliceForAppend extends in by n bytes, returning the extended slice (head) and
-// a slice aliasing just the appended region (tail). It allocates only if in
-// lacks capacity.
-func sliceForAppend(in []byte, n int) (head, tail []byte) {
-	if total := len(in) + n; cap(in) >= total {
-		head = in[:total]
-	} else {
-		head = make([]byte, total)
-		copy(head, in)
+	if len(dst) != len(ciphertext) {
+		panic("aesgcm: output buffer must be len(ciphertext) bytes")
 	}
-	tail = head[len(in):]
-	return
+	return open(dst, key, nonce, ciphertext)
 }
