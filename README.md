@@ -11,7 +11,7 @@ Inspired by [STROBE], [Noise Protocol], and [Xoodyak], it replaces the usual gra
 with a single construction.  Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3, hardware AES), Thyrse
 delivers 10+ Gb/s on modern processors at a 128-bit security level.
 
-The security of every scheme reduces to the properties of the underlying sponge (indifferentiability from a random
+The security of every scheme reduces to the properties of the underlying hash function (indifferentiability from a random
 oracle, pseudorandom function security, and collision resistance) and the AES-128-GCM AEAD used for encryption, all at a
 128-bit security level ($2^{128}$ against generic attacks). A single analysis covers the framework's transcript layer.
 
