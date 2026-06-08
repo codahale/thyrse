@@ -282,22 +282,22 @@ func (p *Protocol) endFrame() {
 // present, is always aesgcm.TagSize (16) bytes.
 //
 // The frame layout is assembled into a stack buffer and written in a single h.Write call. The frame closes with
-// right_encode of its own body length: 73 bytes for the no-tag layout and 91 bytes for the with-tag layout.
+// right_encode of its own body length: 41 bytes for the no-tag layout and 59 bytes for the with-tag layout.
 //
-// No-tag layout (75 bytes, used by Derive, Ratchet, and the completed Seal/Open under opSeal):
+// No-tag layout (43 bytes, used by Derive, Ratchet, and the completed Seal/Open under opSeal):
 //
-//	opChain 0x01 0x00  originOp  0x01 0x01  0x02 0x02 0x00 [chainValue: 64B]  0x49 0x01
-//	╰─ writeOpLabel ─╯           ╰─LE(1)─╯ ╰─LE(512)──╯                      ╰RE(73)─╯
+//	opChain 0x01 0x00  originOp  0x01 0x01  0x02 0x01 0x00 [chainValue: 32B]  0x29 0x01
+//	╰─ writeOpLabel ─╯           ╰─LE(1)─╯ ╰─LE(256)──╯                      ╰RE(41)─╯
 //
-// With-tag layout (93 bytes, used by Mask/Unmask under opMask and the Seal/Open tag binding under opSealTag):
+// With-tag layout (61 bytes, used by Mask/Unmask under opMask and the Seal/Open tag binding under opSealTag):
 //
-//	opChain 0x01 0x00  originOp  0x01 0x02  0x02 0x02 0x00 [chainValue: 64B]  0x01 0x80 [tag: 16B]  0x5b 0x01
-//	╰─ writeOpLabel ─╯           ╰─LE(2)─╯ ╰─LE(512)──╯                      ╰LE(128)╯            ╰RE(91)─╯
+//	opChain 0x01 0x00  originOp  0x01 0x02  0x02 0x01 0x00 [chainValue: 32B]  0x01 0x80 [tag: 16B]  0x3b 0x01
+//	╰─ writeOpLabel ─╯           ╰─LE(2)─╯ ╰─LE(256)──╯                      ╰LE(128)╯            ╰RE(59)─╯
 func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 	p.h.Reset()
 
 	if len(tag) == 0 {
-		var buf [75]byte
+		var buf [43]byte
 		buf[0] = opChain
 		buf[1] = 1
 		// buf[2] = 0 — left_encode(0) low byte
@@ -305,14 +305,14 @@ func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 		buf[4] = 1
 		buf[5] = 1 // left_encode(1)
 		buf[6] = 2
-		buf[7] = 2 // left_encode(512) = [2, 2, 0]
+		buf[7] = 1 // left_encode(256) = [2, 1, 0]
 		// buf[8] = 0
-		copy(buf[9:73], chainValue)
-		buf[73] = 73 // right_encode(73) value — frame body length
-		buf[74] = 1  // right_encode(73) byte count
+		copy(buf[9:41], chainValue)
+		buf[41] = 41 // right_encode(41) value — frame body length
+		buf[42] = 1  // right_encode(41) byte count
 		_, _ = p.h.Write(buf[:])
 	} else {
-		var buf [93]byte
+		var buf [61]byte
 		buf[0] = opChain
 		buf[1] = 1
 		// buf[2] = 0
@@ -320,21 +320,21 @@ func (p *Protocol) resetChain(originOp byte, chainValue, tag []byte) {
 		buf[4] = 1
 		buf[5] = 2 // left_encode(2)
 		buf[6] = 2
-		buf[7] = 2 // left_encode(512)
+		buf[7] = 1 // left_encode(256)
 		// buf[8] = 0
-		copy(buf[9:73], chainValue)
-		buf[73] = 1
-		buf[74] = 0x80 // left_encode(128) = [1, 0x80]
-		copy(buf[75:91], tag)
-		buf[91] = 91 // right_encode(91) value — frame body length
-		buf[92] = 1  // right_encode(91) byte count
+		copy(buf[9:41], chainValue)
+		buf[41] = 1
+		buf[42] = 0x80 // left_encode(128) = [1, 0x80]
+		copy(buf[43:59], tag)
+		buf[59] = 59 // right_encode(59) value — frame body length
+		buf[60] = 1  // right_encode(59) byte count
 		_, _ = p.h.Write(buf[:])
 	}
 }
 
 const (
 	// chainValueSize is the chain value size in bytes (H).
-	chainValueSize = 64
+	chainValueSize = 32
 
 	// Operation codes.
 	opInit    = 0x01

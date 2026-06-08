@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+
+	"github.com/codahale/thyrse/internal/enc"
 )
 
 // newKeyed returns a Protocol initialized with label and a single Mix("key", key).
@@ -569,4 +571,48 @@ func TestClear(t *testing.T) {
 			t.Fatal("Clear corrupted shared state")
 		}
 	})
+}
+
+func TestResetChainEncoding(t *testing.T) {
+	var chainValue [chainValueSize]byte
+	for i := range chainValue {
+		chainValue[i] = byte(i)
+	}
+
+	var tag [16]byte
+	for i := range tag {
+		tag[i] = byte(i + len(chainValue))
+	}
+
+	for _, tc := range []struct {
+		name string
+		tag  []byte
+	}{
+		{name: "without tag"},
+		{name: "with tag", tag: tag[:]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := New("discarded")
+			got.resetChain(opMask, chainValue[:], tc.tag)
+
+			want := New("discarded")
+			want.h.Reset()
+			want.beginFrame(opChain, "")
+			_, _ = want.h.Write([]byte{opMask})
+			fieldCount := uint64(1)
+			if len(tc.tag) > 0 {
+				fieldCount++
+			}
+			_, _ = want.h.Write(enc.LeftEncode(nil, fieldCount))
+			_, _ = want.h.Write(enc.EncodeString(nil, chainValue[:]))
+			if len(tc.tag) > 0 {
+				_, _ = want.h.Write(enc.EncodeString(nil, tc.tag))
+			}
+			want.endFrame()
+
+			if got.Equal(want) != 1 {
+				t.Fatal("optimized chain frame does not match generic encoding")
+			}
+		})
+	}
 }
