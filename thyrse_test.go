@@ -597,18 +597,17 @@ func TestResetChainEncoding(t *testing.T) {
 
 			want := New("discarded")
 			want.h.Reset()
-			want.beginFrame(opChain, "")
 			_, _ = want.h.Write([]byte{opMask})
-			fieldCount := uint64(1)
+			_, _ = want.h.Write(chainValue[:])
+			_, _ = want.h.Write(enc.RightEncode(nil, uint64(len(chainValue))))
+			valueCount := uint64(1)
 			if len(tc.tag) > 0 {
-				fieldCount++
+				_, _ = want.h.Write(tc.tag)
+				_, _ = want.h.Write(enc.RightEncode(nil, uint64(len(tc.tag))))
+				valueCount++
 			}
-			_, _ = want.h.Write(enc.LeftEncode(nil, fieldCount))
-			_, _ = want.h.Write(enc.EncodeString(nil, chainValue[:]))
-			if len(tc.tag) > 0 {
-				_, _ = want.h.Write(enc.EncodeString(nil, tc.tag))
-			}
-			want.endFrame()
+			_, _ = want.h.Write(enc.RightEncode(nil, valueCount))
+			_, _ = want.h.Write([]byte{opChain})
 
 			if got.Equal(want) != 1 {
 				t.Fatal("optimized chain frame does not match generic encoding")

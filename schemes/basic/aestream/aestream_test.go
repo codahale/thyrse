@@ -358,7 +358,7 @@ func Example() {
 	fmt.Printf("plaintext  = %s\n", plaintext)
 
 	// Output:
-	// ciphertext = 8fe8d4e704559d09349f2522d266479b62dc3f8121272ab5b1b7fc40dfcaba11e87cbe0ddc0d3d9feb25d9509e3ff03e3fc5a466dc3bf9218b6f3a2966ee53d3acad4b1c3a38102197575a2189ce62
+	// ciphertext = b9f84dd0119b650d9beec66cd8d00a17a3291bba3b1632862e286d4256e0c86e143fba6d3a54707c270c4479957b077f86b1080655f6e08c65e80e152e0eb8e3222dbec177409b60c28b00ce977ca2
 	// plaintext  = hello world
 }
 
