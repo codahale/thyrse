@@ -58,7 +58,9 @@ func seal(dst, key, nonce, plaintext []byte) (tag []byte) {
 	if len(plaintext) > 0 {
 		gcmCrypt(gcmAesEnc, &productTable, dst, plaintext, &counter, &tagOut, ks)
 	}
-	gcmAesFinish(&productTable, &tagMask, &tagOut, uint64(len(plaintext)), 0)
+	// GMAC: the ciphertext is additional data, so its length goes in the dLen
+	// (AAD) slot of the GHASH length block and the pLen (ciphertext) slot is 0.
+	gcmAesFinish(&productTable, &tagMask, &tagOut, 0, uint64(len(plaintext)))
 
 	tag = make([]byte, TagSize)
 	copy(tag, tagOut[:])
@@ -81,7 +83,8 @@ func open(dst, key, nonce, ciphertext []byte) (tag []byte) {
 		// gcmAesDec authenticates the ciphertext as it decrypts it.
 		gcmCrypt(gcmAesDec, &productTable, dst, ciphertext, &counter, &tagOut, ks)
 	}
-	gcmAesFinish(&productTable, &tagMask, &tagOut, uint64(len(ciphertext)), 0)
+	// GMAC: ciphertext length in the dLen (AAD) slot, pLen 0; see seal.
+	gcmAesFinish(&productTable, &tagMask, &tagOut, 0, uint64(len(ciphertext)))
 
 	tag = make([]byte, TagSize)
 	copy(tag, tagOut[:])

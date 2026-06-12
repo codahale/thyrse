@@ -13,7 +13,7 @@ import (
 )
 
 // TagSize is the size in bytes of the authentication tag appended by Seal. The tag is KT128 output committing to the
-// transcript after the AES-GCM tag is bound, not the AES-GCM tag itself.
+// transcript after the GMAC tag is bound, not the GMAC tag itself.
 const TagSize = 32
 
 // ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. After a failed Open, the
@@ -169,8 +169,8 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	gcmTag := aesgcm.Encrypt(ciphertext, key, nonce, plaintext)
 	clear(keyNonce[:])
 
-	// Bind the AES-GCM tag into the transcript under opSealTag, then derive the
-	// wire tag (KT128 output) from that state instead of returning the AES-GCM
+	// Bind the GMAC tag into the transcript under opSealTag, then derive the
+	// wire tag (KT128 output) from that state instead of returning the GMAC
 	// tag itself. The completed seal then chains under opSeal, keeping the
 	// tag-derivation state distinct from the state subsequent operations follow.
 	p.resetChain(opSealTag, cv[:], gcmTag)
@@ -184,7 +184,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 // appended (as returned by Seal).
 //
 // On success, returns the plaintext. On failure, returns ErrInvalidCiphertext. The protocol's transcript diverges
-// from the sender's because the chain frame absorbs the computed AES-GCM tag before verification returns.
+// from the sender's because the chain frame absorbs the computed GMAC tag before verification returns.
 func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	var ct, tt []byte
 	if len(sealed) < TagSize {
@@ -205,7 +205,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	gcmTag := aesgcm.Decrypt(plaintext, key, nonce, ct)
 	clear(keyNonce[:])
 
-	// Bind the expected AES-GCM tag into the transcript under opSealTag, then
+	// Bind the expected GMAC tag into the transcript under opSealTag, then
 	// recompute the wire tag (KT128 output) from that state and compare it
 	// against the received tag. The completed open chains under opSeal.
 	p.resetChain(opSealTag, cv[:], gcmTag)
@@ -350,7 +350,7 @@ const (
 	opChain   = 0x08
 
 	// opSealTag is the origin code for the chain frame Seal and Open derive the
-	// wire tag from (the AES-GCM tag binding). The completed seal chains under
+	// wire tag from (the GMAC tag binding). The completed seal chains under
 	// opSeal, so this intermediate, tag-derivation state stays distinct from the
 	// state that subsequent operations follow.
 	opSealTag = 0x09
