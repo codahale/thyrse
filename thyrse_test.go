@@ -579,39 +579,18 @@ func TestResetChainEncoding(t *testing.T) {
 		chainValue[i] = byte(i)
 	}
 
-	var tag [16]byte
-	for i := range tag {
-		tag[i] = byte(i + len(chainValue))
-	}
+	got := New("discarded")
+	got.resetChain(opMask, chainValue[:])
 
-	for _, tc := range []struct {
-		name string
-		tag  []byte
-	}{
-		{name: "without tag"},
-		{name: "with tag", tag: tag[:]},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := New("discarded")
-			got.resetChain(opMask, chainValue[:], tc.tag)
+	want := New("discarded")
+	want.h.Reset()
+	_, _ = want.h.Write([]byte{opMask})
+	_, _ = want.h.Write(chainValue[:])
+	_, _ = want.h.Write(enc.RightEncode(nil, uint64(len(chainValue))))
+	_, _ = want.h.Write(enc.RightEncode(nil, 1))
+	_, _ = want.h.Write([]byte{opChain})
 
-			want := New("discarded")
-			want.h.Reset()
-			_, _ = want.h.Write([]byte{opMask})
-			_, _ = want.h.Write(chainValue[:])
-			_, _ = want.h.Write(enc.RightEncode(nil, uint64(len(chainValue))))
-			valueCount := uint64(1)
-			if len(tc.tag) > 0 {
-				_, _ = want.h.Write(tc.tag)
-				_, _ = want.h.Write(enc.RightEncode(nil, uint64(len(tc.tag))))
-				valueCount++
-			}
-			_, _ = want.h.Write(enc.RightEncode(nil, valueCount))
-			_, _ = want.h.Write([]byte{opChain})
-
-			if got.Equal(want) != 1 {
-				t.Fatal("optimized chain frame does not match generic encoding")
-			}
-		})
+	if got.Equal(want) != 1 {
+		t.Fatal("optimized chain frame does not match generic encoding")
 	}
 }
