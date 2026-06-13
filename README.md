@@ -67,9 +67,9 @@ uses SIMD instructions for lower latency on short inputs and higher throughput o
 
 Encryption uses AES-128-CTR from the Go standard library — AES-NI on x86-64, ARMv8 AES on ARM64. Authenticity does not
 need a separate primitive: the ciphertext is absorbed into the KT128 transcript and the tag is squeezed from it.
-Encryption and absorption are interleaved over cache-resident windows, so the ciphertext is walked once rather than
-twice. On platforms without hardware AES the standard library falls back to a portable software implementation that, like
-Go's `crypto/aes`, is not constant-time.
+Encryption and absorption are interleaved over a bounded window, so a large message's working set stays cache-resident
+between the two passes. On platforms without hardware AES the standard library falls back to a portable software
+implementation that, like Go's `crypto/aes`, is not constant-time.
 
 Build with `-tags purego` to disable assembly on any platform.
 

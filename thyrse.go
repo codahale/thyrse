@@ -275,8 +275,8 @@ func (p *Protocol) writeStringOp(data []byte, op byte) {
 // ciphertext into the transcript as ciphertext || right_encode(len) || op, a length-suffixed byte-string field closing
 // the current frame.
 //
-// Encryption and absorption are fused over fixed-size windows so the ciphertext stays in cache between the AES-CTR pass
-// and the KT128 pass instead of being walked twice. When decrypting, each window's ciphertext is absorbed before it is
+// Encryption and absorption are fused over windows (see [ctrWindowSize]) so a large message's working set stays bounded
+// between the AES-CTR pass and the KT128 pass. When decrypting, each window's ciphertext is absorbed before it is
 // overwritten with plaintext, so dst may alias src. The window size does not affect the transcript: KT128 hashes the
 // same byte sequence regardless of how it is chunked.
 func (p *Protocol) writeMaskedStringOp(op byte, key, dst, src []byte, decrypt bool) {
@@ -286,8 +286,9 @@ func (p *Protocol) writeMaskedStringOp(op byte, key, dst, src []byte, decrypt bo
 	}
 	stream := cipher.NewCTR(block, zeroIV[:])
 
-	for off := 0; off < len(src); off += ctrWindow {
-		end := min(off+ctrWindow, len(src))
+	window := ctrWindowSize(len(src))
+	for off := 0; off < len(src); off += window {
+		end := min(off+window, len(src))
 		if decrypt {
 			// Absorb the ciphertext before decrypting in place over it.
 			_, _ = p.h.Write(src[off:end])
@@ -350,12 +351,6 @@ const (
 	// keySize is the AES-128 key size in bytes derived per Mask/Seal operation.
 	keySize = 16
 
-	// ctrWindow is the size in bytes of the windows over which AES-CTR encryption and KT128 absorption are
-	// interleaved. It is sized to keep a window resident in the L2 cache between the two passes and is a multiple of
-	// both the AES block size and the KT128 chunk size, and larger than KT128's SIMD leaf batch, so each full window
-	// drives KT128's no-copy parallel leaf path.
-	ctrWindow = 128 * 1024
-
 	// Operation codes.
 	opInit     = 0x01
 	opMix      = 0x02
@@ -377,6 +372,21 @@ const (
 // zeroIV is the all-zero AES-CTR initial counter. A fresh key is derived per Mask/Seal operation, so a fixed counter
 // start never repeats a (key, counter) pair across operations.
 var zeroIV [aes.BlockSize]byte
+
+// ctrWindowSize returns the window size in bytes over which AES-CTR encryption and KT128 absorption are interleaved for
+// an n-byte message.
+//
+// Both AES-CTR and KT128 are compute-bound well below memory bandwidth, so keeping a window cache-resident buys little,
+// while splitting a message into windows adds KT128 per-window buffering overhead. The window is therefore the whole
+// message up to a cap: messages at or below the cap are encrypted and absorbed in a single pass each, and only larger
+// messages are split, with the cap bounding the working set as cache-residency insurance on memory-bound platforms.
+func ctrWindowSize(n int) int {
+	return min(n, ctrWindowCap)
+}
+
+// ctrWindowCap is the maximum interleave window. It is a multiple of both the AES block size and the KT128 chunk size,
+// and large enough to fit in the last-level cache of current hardware.
+const ctrWindowCap = 1024 * 1024
 
 var (
 	csDerive  = []byte("thyrse/derive")
