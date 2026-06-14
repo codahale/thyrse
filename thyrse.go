@@ -37,7 +37,7 @@ type Protocol struct {
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
 // identity: two protocols using different labels produce cryptographically independent transcripts.
 func New(label string) *Protocol {
-	p := &Protocol{h: kt128.New()}
+	p := &Protocol{h: kt128.New(nil)}
 	p.writeLabelOp(label, opInit)
 	return p
 }
@@ -101,7 +101,7 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 	p.writeLabel(label)
 	p.writeIntOp(uint64(outputLen), opDerive)
 
-	cv := p.finalize(csDerive, out)
+	cv := p.finalize(out)
 	p.resetChain(opDerive, cv[:])
 
 	return ret
@@ -111,7 +111,7 @@ func (p *Protocol) Derive(label string, dst []byte, outputLen int) []byte {
 func (p *Protocol) Ratchet(label string) {
 	p.writeLabelOp(label, opRatchet)
 
-	cv := p.finalize(csRatchet, nil)
+	cv := p.finalize(nil)
 	p.resetChain(opRatchet, cv[:])
 }
 
@@ -125,7 +125,7 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 	p.writeIntOp(uint64(len(plaintext)), opMask)
 
 	var key [keySize]byte
-	cv := p.finalize(csMask, key[:])
+	cv := p.finalize(key[:])
 
 	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
 	p.resetChain(opMask, cv[:])
@@ -142,7 +142,7 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	p.writeIntOp(uint64(len(ciphertext)), opMask)
 
 	var key [keySize]byte
-	cv := p.finalize(csMask, key[:])
+	cv := p.finalize(key[:])
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
 	p.resetChain(opMask, cv[:])
@@ -163,7 +163,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	p.writeIntOp(uint64(len(plaintext)), opSeal)
 
 	var key [keySize]byte
-	cv := p.finalize(csSeal, key[:])
+	cv := p.finalize(key[:])
 
 	// Encrypt under opSealTag, absorbing the ciphertext into the transcript, then derive the wire tag (KT128 output)
 	// from that state. The completed seal then chains under opSeal, keeping the tag-derivation state distinct from the
@@ -172,7 +172,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	p.writeMaskedStringOp(opSealData, key[:], ciphertext, plaintext, false)
 	clear(key[:])
 
-	cv = p.finalize(csSeal, tagDst)
+	cv = p.finalize(tagDst)
 	p.resetChain(opSeal, cv[:])
 
 	return ret
@@ -196,7 +196,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	p.writeIntOp(uint64(len(ct)), opSeal)
 
 	var key [keySize]byte
-	cv := p.finalize(csSeal, key[:])
+	cv := p.finalize(key[:])
 
 	// Decrypt under opSealTag, absorbing the received ciphertext into the transcript, then recompute the wire tag
 	// (KT128 output) from that state and compare it against the received tag. The completed open chains under opSeal.
@@ -206,7 +206,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	clear(key[:])
 
 	var tag [TagSize]byte
-	cv = p.finalize(csSeal, tag[:])
+	cv = p.finalize(tag[:])
 	p.resetChain(opSeal, cv[:])
 
 	if subtle.ConstantTimeCompare(tag[:], tt) != 1 {
@@ -232,9 +232,8 @@ func (p *Protocol) Clear() {
 // finalize derives one KT128 output bundle for the current transcript. The
 // bundle is parsed as cv || dst, where cv is always chainValueSize bytes and dst
 // may be empty.
-func (p *Protocol) finalize(customization []byte, dst []byte) [chainValueSize]byte {
+func (p *Protocol) finalize(dst []byte) [chainValueSize]byte {
 	var cv [chainValueSize]byte
-	p.h.SetCustomizationString(customization)
 	_, _ = p.h.Read(cv[:])
 	if len(dst) > 0 {
 		_, _ = p.h.Read(dst)
@@ -387,10 +386,3 @@ func ctrWindowSize(n int) int {
 // ctrWindowCap is the maximum interleave window. It is a multiple of both the AES block size and the KT128 chunk size,
 // and large enough to fit in the last-level cache of current hardware.
 const ctrWindowCap = 1024 * 1024
-
-var (
-	csDerive  = []byte("thyrse/derive")
-	csRatchet = []byte("thyrse/ratchet")
-	csMask    = []byte("thyrse/mask")
-	csSeal    = []byte("thyrse/seal")
-)

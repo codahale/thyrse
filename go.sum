@@ -1,7 +1,7 @@
 filippo.io/edwards25519 v1.2.0 h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=
 filippo.io/edwards25519 v1.2.0/go.mod h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=
-github.com/codahale/kt128 v0.0.0-20260613162905-ae7bf847fe59 h1:9WcHuuthskIkI3plv7w4TWsvSNIVTzCpEmmf9miHyG8=
-github.com/codahale/kt128 v0.0.0-20260613162905-ae7bf847fe59/go.mod h1:2nOgNLnwSn1ngVdtVbdnOwiPITXeaMj/WoBWksk6egQ=
+github.com/codahale/kt128 v0.0.0-20260614010525-7ad33a4db6bd h1:muGxVNqKP4qF2eRjbgO9cw9R7ZLpgH0E7KFItcfvWIs=
+github.com/codahale/kt128 v0.0.0-20260614010525-7ad33a4db6bd/go.mod h1:2nOgNLnwSn1ngVdtVbdnOwiPITXeaMj/WoBWksk6egQ=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gtank/ristretto255 v0.2.0 h1:LeOuWr6giplWkkMizx2emfG03SRPJqKt1nfIHLVHQ/0=
