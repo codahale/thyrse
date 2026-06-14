@@ -19,7 +19,7 @@ const TagSize = 32
 
 // ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. After a failed Open, the
 // protocol's transcript has diverged from the sender's because it absorbed a different ciphertext.
-var ErrInvalidCiphertext = errors.New("thyrse: authentication failed")
+var ErrInvalidCiphertext = errors.New("thyrse: invalid ciphertext")
 
 // Protocol is a transcript-based cryptographic protocol instance.
 //
