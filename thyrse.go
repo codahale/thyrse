@@ -32,6 +32,12 @@ var ErrInvalidCiphertext = errors.New("thyrse: invalid ciphertext")
 // delimited by information already read, making the transcript a recoverable encoding of the operation sequence.
 type Protocol struct {
 	h *kt128.Hasher
+
+	// ctr is reusable scratch for the short-message AES-CTR path (see
+	// writeMaskedStringOp): the first block holds the counter, the second the
+	// keystream. Keeping it on the heap-allocated Protocol lets the block
+	// cipher write through it without escaping a fresh allocation per call.
+	ctr [2 * aes.BlockSize]byte
 }
 
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
@@ -227,6 +233,7 @@ func (p *Protocol) Clone() *Protocol {
 func (p *Protocol) Clear() {
 	p.h.Reset()
 	p.h = nil
+	clear(p.ctr[:])
 }
 
 // finalize derives one KT128 output bundle for the current transcript. The
@@ -283,18 +290,34 @@ func (p *Protocol) writeMaskedStringOp(op byte, key, dst, src []byte, decrypt bo
 	if err != nil {
 		panic("thyrse: " + err.Error())
 	}
-	stream := cipher.NewCTR(block, zeroIV[:])
 
-	window := ctrWindowSize(len(src))
-	for off := 0; off < len(src); off += window {
-		end := min(off+window, len(src))
+	if len(src) <= ctrSmallMax {
+		// Short message: generate the CTR keystream directly from the block
+		// cipher, avoiding cipher.NewCTR's stream object and its 512-byte buffer
+		// allocation. The whole message is a single window, so encryption and
+		// absorption are not interleaved; when decrypting, the ciphertext is
+		// absorbed before being overwritten, so dst may alias src.
 		if decrypt {
-			// Absorb the ciphertext before decrypting in place over it.
-			_, _ = p.h.Write(src[off:end])
-			stream.XORKeyStream(dst[off:end], src[off:end])
+			_, _ = p.h.Write(src)
+			p.ctrXORSmall(block, dst, src)
 		} else {
-			stream.XORKeyStream(dst[off:end], src[off:end])
-			_, _ = p.h.Write(dst[off:end])
+			p.ctrXORSmall(block, dst, src)
+			_, _ = p.h.Write(dst)
+		}
+	} else {
+		stream := cipher.NewCTR(block, zeroIV[:])
+
+		window := ctrWindowSize(len(src))
+		for off := 0; off < len(src); off += window {
+			end := min(off+window, len(src))
+			if decrypt {
+				// Absorb the ciphertext before decrypting in place over it.
+				_, _ = p.h.Write(src[off:end])
+				stream.XORKeyStream(dst[off:end], src[off:end])
+			} else {
+				stream.XORKeyStream(dst[off:end], src[off:end])
+				_, _ = p.h.Write(dst[off:end])
+			}
 		}
 	}
 
@@ -302,6 +325,34 @@ func (p *Protocol) writeMaskedStringOp(op byte, key, dst, src []byte, decrypt bo
 	b := enc.RightEncode(buf[:0], uint64(len(src)))
 	b = append(b, op)
 	_, _ = p.h.Write(b)
+}
+
+// ctrXORSmall applies AES-CTR keyed by block to src, writing the result to dst, starting from an all-zero counter. It
+// reproduces cipher.NewCTR(block, zeroIV) bit for bit but generates the keystream one block at a time through p.ctr, so
+// the counter and keystream slices reference the heap-resident Protocol rather than escaping a fresh allocation per
+// call. It is used only for short messages, where this beats cipher.NewCTR's stream-buffer setup.
+func (p *Protocol) ctrXORSmall(block cipher.Block, dst, src []byte) {
+	counter := p.ctr[:aes.BlockSize]
+	ks := p.ctr[aes.BlockSize:]
+	clear(counter)
+
+	for len(src) > 0 {
+		block.Encrypt(ks, counter)
+		n := min(len(src), aes.BlockSize)
+		subtle.XORBytes(dst[:n], src[:n], ks[:n])
+		src, dst = src[n:], dst[n:]
+
+		// Increment the 128-bit big-endian counter, matching crypto/cipher CTR.
+		for i := aes.BlockSize - 1; i >= 0; i-- {
+			counter[i]++
+			if counter[i] != 0 {
+				break
+			}
+		}
+	}
+
+	// The keystream equals the plaintext given the public ciphertext, so do not retain it.
+	clear(ks)
 }
 
 // writeInt writes right_encode(v).
@@ -386,3 +437,10 @@ func ctrWindowSize(n int) int {
 // ctrWindowCap is the maximum interleave window. It is a multiple of both the AES block size and the KT128 chunk size,
 // and large enough to fit in the last-level cache of current hardware.
 const ctrWindowCap = 1024 * 1024
+
+// ctrSmallMax is the largest message, in bytes, for which Mask/Seal/Open/Unmask generate the AES-CTR keystream directly
+// from the block cipher (see [Protocol.ctrXORSmall]) instead of constructing a cipher.NewCTR stream. At or below it,
+// skipping the stream object's setup and 512-byte buffer allocation is both faster and one allocation lighter; above
+// it, cipher.NewCTR's bulk keystream generation overtakes the per-block loop. The crossover measured ~128 bytes (8 AES
+// blocks); the value is a multiple of the AES block size.
+const ctrSmallMax = 128
