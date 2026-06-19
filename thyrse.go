@@ -2,8 +2,6 @@
 package thyrse
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -11,14 +9,15 @@ import (
 	"github.com/codahale/kt128"
 	"github.com/codahale/thyrse/internal/enc"
 	"github.com/codahale/thyrse/internal/mem"
+	"github.com/codahale/treewrap/tw128"
 )
 
-// TagSize is the size in bytes of the authentication tag appended by Seal. The tag is KT128 output committing to the
-// transcript after the ciphertext is absorbed.
-const TagSize = 32
+// TagSize is the size in bytes of the authentication tag appended by Seal. The tag is the TW128 authentication tag
+// computed over the sealed plaintext.
+const TagSize = tw128.TagSize
 
 // ErrInvalidCiphertext is returned by [Protocol.Open] when tag verification fails. After a failed Open, the
-// protocol's transcript has diverged from the sender's because it absorbed a different ciphertext.
+// protocol's transcript has diverged from the sender's because it absorbed a tag derived from a different ciphertext.
 var ErrInvalidCiphertext = errors.New("thyrse: invalid ciphertext")
 
 // Protocol is a transcript-based cryptographic protocol instance.
@@ -32,12 +31,6 @@ var ErrInvalidCiphertext = errors.New("thyrse: invalid ciphertext")
 // delimited by information already read, making the transcript a recoverable encoding of the operation sequence.
 type Protocol struct {
 	h *kt128.Hasher
-
-	// ctr is reusable scratch for the short-message AES-CTR path (see
-	// writeMaskedStringOp): the first block holds the counter, the second the
-	// keystream. Keeping it on the heap-allocated Protocol lets the block
-	// cipher write through it without escaping a fresh allocation per call.
-	ctr [2 * aes.BlockSize]byte
 }
 
 // New creates a new protocol instance with the given label for domain separation. The label establishes the protocol
@@ -122,8 +115,8 @@ func (p *Protocol) Ratchet(label string) {
 }
 
 // Mask encrypts plaintext without authentication. The caller is responsible for authenticating the ciphertext through
-// external mechanisms. The plaintext length is bound into the protocol transcript and the ciphertext is absorbed into
-// it, so the transcript commits collision-resistantly to the ciphertext.
+// external mechanisms. The plaintext length is bound into the protocol transcript and the TW128 tag over the plaintext
+// is absorbed into it, so the transcript commits collision-resistantly to the masked plaintext.
 //
 // Confidentiality requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
 func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
@@ -135,7 +128,7 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 
 	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
 	p.resetChain(opMask, cv[:])
-	p.writeMaskedStringOp(opMaskData, key[:], ciphertext, plaintext, false)
+	p.writeCryptOp(opMaskData, key[:], ciphertext, plaintext, false)
 	clear(key[:])
 
 	return ret
@@ -152,7 +145,7 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 
 	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
 	p.resetChain(opMask, cv[:])
-	p.writeMaskedStringOp(opMaskData, key[:], plaintext, ciphertext, true)
+	p.writeCryptOp(opMaskData, key[:], plaintext, ciphertext, true)
 	clear(key[:])
 
 	return ret
@@ -171,14 +164,15 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	var key [keySize]byte
 	cv := p.finalize(key[:])
 
-	// Encrypt under opSealTag, absorbing the ciphertext into the transcript, then derive the wire tag (KT128 output)
-	// from that state. The completed seal then chains under opSeal, keeping the tag-derivation state distinct from the
-	// state subsequent operations follow.
+	// Encrypt under the opSealTag chain, absorbing the TW128 tag into the transcript; that same tag is the wire tag.
+	// The completed seal then chains under opSeal, keeping the seal-data state distinct from the state that subsequent
+	// operations follow.
 	p.resetChain(opSealTag, cv[:])
-	p.writeMaskedStringOp(opSealData, key[:], ciphertext, plaintext, false)
+	tag := p.writeCryptOp(opSealData, key[:], ciphertext, plaintext, false)
 	clear(key[:])
+	copy(tagDst, tag[:])
 
-	cv = p.finalize(tagDst)
+	cv = p.finalize(nil)
 	p.resetChain(opSeal, cv[:])
 
 	return ret
@@ -188,7 +182,8 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 // appended (as returned by Seal).
 //
 // On success, returns the plaintext. On failure, returns ErrInvalidCiphertext. The protocol's transcript diverges
-// from the sender's because it absorbs the received ciphertext before verification returns.
+// from the sender's because it absorbs the TW128 tag recomputed over the received ciphertext before verification
+// returns.
 func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	var ct, tt []byte
 	if len(sealed) < TagSize {
@@ -204,15 +199,15 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	var key [keySize]byte
 	cv := p.finalize(key[:])
 
-	// Decrypt under opSealTag, absorbing the received ciphertext into the transcript, then recompute the wire tag
-	// (KT128 output) from that state and compare it against the received tag. The completed open chains under opSeal.
+	// Decrypt under the opSealTag chain, absorbing the TW128 tag recomputed over the received ciphertext into the
+	// transcript, then compare that tag against the received tag in constant time. The completed open chains under
+	// opSeal.
 	ret, plaintext := mem.SliceForAppend(dst, len(ct))
 	p.resetChain(opSealTag, cv[:])
-	p.writeMaskedStringOp(opSealData, key[:], plaintext, ct, true)
+	tag := p.writeCryptOp(opSealData, key[:], plaintext, ct, true)
 	clear(key[:])
 
-	var tag [TagSize]byte
-	cv = p.finalize(tag[:])
+	cv = p.finalize(nil)
 	p.resetChain(opSeal, cv[:])
 
 	if subtle.ConstantTimeCompare(tag[:], tt) != 1 {
@@ -233,7 +228,6 @@ func (p *Protocol) Clone() *Protocol {
 func (p *Protocol) Clear() {
 	p.h.Reset()
 	p.h = nil
-	clear(p.ctr[:])
 }
 
 // finalize derives one KT128 output bundle for the current transcript. The
@@ -277,82 +271,29 @@ func (p *Protocol) writeStringOp(data []byte, op byte) {
 	_, _ = p.h.Write(b)
 }
 
-// writeMaskedStringOp encrypts (or decrypts) src under AES-128-CTR with key, writing the result to dst, and absorbs the
-// ciphertext into the transcript as ciphertext || right_encode(len) || op, a length-suffixed byte-string field closing
-// the current frame.
+// writeCryptOp encrypts (or decrypts) src under TW128 with key, writing the result to dst, and absorbs the resulting
+// TW128 authentication tag into the transcript as tag || right_encode(TagSize) || op, a length-suffixed byte-string
+// field closing the current frame. It returns the tag so Seal can place it on the wire and Open can verify it.
 //
-// Encryption and absorption are fused over windows (see [ctrWindowSize]) so a large message's working set stays bounded
-// between the AES-CTR pass and the KT128 pass. When decrypting, each window's ciphertext is absorbed before it is
-// overwritten with plaintext, so dst may alias src. The window size does not affect the transcript: KT128 hashes the
-// same byte sequence regardless of how it is chunked.
-func (p *Protocol) writeMaskedStringOp(op byte, key, dst, src []byte, decrypt bool) {
-	block, err := aes.NewCipher(key)
+// The transcript binds to src through the tag rather than the ciphertext: the tag is a TW128 MAC over src under the
+// per-operation key, so a collision would be a TW128 forgery. dst must have capacity for len(src) bytes. A fresh key
+// is derived per operation, so the fixed zero nonce never repeats a (key, nonce) pair. When decrypting, dst may alias
+// src; the tag is recomputed over the recovered plaintext, so callers must verify it before trusting dst.
+func (p *Protocol) writeCryptOp(op byte, key, dst, src []byte, decrypt bool) [TagSize]byte {
+	aead, err := tw128.New(key)
 	if err != nil {
 		panic("thyrse: " + err.Error())
 	}
 
-	if len(src) <= ctrSmallMax {
-		// Short message: generate the CTR keystream directly from the block
-		// cipher, avoiding cipher.NewCTR's stream object and its 512-byte buffer
-		// allocation. The whole message is a single window, so encryption and
-		// absorption are not interleaved; when decrypting, the ciphertext is
-		// absorbed before being overwritten, so dst may alias src.
-		if decrypt {
-			_, _ = p.h.Write(src)
-			p.ctrXORSmall(block, dst, src)
-		} else {
-			p.ctrXORSmall(block, dst, src)
-			_, _ = p.h.Write(dst)
-		}
+	var tag [TagSize]byte
+	if decrypt {
+		_, tag = aead.DecryptAndHash(dst[:0], zeroNonce[:], src, nil)
 	} else {
-		stream := cipher.NewCTR(block, zeroIV[:])
-
-		window := ctrWindowSize(len(src))
-		for off := 0; off < len(src); off += window {
-			end := min(off+window, len(src))
-			if decrypt {
-				// Absorb the ciphertext before decrypting in place over it.
-				_, _ = p.h.Write(src[off:end])
-				stream.XORKeyStream(dst[off:end], src[off:end])
-			} else {
-				stream.XORKeyStream(dst[off:end], src[off:end])
-				_, _ = p.h.Write(dst[off:end])
-			}
-		}
+		_, tag = aead.EncryptAndHash(dst[:0], zeroNonce[:], src, nil)
 	}
 
-	var buf [enc.MaxIntSize + 1]byte
-	b := enc.RightEncode(buf[:0], uint64(len(src)))
-	b = append(b, op)
-	_, _ = p.h.Write(b)
-}
-
-// ctrXORSmall applies AES-CTR keyed by block to src, writing the result to dst, starting from an all-zero counter. It
-// reproduces cipher.NewCTR(block, zeroIV) bit for bit but generates the keystream one block at a time through p.ctr, so
-// the counter and keystream slices reference the heap-resident Protocol rather than escaping a fresh allocation per
-// call. It is used only for short messages, where this beats cipher.NewCTR's stream-buffer setup.
-func (p *Protocol) ctrXORSmall(block cipher.Block, dst, src []byte) {
-	counter := p.ctr[:aes.BlockSize]
-	ks := p.ctr[aes.BlockSize:]
-	clear(counter)
-
-	for len(src) > 0 {
-		block.Encrypt(ks, counter)
-		n := min(len(src), aes.BlockSize)
-		subtle.XORBytes(dst[:n], src[:n], ks[:n])
-		src, dst = src[n:], dst[n:]
-
-		// Increment the 128-bit big-endian counter, matching crypto/cipher CTR.
-		for i := aes.BlockSize - 1; i >= 0; i-- {
-			counter[i]++
-			if counter[i] != 0 {
-				break
-			}
-		}
-	}
-
-	// The keystream equals the plaintext given the public ciphertext, so do not retain it.
-	clear(ks)
+	p.writeStringOp(tag[:], op)
+	return tag
 }
 
 // writeInt writes right_encode(v).
@@ -398,8 +339,8 @@ const (
 	// chainValueSize is the chain value size in bytes (H).
 	chainValueSize = 32
 
-	// keySize is the AES-128 key size in bytes derived per Mask/Seal operation.
-	keySize = 16
+	// keySize is the TW128 key size in bytes derived per Mask/Seal operation.
+	keySize = tw128.KeySize
 
 	// Operation codes.
 	opInit     = 0x01
@@ -413,34 +354,12 @@ const (
 	opMaskData = 0x0a
 	opSealData = 0x0b
 
-	// opSealTag is the origin code for the chain frame Seal and Open absorb the ciphertext into and derive the wire
-	// tag from. The completed seal chains under opSeal, so this intermediate, tag-derivation state stays distinct from
-	// the state that subsequent operations follow.
+	// opSealTag is the origin code for the chain frame Seal and Open absorb the TW128 tag into. The completed seal
+	// chains under opSeal, so this intermediate, seal-data state stays distinct from the state that subsequent
+	// operations follow.
 	opSealTag = 0x09
 )
 
-// zeroIV is the all-zero AES-CTR initial counter. A fresh key is derived per Mask/Seal operation, so a fixed counter
-// start never repeats a (key, counter) pair across operations.
-var zeroIV [aes.BlockSize]byte
-
-// ctrWindowSize returns the window size in bytes over which AES-CTR encryption and KT128 absorption are interleaved for
-// an n-byte message.
-//
-// Both AES-CTR and KT128 are compute-bound well below memory bandwidth, so keeping a window cache-resident buys little,
-// while splitting a message into windows adds KT128 per-window buffering overhead. The window is therefore the whole
-// message up to a cap: messages at or below the cap are encrypted and absorbed in a single pass each, and only larger
-// messages are split, with the cap bounding the working set as cache-residency insurance on memory-bound platforms.
-func ctrWindowSize(n int) int {
-	return min(n, ctrWindowCap)
-}
-
-// ctrWindowCap is the maximum interleave window. It is a multiple of both the AES block size and the KT128 chunk size,
-// and large enough to fit in the last-level cache of current hardware.
-const ctrWindowCap = 1024 * 1024
-
-// ctrSmallMax is the largest message, in bytes, for which Mask/Seal/Open/Unmask generate the AES-CTR keystream directly
-// from the block cipher (see [Protocol.ctrXORSmall]) instead of constructing a cipher.NewCTR stream. At or below it,
-// skipping the stream object's setup and 512-byte buffer allocation is both faster and one allocation lighter; above
-// it, cipher.NewCTR's bulk keystream generation overtakes the per-block loop. The crossover measured ~128 bytes (8 AES
-// blocks); the value is a multiple of the AES block size.
-const ctrSmallMax = 128
+// zeroNonce is the all-zero TW128 nonce. A fresh key is derived per Mask/Seal operation, so a fixed nonce never repeats
+// a (key, nonce) pair across operations.
+var zeroNonce [tw128.NonceSize]byte
