@@ -6,16 +6,16 @@
 > **This code has not been audited. This design has not been analyzed.** It is experimental and should not be used for
 > production systems or critical security applications. Use at your own risk.
 
-Thyrse is a transcript-based cryptographic protocol framework built on the KT128 hash function and the TW128
-authenticated cipher.
+Thyrse is a transcript-based cryptographic protocol framework built on the KT128 hash function and AES-128-CTR
+encryption.
 Inspired by [STROBE], [Noise Protocol], and [Xoodyak], it replaces the usual grab-bag of hash functions, MACs, and KDFs
-with a single construction.  Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3), Thyrse
+with a single construction.  Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3, hardware AES), Thyrse
 delivers 10+ Gb/s on modern processors at a 128-bit security level.
 
-Confidentiality and authenticity come from TW128, a tree-parallel authenticated cipher; its authentication tag is
-absorbed into the KT128 transcript, so every output commits collision-resistantly to the encrypted message. The
-security of every scheme therefore reduces to the properties of the underlying hash function (indifferentiability from a
-random oracle, pseudorandom function security, and collision resistance) and the TW128 cipher, all at a
+Confidentiality comes from AES-128-CTR; authenticity comes from KT128 itself, which absorbs the ciphertext into the
+transcript, so every output commits collision-resistantly to it. The security of every scheme therefore reduces to the
+properties of the underlying hash function (indifferentiability from a random oracle, pseudorandom function security,
+and collision resistance) and the AES-128-CTR encryption, all at a
 128-bit security level ($2^{128}$ against generic attacks). A single analysis covers the framework's transcript layer.
 
 [STROBE]: https://strobe.sourceforge.io
@@ -65,15 +65,15 @@ uses SIMD instructions for lower latency on short inputs and higher throughput o
 | ARM64    | NEON / FEAT_SHA3 | up to 4-wide          |
 | Any      | Pure Go          | all widths (portable) |
 
-Encryption uses [TW128], a tree-parallel authenticated cipher built on the same Keccak-p[1600] permutation as KT128, so
-confidentiality and authenticity share one primitive and one SIMD code path. The TW128 tag is absorbed into the KT128
-transcript, binding every subsequent output to the encrypted message without a separate authentication primitive.
+Encryption uses AES-128-CTR from the Go standard library — AES-NI on x86-64, ARMv8 AES on ARM64. Authenticity does not
+need a separate primitive: the ciphertext is absorbed into the KT128 transcript and the tag is squeezed from it.
+Encryption and absorption are interleaved over a bounded window, so a large message's working set stays cache-resident
+between the two passes. On platforms without hardware AES the standard library falls back to a portable software
+implementation that, like Go's `crypto/aes`, is not constant-time.
 
 Build with `-tags purego` to disable assembly on any platform.
 
 [KT128]: https://github.com/codahale/kt128
-
-[TW128]: https://github.com/codahale/treewrap
 
 ## The Protocol API
 
