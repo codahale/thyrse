@@ -37,7 +37,7 @@ Thyrse ships with a library of ready-to-use cryptographic schemes built on the c
 | **siv**      | Nonce-misuse-resistant AEAD (Synthetic Initialization Vector)              |
 | **aestream** | Streaming authenticated encryption with `io.Reader` / `io.Writer` wrappers |
 | **oae2**     | Online authenticated encryption with block-based streaming                 |
-| **mhf**      | Data-dependent memory-hard function (DEGSample, Blocki & Holman 2025)      |
+| **mhf**      | Balloon memory-hard password hashing                                      |
 
 ### Complex
 
