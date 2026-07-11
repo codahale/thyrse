@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"encoding/binary"
 	"errors"
+	"math"
 	"slices"
 
 	"github.com/codahale/thyrse"
@@ -82,10 +83,10 @@ type Commitment struct {
 // key, the signers (each containing their secret share and verifying share), and the verifying shares (public keys
 // corresponding to each signer's share).
 //
-// Identifiers are 1-based: signers[i] has identifier i+1. The threshold must be at least 2 and at most maxSigners.
-// rand must contain at least 64 bytes of uniform randomness.
+// Identifiers are 1-based: signers[i] has identifier i+1. The threshold must be at least 2 and at most maxSigners,
+// maxSigners must not exceed 65,535, and rand must contain at least 64 bytes of uniform randomness.
 func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto255.Element, []Signer, []*ristretto255.Element, error) {
-	if threshold < 2 || maxSigners < threshold || len(rand) < 64 {
+	if threshold < 2 || maxSigners < threshold || maxSigners > math.MaxUint16 || len(rand) < 64 {
 		return nil, nil, nil, ErrInvalidParameters
 	}
 

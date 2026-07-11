@@ -67,6 +67,13 @@ func TestKeyGen(t *testing.T) {
 		}
 	})
 
+	t.Run("too many signers", func(t *testing.T) {
+		_, _, _, err := frost.KeyGen(kgDomain, 1<<16, 2, drbg.Data(64))
+		if err != frost.ErrInvalidParameters {
+			t.Errorf("KeyGen() err = %v, want ErrInvalidParameters", err)
+		}
+	})
+
 	t.Run("insufficient randomness", func(t *testing.T) {
 		_, _, _, err := frost.KeyGen(kgDomain, 5, 3, drbg.Data(32))
 		if err == nil {
