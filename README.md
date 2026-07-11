@@ -32,7 +32,7 @@ Thyrse ships with a library of ready-to-use cryptographic schemes built on the c
 
 | Scheme       | What it does                                                               |
 |--------------|----------------------------------------------------------------------------|
-| **digest**   | Hash (32 bytes) and HMAC (16 bytes) via `New` / `NewKeyed`                 |
+| **digest**   | Hash (32 bytes) and MAC (16 bytes) via `New` / `NewKeyed`                 |
 | **aead**     | Authenticated encryption implementing `crypto/cipher.AEAD`                 |
 | **siv**      | Nonce-misuse-resistant AEAD (Synthetic Initialization Vector)              |
 | **aestream** | Streaming authenticated encryption with `io.Reader` / `io.Writer` wrappers |
