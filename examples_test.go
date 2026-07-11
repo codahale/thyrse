@@ -32,7 +32,7 @@ func Example() {
 	// Derive('third', 8) = c7cc36aff0717a22
 	// Mask('fourth', 'this is an example') = 261c6d6736d9baf78b9e37121bf598c246d9
 	// Seal('fifth', 'this is an example') = 86b19637aa9e4d139b3a6fe45cc059d3f6c7a5ac8d8fee95554850c211b6e69b9c3ac934ff6ffd1e8ae9adde8620a7a1b924
-	// Derive('seventh', 8) = 8c59fc192516ddc3
+	// Derive('seventh', 8) = 3e76430056114cbe
 }
 
 func ExampleProtocol_mac() {

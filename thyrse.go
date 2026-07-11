@@ -174,14 +174,14 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	cv := p.finalize(key[:])
 
 	// Encrypt under opSealTag, absorbing the ciphertext into the transcript, then derive the wire tag (KT128 output)
-	// from that state. The completed seal then chains under opSeal, keeping the tag-derivation state distinct from the
-	// state subsequent operations follow.
+	// from that state. The completed seal then chains under opSeal with the wire and calculated tags (which are equal),
+	// keeping the tag-derivation state distinct from the state subsequent operations follow.
 	p.resetChain(opSealTag, cv[:])
 	p.writeMaskedStringOp(opSealData, key[:], ciphertext, plaintext, false)
 	clear(key[:])
 
 	cv = p.finalize(tagDst)
-	p.resetChain(opSeal, cv[:])
+	p.resetSealChain(cv[:], tagDst, tagDst)
 
 	return ret
 }
@@ -190,7 +190,7 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 // appended (as returned by Seal).
 //
 // On success, returns the plaintext. On failure, returns ErrInvalidCiphertext. The protocol's transcript diverges
-// from the sender's because it absorbs the received ciphertext before verification returns.
+// from the sender's because its completed seal state commits to both the received and calculated tags.
 func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	var ct, tt []byte
 	if len(sealed) < TagSize {
@@ -207,7 +207,8 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	cv := p.finalize(key[:])
 
 	// Decrypt under opSealTag, absorbing the received ciphertext into the transcript, then recompute the wire tag
-	// (KT128 output) from that state and compare it against the received tag. The completed open chains under opSeal.
+	// (KT128 output) from that state. The completed open chains under opSeal with both the received and calculated tags
+	// before comparing them, so an authentication failure always leaves a state distinct from the sender's.
 	ret, plaintext := mem.SliceForAppend(dst, len(ct))
 	p.resetChain(opSealTag, cv[:])
 	p.writeMaskedStringOp(opSealData, key[:], plaintext, ct, true)
@@ -215,7 +216,7 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 
 	var tag [TagSize]byte
 	cv = p.finalize(tag[:])
-	p.resetChain(opSeal, cv[:])
+	p.resetSealChain(cv[:], tt, tag[:])
 
 	if subtle.ConstantTimeCompare(tag[:], tt) != 1 {
 		clear(plaintext)
@@ -394,6 +395,29 @@ func (p *Protocol) resetChain(originOp byte, chainValue []byte) {
 	buf[36] = 1
 	buf[37] = opChain
 	_, _ = p.h.Write(buf[:])
+}
+
+// resetSealChain resets the transcript with a chain frame containing the chain
+// value, the tag carried on the wire, and the locally calculated tag. Seal
+// supplies its calculated tag in both tag positions. Open supplies the received
+// and calculated tags, causing authentication failures to produce a distinct
+// subsequent state while successful operations remain synchronized.
+func (p *Protocol) resetSealChain(chainValue, wireTag, calculatedTag []byte) {
+	p.h.Reset()
+
+	// The maximum frame is 106 bytes: a one-byte origin, three 32-byte
+	// values, four two-byte right encodings, and the chain operation byte.
+	var buf [106]byte
+	b := append(buf[:0], opSeal)
+	b = append(b, chainValue...)
+	b = enc.RightEncode(b, uint64(len(chainValue)))
+	b = append(b, wireTag...)
+	b = enc.RightEncode(b, uint64(len(wireTag)))
+	b = append(b, calculatedTag...)
+	b = enc.RightEncode(b, uint64(len(calculatedTag)))
+	b = enc.RightEncode(b, 3)
+	b = append(b, opChain)
+	_, _ = p.h.Write(b)
 }
 
 const (

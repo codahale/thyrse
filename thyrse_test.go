@@ -3,6 +3,7 @@ package thyrse
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/codahale/thyrse/internal/enc"
@@ -137,6 +138,9 @@ func TestSeal(t *testing.T) {
 		if !bytes.Equal(opened, plaintext) {
 			t.Fatalf("got %q, want %q", opened, plaintext)
 		}
+		if enc.Equal(dec) != 1 {
+			t.Fatal("Seal and successful Open produced divergent states")
+		}
 	})
 
 	t.Run("empty plaintext", func(t *testing.T) {
@@ -207,13 +211,13 @@ func TestOpen(t *testing.T) {
 	key := []byte("32-byte-key-material-for-testing!")
 
 	// Shared seal setup for tamper tests.
-	seal := func() []byte {
+	seal := func(plaintext []byte) (*Protocol, []byte) {
 		enc := newKeyed("test.seal", key)
-		return enc.Seal("message", nil, []byte("secret"))
+		return enc, enc.Seal("message", nil, plaintext)
 	}
 
 	t.Run("tampered ciphertext", func(t *testing.T) {
-		sealed := seal()
+		enc, sealed := seal([]byte("secret"))
 		tampered := make([]byte, len(sealed))
 		copy(tampered, sealed)
 		tampered[0] ^= 0xFF
@@ -223,10 +227,13 @@ func TestOpen(t *testing.T) {
 		if !errors.Is(err, ErrInvalidCiphertext) {
 			t.Fatalf("got %v, want ErrInvalidCiphertext", err)
 		}
+		if enc.Equal(dec) == 1 {
+			t.Fatal("ciphertext error did not diverge state")
+		}
 	})
 
 	t.Run("tampered tag", func(t *testing.T) {
-		sealed := seal()
+		enc, sealed := seal([]byte("secret"))
 		tampered := make([]byte, len(sealed))
 		copy(tampered, sealed)
 		tampered[len(tampered)-1] ^= 0xFF
@@ -235,6 +242,37 @@ func TestOpen(t *testing.T) {
 		_, err := dec.Open("message", nil, tampered)
 		if !errors.Is(err, ErrInvalidCiphertext) {
 			t.Fatalf("got %v, want ErrInvalidCiphertext", err)
+		}
+		if enc.Equal(dec) == 1 {
+			t.Fatal("tag-only error did not diverge state")
+		}
+	})
+
+	t.Run("truncated tag", func(t *testing.T) {
+		enc, sealed := seal(nil)
+		dec := newKeyed("test.seal", key)
+		_, err := dec.Open("message", nil, sealed[:len(sealed)-1])
+		if !errors.Is(err, ErrInvalidCiphertext) {
+			t.Fatalf("got %v, want ErrInvalidCiphertext", err)
+		}
+		if enc.Equal(dec) == 1 {
+			t.Fatal("truncated tag did not diverge state")
+		}
+	})
+
+	t.Run("different tags produce different states", func(t *testing.T) {
+		_, sealed := seal([]byte("secret"))
+		bad1 := slices.Clone(sealed)
+		bad2 := slices.Clone(sealed)
+		bad1[len(bad1)-1] ^= 1
+		bad2[len(bad2)-1] ^= 2
+
+		dec1 := newKeyed("test.seal", key)
+		dec2 := newKeyed("test.seal", key)
+		_, _ = dec1.Open("message", nil, bad1)
+		_, _ = dec2.Open("message", nil, bad2)
+		if dec1.Equal(dec2) == 1 {
+			t.Fatal("different received tags produced equal states")
 		}
 	})
 
