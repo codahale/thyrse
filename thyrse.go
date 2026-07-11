@@ -6,7 +6,6 @@ import (
 	"crypto/cipher"
 	"crypto/subtle"
 	"errors"
-	"fmt"
 
 	"github.com/codahale/kt128"
 	"github.com/codahale/thyrse/internal/enc"
@@ -53,8 +52,17 @@ func (p *Protocol) Equal(other *Protocol) int {
 	return p.h.Equal(other.h)
 }
 
-func (p *Protocol) String() string {
-	return fmt.Sprintf("Protocol(%x)", p.Clone().Derive("test", nil, 8))
+// String returns a state-independent representation of the protocol suitable
+// for diagnostic output. It deliberately does not expose a transcript
+// fingerprint.
+func (*Protocol) String() string {
+	return "thyrse.Protocol{redacted}"
+}
+
+// GoString returns a state-independent representation for Go-syntax
+// formatting such as %#v.
+func (*Protocol) GoString() string {
+	return "thyrse.Protocol{redacted}"
 }
 
 // Mix absorbs data into the protocol transcript. Use for key material, nonces, associated data, and any protocol input

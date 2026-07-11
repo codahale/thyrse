@@ -26,8 +26,8 @@ func TestPake(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if got, want := pInitiator.String(), pResponder.String(); got != want {
-			t.Errorf("initiator = %s, responder = %s", got, want)
+		if pInitiator.Equal(pResponder) != 1 {
+			t.Error("initiator and responder states differ")
 		}
 	})
 
@@ -58,8 +58,8 @@ func TestPake(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if got, want := pInitiator.String(), pResponder.String(); got == want {
-			t.Errorf("Initiate/Respond() states equal, want different")
+		if pInitiator.Equal(pResponder) != 0 {
+			t.Error("Initiate/Respond() states equal, want different")
 		}
 	})
 

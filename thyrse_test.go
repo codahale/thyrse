@@ -3,6 +3,7 @@ package thyrse
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -493,49 +494,30 @@ func TestEqual(t *testing.T) {
 }
 
 func TestString(t *testing.T) {
-	t.Run("non-empty", func(t *testing.T) {
-		p := New("test")
-		s := p.String()
-		if s == "" {
-			t.Fatal("String() should not be empty")
-		}
-	})
+	const redacted = "thyrse.Protocol{redacted}"
+	p1 := New("test")
+	p1.Mix("key", []byte("a"))
+	p2 := New("test")
+	p2.Mix("key", []byte("b"))
 
-	t.Run("same state same string", func(t *testing.T) {
-		p1 := New("test")
-		p1.Mix("key", []byte("secret"))
-
-		p2 := New("test")
-		p2.Mix("key", []byte("secret"))
-
-		if p1.String() != p2.String() {
-			t.Fatal("identical protocols should produce same String()")
-		}
-	})
-
-	t.Run("different state different string", func(t *testing.T) {
-		p1 := New("test")
-		p1.Mix("key", []byte("a"))
-
-		p2 := New("test")
-		p2.Mix("key", []byte("b"))
-
-		if p1.String() == p2.String() {
-			t.Fatal("different protocols should produce different String()")
-		}
-	})
-
-	t.Run("non-mutating", func(t *testing.T) {
-		p := New("test")
-		p.Mix("key", []byte("secret"))
-		clone := p.Clone()
-
-		_ = p.String()
-
-		if p.Equal(clone) != 1 {
-			t.Fatal("String() should not mutate protocol state")
-		}
-	})
+	if p1.Equal(p2) != 0 {
+		t.Fatal("test protocols should have different states")
+	}
+	if got := p1.String(); got != redacted {
+		t.Fatalf("String() = %q, want %q", got, redacted)
+	}
+	if got := p1.GoString(); got != redacted {
+		t.Fatalf("GoString() = %q, want %q", got, redacted)
+	}
+	for _, format := range []string{"%v", "%+v", "%#v"} {
+		t.Run(format, func(t *testing.T) {
+			got1 := fmt.Sprintf(format, p1)
+			got2 := fmt.Sprintf(format, p2)
+			if got1 != redacted || got2 != redacted {
+				t.Fatalf("formatting = (%q, %q), want (%q, %q)", got1, got2, redacted, redacted)
+			}
+		})
+	}
 }
 
 func TestForkN(t *testing.T) {
