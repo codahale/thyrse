@@ -3,6 +3,7 @@ package adratchet_test
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/codahale/thyrse"
@@ -150,15 +151,80 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid message", func(t *testing.T) {
+	t.Run("failed new DH message is retryable", func(t *testing.T) {
 		alice := adratchet.NewInitiator(p.Clone(), dA, qB)
 		bea := adratchet.NewResponder(p.Clone(), dB, qA)
 
 		msg := alice.SendMessage([]byte("hello"))
-		msg[len(msg)-1] ^= 0xff // Corrupt the tag
+		tampered := slices.Clone(msg)
+		tampered[len(tampered)-1] ^= 0xff
 
-		if _, err := bea.ReceiveMessage(msg); err == nil {
+		if _, err := bea.ReceiveMessage(tampered); err == nil {
 			t.Error("ReceiveMessage() err = nil, want error")
+		}
+		got, err := bea.ReceiveMessage(msg)
+		if err != nil {
+			t.Fatalf("ReceiveMessage() retry err = %v, want nil", err)
+		}
+		if !bytes.Equal(got, []byte("hello")) {
+			t.Errorf("ReceiveMessage() retry = %q, want %q", got, "hello")
+		}
+
+		reply := bea.SendMessage([]byte("reply"))
+		got, err = alice.ReceiveMessage(reply)
+		if err != nil {
+			t.Fatalf("ReceiveMessage() reply err = %v, want nil", err)
+		}
+		if !bytes.Equal(got, []byte("reply")) {
+			t.Errorf("ReceiveMessage() reply = %q, want %q", got, "reply")
+		}
+	})
+
+	t.Run("failed current chain message is retryable", func(t *testing.T) {
+		alice := adratchet.NewInitiator(p.Clone(), dA, qB)
+		bea := adratchet.NewResponder(p.Clone(), dB, qA)
+
+		first := alice.SendMessage([]byte("first"))
+		if _, err := bea.ReceiveMessage(first); err != nil {
+			t.Fatal(err)
+		}
+
+		msg := alice.SendMessage([]byte("second"))
+		tampered := slices.Clone(msg)
+		tampered[len(tampered)-1] ^= 0xff
+		if _, err := bea.ReceiveMessage(tampered); err == nil {
+			t.Error("ReceiveMessage() err = nil, want error")
+		}
+		got, err := bea.ReceiveMessage(msg)
+		if err != nil {
+			t.Fatalf("ReceiveMessage() retry err = %v, want nil", err)
+		}
+		if !bytes.Equal(got, []byte("second")) {
+			t.Errorf("ReceiveMessage() retry = %q, want %q", got, "second")
+		}
+	})
+
+	t.Run("failed skipped message is retryable", func(t *testing.T) {
+		alice := adratchet.NewInitiator(p.Clone(), dA, qB)
+		bea := adratchet.NewResponder(p.Clone(), dB, qA)
+
+		first := alice.SendMessage([]byte("first"))
+		second := alice.SendMessage([]byte("second"))
+		if _, err := bea.ReceiveMessage(second); err != nil {
+			t.Fatal(err)
+		}
+
+		tampered := slices.Clone(first)
+		tampered[len(tampered)-1] ^= 0xff
+		if _, err := bea.ReceiveMessage(tampered); err == nil {
+			t.Error("ReceiveMessage() err = nil, want error")
+		}
+		got, err := bea.ReceiveMessage(first)
+		if err != nil {
+			t.Fatalf("ReceiveMessage() retry err = %v, want nil", err)
+		}
+		if !bytes.Equal(got, []byte("first")) {
+			t.Errorf("ReceiveMessage() retry = %q, want %q", got, "first")
 		}
 	})
 

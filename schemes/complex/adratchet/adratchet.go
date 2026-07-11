@@ -121,7 +121,7 @@ func (s *State) Ratchet() {
 }
 
 // ReceiveMessage decrypts the given ciphertext and returns the plaintext. It handles out-of-order messages and performs
-// ratchet steps as needed.
+// ratchet steps as needed. State changes are committed only after the message authenticates successfully.
 func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) < Overhead {
 		return nil, thyrse.ErrInvalidCiphertext
@@ -136,12 +136,29 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 	n := binary.LittleEndian.Uint32(header[32:36])
 	pn := binary.LittleEndian.Uint32(header[36:40])
 
+	trial := s.clone()
+	plaintext, err := trial.receiveMessage(header, msg, pub, n, pn)
+	if err != nil {
+		s.discard(trial)
+		return nil, err
+	}
+	s.commit(trial)
+	return plaintext, nil
+}
+
+func (s *State) receiveMessage(header, msg []byte, pub *ristretto255.Element, n, pn uint32) ([]byte, error) {
 	// Check for a skipped message key.
 	sk := newSK(pub, n)
 	if p, ok := s.skipped[sk]; ok {
-		delete(s.skipped, sk)
+		p = p.Clone()
 		p.Mix("header", header)
-		return p.Open("message", nil, msg)
+		plaintext, err := p.Open("message", nil, msg)
+		p.Clear()
+		if err != nil {
+			return nil, err
+		}
+		delete(s.skipped, sk)
+		return plaintext, nil
 	}
 
 	// Check for a new DH key.
@@ -178,7 +195,49 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 
 	// Mix in the header and open the message.
 	p.Mix("header", header)
-	return p.Open("message", nil, msg)
+	plaintext, err := p.Open("message", nil, msg)
+	p.Clear()
+	return plaintext, err
+}
+
+// clone returns a copy-on-write transaction. The sending and receiving
+// protocols are cloned eagerly; skipped-key protocols are shared until one is
+// selected, while the map itself is copied so additions and deletions remain
+// local to the transaction.
+func (s *State) clone() *State {
+	trial := *s
+	trial.send = s.send.Clone()
+	trial.recv = s.recv.Clone()
+	trial.skipped = make(map[skippedKey]*thyrse.Protocol, len(s.skipped))
+	for k, p := range s.skipped {
+		trial.skipped[k] = p
+	}
+	return &trial
+}
+
+// discard clears protocol states created by a failed transaction without
+// invalidating skipped-key protocols still owned by the live state.
+func (s *State) discard(trial *State) {
+	trial.send.Clear()
+	trial.recv.Clear()
+	for k, p := range trial.skipped {
+		if original, ok := s.skipped[k]; !ok || original != p {
+			p.Clear()
+		}
+	}
+}
+
+// commit replaces the live state and clears protocol states that are no longer
+// reachable after a successful transaction.
+func (s *State) commit(trial *State) {
+	s.send.Clear()
+	s.recv.Clear()
+	for k, p := range s.skipped {
+		if next, ok := trial.skipped[k]; !ok || next != p {
+			p.Clear()
+		}
+	}
+	*s = *trial
 }
 
 func (s *State) advanceRecvChain(targetN uint32) error {
