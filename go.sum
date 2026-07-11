@@ -1,7 +1,5 @@
 filippo.io/edwards25519 v1.2.0 h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=
 filippo.io/edwards25519 v1.2.0/go.mod h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=
-github.com/codahale/kt128 v0.0.0-20260709165614-462ec3325dde h1:vOx+mH/uspd2RpMkGAiWhU/c9Z5v1mrCNfyJUH5WH2A=
-github.com/codahale/kt128 v0.0.0-20260709165614-462ec3325dde/go.mod h1:2nOgNLnwSn1ngVdtVbdnOwiPITXeaMj/WoBWksk6egQ=
 github.com/codahale/kt128 v0.0.0-20260711181644-a50304d940b6 h1:pR1UZ2x3ttxJgO/CxPuq1F+mYWJQI/2/AGU/CUH+0Fo=
 github.com/codahale/kt128 v0.0.0-20260711181644-a50304d940b6/go.mod h1:2nOgNLnwSn1ngVdtVbdnOwiPITXeaMj/WoBWksk6egQ=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
