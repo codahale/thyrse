@@ -13,16 +13,30 @@ const ProofSize = 32 + 32 + 32
 
 // Prove generates n bytes of pseudorandom data for the given message and returns that and a proof which can be used to
 // verify and recalculate the PRF output given the message and the prover's public key.
+//
+// Panics if the prover's public key or a derived proof point is the identity element.
 func Prove(domain string, d *ristretto255.Scalar, rand, m []byte, n int) (prf, proof []byte) {
+	identity := ristretto255.NewIdentityElement()
+	q := ristretto255.NewIdentityElement().ScalarBaseMult(d)
+	if q.Equal(identity) == 1 {
+		panic("vrf: prover public key is identity")
+	}
+
 	// Hash the input to a point on the curve.
 	p := thyrse.New(domain)
 	p.Mix("generator", ristretto255.NewGeneratorElement().Bytes())
-	p.Mix("prover", ristretto255.NewIdentityElement().ScalarBaseMult(d).Bytes())
+	p.Mix("prover", q.Bytes())
 	p.Mix("input", m)
 	h, _ := ristretto255.NewIdentityElement().SetUniformBytes(p.Derive("point", nil, 64))
+	if h.Equal(identity) == 1 {
+		panic("vrf: input maps to identity")
+	}
 
 	// Calculate gamma and the PRF output.
 	gamma := ristretto255.NewIdentityElement().ScalarMult(d, h)
+	if gamma.Equal(identity) == 1 {
+		panic("vrf: gamma is identity")
+	}
 	p.Mix("gamma", gamma.Bytes())
 	prf = p.Derive("prf", nil, n)
 
@@ -37,6 +51,9 @@ func Prove(domain string, d *ristretto255.Scalar, rand, m []byte, n int) (prf, p
 	// Calculate the commitment points.
 	u := ristretto255.NewIdentityElement().ScalarBaseMult(k)
 	v := ristretto255.NewIdentityElement().ScalarMult(k, h)
+	if u.Equal(identity) == 1 || v.Equal(identity) == 1 {
+		panic("vrf: commitment is identity")
+	}
 	verifier.Mix("commitment-u", u.Bytes())
 	verifier.Mix("commitment-v", v.Bytes())
 
@@ -55,13 +72,17 @@ func Verify(domain string, q *ristretto255.Element, m, proof []byte, n int) (val
 	if len(proof) != ProofSize {
 		return false, nil
 	}
+	identity := ristretto255.NewIdentityElement()
+	if q.Equal(identity) == 1 {
+		return false, nil
+	}
 
 	// Parse the proof.
 	proofGamma := proof[:32]
 	gamma, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(proofGamma)
 	c, _ := ristretto255.NewScalar().SetCanonicalBytes(proof[32:64])
 	s, _ := ristretto255.NewScalar().SetCanonicalBytes(proof[64:])
-	if c == nil || s == nil || gamma == nil {
+	if c == nil || s == nil || gamma == nil || gamma.Equal(identity) == 1 {
 		return false, nil
 	}
 
@@ -80,6 +101,9 @@ func Verify(domain string, q *ristretto255.Element, m, proof []byte, n int) (val
 	negC := ristretto255.NewScalar().Negate(c)
 	u := ristretto255.NewIdentityElement().VarTimeDoubleScalarBaseMult(negC, q, s)
 	v := ristretto255.NewIdentityElement().VarTimeMultiScalarMult([]*ristretto255.Scalar{s, negC}, []*ristretto255.Element{h, gamma})
+	if u.Equal(identity) == 1 || v.Equal(identity) == 1 {
+		return false, nil
+	}
 
 	// Fork the protocol into prover and verifier roles.
 	_, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))

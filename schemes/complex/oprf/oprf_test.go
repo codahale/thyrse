@@ -72,6 +72,13 @@ func TestBlindEvaluate(t *testing.T) {
 			t.Error("BlindEvaluate() err = nil, want error")
 		}
 	})
+
+	t.Run("zero private key", func(t *testing.T) {
+		_, err := oprf.BlindEvaluate(ristretto255.NewScalar(), ristretto255.NewGeneratorElement())
+		if err == nil {
+			t.Error("BlindEvaluate() err = nil, want error")
+		}
+	})
 }
 
 func TestFinalize(t *testing.T) {

@@ -23,7 +23,7 @@ type Finish = func(in []byte) (*thyrse.Protocol, error)
 // message to be sent to the responder. When the finish function is called with the responder's message, it will return
 // a thyrse.Protocol with a shared state.
 //
-// Panics if rand is not exactly 64 bytes.
+// Panics if rand is not exactly 64 bytes or produces an identity exchange point.
 func Initiate(domain string, initiatorID, responderID, sessionID, password, rand []byte) (finish Finish, out []byte) {
 	return exchange(domain, initiatorID, responderID, sessionID, password, rand, true)
 }
@@ -33,7 +33,7 @@ func Initiate(domain string, initiatorID, responderID, sessionID, password, rand
 // Returns a fully-keyed thyrse.Protocol and a message to be sent to the initiator to complete the exchange, or an
 // error.
 //
-// Panics if rand is not exactly 64 bytes.
+// Panics if rand is not exactly 64 bytes or produces an identity exchange point.
 func Respond(domain string, initiatorID, responderID, sessionID, password, rand, msg []byte) (p *thyrse.Protocol, out []byte, err error) {
 	finish, out := exchange(domain, initiatorID, responderID, sessionID, password, rand, false)
 	p, err = finish(msg)
@@ -50,6 +50,9 @@ func exchange(domain string, initiatorID, responderID, sessionID, password, rand
 
 	// Derive a base point from the protocol state.
 	gP, _ := ristretto255.NewIdentityElement().SetUniformBytes(p.Derive("generator", nil, 64))
+	if gP.Equal(ristretto255.NewIdentityElement()) == 1 {
+		panic("pake: generator is identity")
+	}
 
 	// Generate a random secret value.
 	a, err := ristretto255.NewScalar().SetUniformBytes(rand)
@@ -58,7 +61,11 @@ func exchange(domain string, initiatorID, responderID, sessionID, password, rand
 	}
 
 	// Calculate the exchange point and encode it.
-	out = ristretto255.NewIdentityElement().ScalarMult(a, gP).Bytes()
+	exchangePoint := ristretto255.NewIdentityElement().ScalarMult(a, gP)
+	if exchangePoint.Equal(ristretto255.NewIdentityElement()) == 1 {
+		panic("pake: exchange point is identity")
+	}
+	out = exchangePoint.Bytes()
 
 	// Return a continuation to be called when the message from the other party is received.
 	return func(in []byte) (*thyrse.Protocol, error) {

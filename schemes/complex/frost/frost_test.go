@@ -289,6 +289,20 @@ func TestVerifyShare(t *testing.T) {
 			t.Error("VerifyShare() = true, want false")
 		}
 	})
+
+	t.Run("identity verifying share", func(t *testing.T) {
+		id := signers[subset[0]].Identifier()
+		if frost.VerifyShare(signDomain, ristretto255.NewIdentityElement(), groupKey, id, message, commitments, shares[0]) {
+			t.Error("VerifyShare() = true, want false")
+		}
+	})
+
+	t.Run("identity group key", func(t *testing.T) {
+		id := signers[subset[0]].Identifier()
+		if frost.VerifyShare(signDomain, verifyingShares[subset[0]], ristretto255.NewIdentityElement(), id, message, commitments, shares[0]) {
+			t.Error("VerifyShare() = true, want false")
+		}
+	})
 }
 
 func TestVerifyInvalid(t *testing.T) {
@@ -334,6 +348,12 @@ func TestVerifyInvalid(t *testing.T) {
 	t.Run("wrong group key", func(t *testing.T) {
 		otherGroupKey, _, _, _ := frost.KeyGen(kgDomain, 3, 2, drbg.Data(64))
 		if frost.Verify(signDomain, otherGroupKey, message, signature) {
+			t.Error("Verify() = true, want false")
+		}
+	})
+
+	t.Run("identity group key", func(t *testing.T) {
+		if frost.Verify(signDomain, ristretto255.NewIdentityElement(), message, signature) {
 			t.Error("Verify() = true, want false")
 		}
 	})
@@ -407,6 +427,15 @@ func TestSignErrors(t *testing.T) {
 			t.Error("Sign() err = nil, want error")
 		}
 	})
+
+	t.Run("identity commitment", func(t *testing.T) {
+		identityCommitments := slices.Clone(commitments)
+		identityCommitments[0].Hiding = ristretto255.NewIdentityElement().Bytes()
+		_, err := signers[0].Sign(signDomain, nonces[0], message, identityCommitments)
+		if err != frost.ErrInvalidCommitment {
+			t.Errorf("Sign() err = %v, want ErrInvalidCommitment", err)
+		}
+	})
 }
 
 func TestAggregateErrors(t *testing.T) {
@@ -431,6 +460,22 @@ func TestAggregateErrors(t *testing.T) {
 		_, err := frost.Aggregate(signDomain, groupKey, []byte("msg"), commitments, [][]byte{badShare})
 		if err == nil {
 			t.Error("Aggregate() err = nil, want error")
+		}
+	})
+
+	t.Run("identity group key", func(t *testing.T) {
+		_, err := frost.Aggregate(signDomain, ristretto255.NewIdentityElement(), []byte("msg"), nil, nil)
+		if err != frost.ErrInvalidParameters {
+			t.Errorf("Aggregate() err = %v, want ErrInvalidParameters", err)
+		}
+	})
+
+	t.Run("identity commitment", func(t *testing.T) {
+		identity := ristretto255.NewIdentityElement().Bytes()
+		commitments := []frost.Commitment{{Identifier: 1, Hiding: identity, Binding: identity}}
+		_, err := frost.Aggregate(signDomain, groupKey, []byte("msg"), commitments, [][]byte{make([]byte, 32)})
+		if err != frost.ErrInvalidCommitment {
+			t.Errorf("Aggregate() err = %v, want ErrInvalidCommitment", err)
 		}
 	})
 }

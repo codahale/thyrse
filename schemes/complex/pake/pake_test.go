@@ -79,6 +79,15 @@ func TestPake(t *testing.T) {
 			t.Errorf("finish() err = %v, want ErrInvalidHandshake", err)
 		}
 	})
+
+	t.Run("identity local exchange point", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("Initiate() did not panic")
+			}
+		}()
+		pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), make([]byte, 64))
+	})
 }
 
 func Example() {

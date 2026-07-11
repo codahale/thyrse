@@ -8,6 +8,7 @@ import (
 	"github.com/codahale/thyrse"
 	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/adratchet"
+	"github.com/gtank/ristretto255"
 )
 
 func Example() {
@@ -52,6 +53,27 @@ func Example() {
 	// Output:
 	// message from B: "no, this is _my_ first message"
 	// message from A: "this is my first message"
+}
+
+func TestNewRejectsIdentityKeys(t *testing.T) {
+	drbg := testdata.New("thyrse async double ratchet identity")
+	d, q := drbg.KeyPair()
+
+	for name, f := range map[string]func(){
+		"initiator local":  func() { adratchet.NewInitiator(thyrse.New("test"), ristretto255.NewScalar(), q) },
+		"initiator remote": func() { adratchet.NewInitiator(thyrse.New("test"), d, ristretto255.NewIdentityElement()) },
+		"responder local":  func() { adratchet.NewResponder(thyrse.New("test"), ristretto255.NewScalar(), q) },
+		"responder remote": func() { adratchet.NewResponder(thyrse.New("test"), d, ristretto255.NewIdentityElement()) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("constructor did not panic")
+				}
+			}()
+			f()
+		})
+	}
 }
 
 func TestState_ReceiveMessage(t *testing.T) {
@@ -182,6 +204,18 @@ func TestState_ReceiveMessage(t *testing.T) {
 		msg := alice.SendMessage([]byte("hello"))
 		// Ristretto255 points are 32 bytes, and the highest bit must be 0 for canonical encoding.
 		msg[31] |= 0x80
+
+		if _, err := bea.ReceiveMessage(msg); err == nil {
+			t.Error("ReceiveMessage() err = nil, want error")
+		}
+	})
+
+	t.Run("identity public key", func(t *testing.T) {
+		alice := adratchet.NewInitiator(p.Clone(), dA, qB)
+		bea := adratchet.NewResponder(p.Clone(), dB, qA)
+
+		msg := alice.SendMessage([]byte("hello"))
+		copy(msg[:32], ristretto255.NewIdentityElement().Bytes())
 
 		if _, err := bea.ReceiveMessage(msg); err == nil {
 			t.Error("ReceiveMessage() err = nil, want error")

@@ -32,11 +32,16 @@ const (
 
 // NewInitiator creates a new double ratchet state for the initiating party with the given base protocol, local private
 // key, and peer public key. It automatically performs an initial DH ratchet step.
+// Panics if either public key is the identity element.
 func NewInitiator(p *thyrse.Protocol, local *ristretto255.Scalar, remote *ristretto255.Element) *State {
+	localPub := ristretto255.NewIdentityElement().ScalarBaseMult(local)
+	if localPub.Equal(ristretto255.NewIdentityElement()) == 1 || remote.Equal(ristretto255.NewIdentityElement()) == 1 {
+		panic("adratchet: identity public key")
+	}
 	send, recv := p.Fork("role", []byte("initiator"), []byte("responder"))
 	s := &State{
 		localPriv: local,
-		localPub:  ristretto255.NewIdentityElement().ScalarBaseMult(local),
+		localPub:  localPub,
 		remotePub: remote,
 		send:      send,
 		recv:      recv,
@@ -51,11 +56,16 @@ func NewInitiator(p *thyrse.Protocol, local *ristretto255.Scalar, remote *ristre
 
 // NewResponder creates a new double ratchet state for the responding party with the given base protocol, local private
 // key, and peer public key.
+// Panics if either public key is the identity element.
 func NewResponder(p *thyrse.Protocol, local *ristretto255.Scalar, remote *ristretto255.Element) *State {
+	localPub := ristretto255.NewIdentityElement().ScalarBaseMult(local)
+	if localPub.Equal(ristretto255.NewIdentityElement()) == 1 || remote.Equal(ristretto255.NewIdentityElement()) == 1 {
+		panic("adratchet: identity public key")
+	}
 	recv, send := p.Fork("role", []byte("initiator"), []byte("responder"))
 	s := &State{
 		localPriv: local,
-		localPub:  ristretto255.NewIdentityElement().ScalarBaseMult(local),
+		localPub:  localPub,
 		remotePub: remote,
 		send:      send,
 		recv:      recv,
@@ -92,12 +102,17 @@ func (s *State) SendMessage(plaintext []byte) []byte {
 // Ratchet performs a voluntary DH ratchet step, generating a new local key and mixing it with the
 // remote public key into the sending protocol.
 func (s *State) Ratchet() {
-	var b [64]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		panic(err)
+	for {
+		var b [64]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			panic(err)
+		}
+		s.localPriv, _ = ristretto255.NewScalar().SetUniformBytes(b[:])
+		s.localPub = ristretto255.NewIdentityElement().ScalarBaseMult(s.localPriv)
+		if s.localPub.Equal(ristretto255.NewIdentityElement()) == 0 {
+			break
+		}
 	}
-	s.localPriv, _ = ristretto255.NewScalar().SetUniformBytes(b[:])
-	s.localPub = ristretto255.NewIdentityElement().ScalarBaseMult(s.localPriv)
 
 	dh := ristretto255.NewIdentityElement().ScalarMult(s.localPriv, s.remotePub)
 	s.send.Mix("dh", dh.Bytes())
@@ -115,7 +130,7 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 	msg := ciphertext[headerSize:]
 
 	pub, err := ristretto255.NewIdentityElement().SetCanonicalBytes(header[:32])
-	if err != nil {
+	if err != nil || pub.Equal(ristretto255.NewIdentityElement()) == 1 {
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 	n := binary.LittleEndian.Uint32(header[32:36])

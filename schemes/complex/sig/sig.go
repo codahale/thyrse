@@ -3,6 +3,7 @@ package sig
 
 import (
 	"bytes"
+	"errors"
 	"io"
 
 	"github.com/codahale/thyrse"
@@ -17,9 +18,14 @@ const Size = 64
 //
 // Returns any error from the underlying reader.
 func Sign(domain string, d *ristretto255.Scalar, rand []byte, message io.Reader) ([]byte, error) {
+	q := ristretto255.NewIdentityElement().ScalarBaseMult(d)
+	if q.Equal(ristretto255.NewIdentityElement()) == 1 {
+		return nil, errors.New("sig: signer public key is identity")
+	}
+
 	// Initialize the protocol and mix in the signer's public key and the message.
 	p := thyrse.New(domain)
-	p.Mix("signer", ristretto255.NewIdentityElement().ScalarBaseMult(d).Bytes())
+	p.Mix("signer", q.Bytes())
 	msg, err := io.ReadAll(message)
 	if err != nil {
 		return nil, err
@@ -37,6 +43,9 @@ func Sign(domain string, d *ristretto255.Scalar, rand []byte, message io.Reader)
 	// user-provided random data hedges the deterministic scheme against fault attacks.
 	k, _ := ristretto255.NewScalar().SetUniformBytes(prover.Derive("commitment", nil, 64))
 	r := ristretto255.NewIdentityElement().ScalarBaseMult(k)
+	if r.Equal(ristretto255.NewIdentityElement()) == 1 {
+		return nil, errors.New("sig: commitment is identity")
+	}
 	rOut := r.Bytes()
 
 	// Mix the commitment point into the verifier.
@@ -58,6 +67,14 @@ func Sign(domain string, d *ristretto255.Scalar, rand []byte, message io.Reader)
 func Verify(domain string, q *ristretto255.Element, sig []byte, message io.Reader) (bool, error) {
 	// Valid signatures consist of a 32-byte point and a 32-byte scalar.
 	if len(sig) != Size {
+		return false, nil
+	}
+	identity := ristretto255.NewIdentityElement()
+	if q.Equal(identity) == 1 {
+		return false, nil
+	}
+	r, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(sig[:32])
+	if r == nil || r.Equal(identity) == 1 {
 		return false, nil
 	}
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/vrf"
+	"github.com/gtank/ristretto255"
 )
 
 func TestVerify(t *testing.T) {
@@ -36,6 +37,22 @@ func TestVerify(t *testing.T) {
 
 		if got != nil {
 			t.Errorf("Verify() output = %x, want nil", got)
+		}
+	})
+
+	t.Run("identity prover", func(t *testing.T) {
+		valid, got := vrf.Verify("domain", ristretto255.NewIdentityElement(), []byte("message"), proof, 32)
+		if valid || got != nil {
+			t.Errorf("Verify() = (%v, %x), want (false, nil)", valid, got)
+		}
+	})
+
+	t.Run("identity gamma", func(t *testing.T) {
+		badGamma := slices.Clone(proof)
+		copy(badGamma[:32], ristretto255.NewIdentityElement().Bytes())
+		valid, got := vrf.Verify("domain", q, []byte("message"), badGamma, 32)
+		if valid || got != nil {
+			t.Errorf("Verify() = (%v, %x), want (false, nil)", valid, got)
 		}
 	})
 
@@ -113,6 +130,15 @@ func TestVerify(t *testing.T) {
 			t.Errorf("Verify() output = %x, want nil", got)
 		}
 	})
+}
+
+func TestProveRejectsIdentityKey(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Prove() did not panic")
+		}
+	}()
+	vrf.Prove("domain", ristretto255.NewScalar(), nil, nil, 32)
 }
 
 func FuzzVerify(f *testing.F) {

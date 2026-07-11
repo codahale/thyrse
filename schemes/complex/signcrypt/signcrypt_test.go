@@ -41,6 +41,29 @@ func TestOpen(t *testing.T) {
 		}
 	})
 
+	t.Run("identity sender", func(t *testing.T) {
+		plaintext, err := signcrypt.Open("signcrypt", dR, ristretto255.NewIdentityElement(), ciphertext)
+		if err == nil {
+			t.Errorf("Open() = %x, want error", plaintext)
+		}
+	})
+
+	t.Run("identity receiver", func(t *testing.T) {
+		plaintext, err := signcrypt.Open("signcrypt", ristretto255.NewScalar(), qS, ciphertext)
+		if err == nil {
+			t.Errorf("Open() = %x, want error", plaintext)
+		}
+	})
+
+	t.Run("identity ephemeral", func(t *testing.T) {
+		identityQE := slices.Clone(ciphertext)
+		copy(identityQE[:32], ristretto255.NewIdentityElement().Bytes())
+		plaintext, err := signcrypt.Open("signcrypt", dR, qS, identityQE)
+		if err == nil {
+			t.Errorf("Open() = %x, want error", plaintext)
+		}
+	})
+
 	t.Run("invalid ephemeral public key", func(t *testing.T) {
 		badQE := slices.Clone(ciphertext)
 		badQE[0] ^= 1
@@ -76,6 +99,23 @@ func TestOpen(t *testing.T) {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
+}
+
+func TestSealRejectsIdentityKeys(t *testing.T) {
+	r, dS, _, _, qR, _, _ := setup()
+	for name, f := range map[string]func(){
+		"receiver": func() { signcrypt.Seal("signcrypt", dS, ristretto255.NewIdentityElement(), r, nil) },
+		"sender":   func() { signcrypt.Seal("signcrypt", ristretto255.NewScalar(), qR, r, nil) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("Seal() did not panic")
+				}
+			}()
+			f()
+		})
+	}
 }
 
 func BenchmarkSeal(b *testing.B) {

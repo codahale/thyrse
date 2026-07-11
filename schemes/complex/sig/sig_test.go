@@ -9,6 +9,7 @@ import (
 
 	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/sig"
+	"github.com/gtank/ristretto255"
 )
 
 func TestSign(t *testing.T) {
@@ -28,6 +29,13 @@ func TestSign(t *testing.T) {
 
 	t.Run("reader failure", func(t *testing.T) {
 		_, err := sig.Sign("sig", d, drbg.Data(64), &testdata.ErrReader{Err: errors.New("broken")})
+		if err == nil {
+			t.Error("Sign() err = nil, want error")
+		}
+	})
+
+	t.Run("identity signer", func(t *testing.T) {
+		_, err := sig.Sign("sig", ristretto255.NewScalar(), nil, strings.NewReader("this is a message"))
 		if err == nil {
 			t.Error("Sign() err = nil, want error")
 		}
@@ -90,6 +98,33 @@ func TestVerify(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		if valid {
+			t.Error("Verify() = true, want false")
+		}
+	})
+
+	t.Run("identity signer", func(t *testing.T) {
+		// With Q=I, (R=[s]G, s) satisfies the verification equation for
+		// every challenge unless the public key is rejected explicitly.
+		s := d
+		r := ristretto255.NewIdentityElement().ScalarBaseMult(s)
+		forged := append(r.Bytes(), s.Bytes()...)
+		valid, err := sig.Verify("sig", ristretto255.NewIdentityElement(), forged, strings.NewReader("this is a message"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if valid {
+			t.Error("Verify() = true, want false")
+		}
+	})
+
+	t.Run("identity commitment", func(t *testing.T) {
+		badR := slices.Clone(signature)
+		copy(badR[:32], ristretto255.NewIdentityElement().Bytes())
+		valid, err := sig.Verify("sig", q, badR, strings.NewReader("this is a message"))
+		if err != nil {
+			t.Fatal(err)
+		}
 		if valid {
 			t.Error("Verify() = true, want false")
 		}

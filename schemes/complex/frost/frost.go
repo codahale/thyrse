@@ -102,6 +102,9 @@ func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto25
 
 	// The group public key is [a_0]G where a_0 is the secret.
 	groupKey := ristretto255.NewIdentityElement().ScalarBaseMult(coeffs[0])
+	if groupKey.Equal(ristretto255.NewIdentityElement()) == 1 {
+		return nil, nil, nil, ErrInvalidParameters
+	}
 
 	// Evaluate the polynomial at each participant's identifier to produce shares.
 	signers := make([]Signer, maxSigners)
@@ -110,6 +113,9 @@ func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto25
 		id := uint16(i + 1)
 		share := evalPolynomial(coeffs, id)
 		vs := ristretto255.NewIdentityElement().ScalarBaseMult(share)
+		if vs.Equal(ristretto255.NewIdentityElement()) == 1 {
+			return nil, nil, nil, ErrInvalidParameters
+		}
 		signers[i] = Signer{
 			domain:         domain,
 			identifier:     id,
@@ -137,10 +143,16 @@ func (s *Signer) Commit(rand []byte) (Nonce, Commitment) {
 	hiding, _ := ristretto255.NewScalar().SetUniformBytes(c.Derive("hiding-nonce", nil, 64))
 	binding, _ := ristretto255.NewScalar().SetUniformBytes(c.Derive("binding-nonce", nil, 64))
 
+	hidingCommitment := ristretto255.NewIdentityElement().ScalarBaseMult(hiding)
+	bindingCommitment := ristretto255.NewIdentityElement().ScalarBaseMult(binding)
+	if hidingCommitment.Equal(ristretto255.NewIdentityElement()) == 1 || bindingCommitment.Equal(ristretto255.NewIdentityElement()) == 1 {
+		panic("frost: nonce commitment is identity")
+	}
+
 	return Nonce{hiding: hiding, binding: binding}, Commitment{
 		Identifier: s.identifier,
-		Hiding:     ristretto255.NewIdentityElement().ScalarBaseMult(hiding).Bytes(),
-		Binding:    ristretto255.NewIdentityElement().ScalarBaseMult(binding).Bytes(),
+		Hiding:     hidingCommitment.Bytes(),
+		Binding:    bindingCommitment.Bytes(),
 	}
 }
 
@@ -187,6 +199,9 @@ func (s *Signer) Sign(domain string, nonce Nonce, message []byte, commitments []
 // must be the same set used during signing, and sigShares[i] must correspond to commitments[i] (after sorting by
 // identifier). The resulting signature is a standard Schnorr signature verifiable with [Verify].
 func Aggregate(domain string, groupKey *ristretto255.Element, message []byte, commitments []Commitment, sigShares [][]byte) ([]byte, error) {
+	if groupKey.Equal(ristretto255.NewIdentityElement()) == 1 {
+		return nil, ErrInvalidParameters
+	}
 	sorted := sortCommitments(commitments)
 
 	if len(sorted) != len(sigShares) {
@@ -226,6 +241,10 @@ func Verify(domain string, groupKey *ristretto255.Element, message, signature []
 // VerifyShare checks an individual signature share against the signer's verifying share. This can be used to identify
 // which participant produced an invalid share before aggregation.
 func VerifyShare(domain string, verifyingShare, groupKey *ristretto255.Element, identifier uint16, message []byte, commitments []Commitment, sigShare []byte) bool {
+	identity := ristretto255.NewIdentityElement()
+	if verifyingShare.Equal(identity) == 1 || groupKey.Equal(identity) == 1 {
+		return false
+	}
 	sorted := sortCommitments(commitments)
 
 	zi, _ := ristretto255.NewScalar().SetCanonicalBytes(sigShare)
@@ -253,7 +272,7 @@ func VerifyShare(domain string, verifyingShare, groupKey *ristretto255.Element, 
 			break
 		}
 	}
-	if hiding == nil || binding == nil {
+	if hiding == nil || binding == nil || hiding.Equal(identity) == 1 || binding.Equal(identity) == 1 {
 		return false
 	}
 
@@ -317,7 +336,8 @@ func computeGroupCommitment(commitments []Commitment, bindingFactors map[uint16]
 	for _, c := range commitments {
 		hiding, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(c.Hiding)
 		binding, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(c.Binding)
-		if hiding == nil || binding == nil {
+		identity := ristretto255.NewIdentityElement()
+		if hiding == nil || binding == nil || hiding.Equal(identity) == 1 || binding.Equal(identity) == 1 {
 			return nil, ErrInvalidCommitment
 		}
 
@@ -325,6 +345,9 @@ func computeGroupCommitment(commitments []Commitment, bindingFactors map[uint16]
 		rhoE := ristretto255.NewIdentityElement().ScalarMult(rho, binding)
 		contribution := ristretto255.NewIdentityElement().Add(hiding, rhoE)
 		result.Add(result, contribution)
+	}
+	if result.Equal(ristretto255.NewIdentityElement()) == 1 {
+		return nil, ErrInvalidCommitment
 	}
 
 	return result, nil

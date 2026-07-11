@@ -13,11 +13,22 @@ const Overhead = 32 + 32 + 32
 
 // Seal encrypts and signs the message to protect its confidentiality and authenticity. Only the owner of the
 // receiver's private key can decrypt it, and only the owner of the sender's private key could have sent it.
+//
+// Panics if a supplied or derived public point is the identity element.
 func Seal(domain string, dS *ristretto255.Scalar, qR *ristretto255.Element, rand, message []byte) []byte {
+	identity := ristretto255.NewIdentityElement()
+	if qR.Equal(identity) == 1 {
+		panic("signcrypt: receiver public key is identity")
+	}
+	qS := ristretto255.NewIdentityElement().ScalarBaseMult(dS)
+	if qS.Equal(identity) == 1 {
+		panic("signcrypt: sender public key is identity")
+	}
+
 	// Initialize the protocol and mix in the sender and receiver's public keys.
 	p := thyrse.New(domain)
 	p.Mix("receiver", qR.Bytes())
-	p.Mix("sender", ristretto255.NewIdentityElement().ScalarBaseMult(dS).Bytes())
+	p.Mix("sender", qS.Bytes())
 
 	// Fork the protocol into sender and receiver roles.
 	sender, receiver := p.Fork("role", []byte("sender"), []byte("receiver"))
@@ -31,6 +42,9 @@ func Seal(domain string, dS *ristretto255.Scalar, qR *ristretto255.Element, rand
 	qE := ristretto255.NewIdentityElement().ScalarBaseMult(dE)
 	k, _ := ristretto255.NewScalar().SetUniformBytes(sender.Derive("commitment", nil, 64))
 	r := ristretto255.NewIdentityElement().ScalarBaseMult(k)
+	if qE.Equal(identity) == 1 || r.Equal(identity) == 1 {
+		panic("signcrypt: derived identity point")
+	}
 
 	// Mix the ephemeral public key and ECDH shared secret into the receiver.
 	receiver.Mix("ephemeral", qE.Bytes())
@@ -58,10 +72,15 @@ func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciph
 	if len(ciphertext) < Overhead {
 		return nil, thyrse.ErrInvalidCiphertext
 	}
+	identity := ristretto255.NewIdentityElement()
+	qR := ristretto255.NewIdentityElement().ScalarBaseMult(dR)
+	if qR.Equal(identity) == 1 || qS.Equal(identity) == 1 {
+		return nil, thyrse.ErrInvalidCiphertext
+	}
 
 	// Initialize the protocol and mix in the sender and receiver's public keys.
 	p := thyrse.New(domain)
-	p.Mix("receiver", ristretto255.NewIdentityElement().ScalarBaseMult(dR).Bytes())
+	p.Mix("receiver", qR.Bytes())
 	p.Mix("sender", qS.Bytes())
 
 	// Fork the protocol into sender and receiver roles.
@@ -70,7 +89,7 @@ func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciph
 	// Mix in the ephemeral public key and decode it.
 	receiver.Mix("ephemeral", ciphertext[:32])
 	qE, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(ciphertext[:32])
-	if qE == nil {
+	if qE == nil || qE.Equal(identity) == 1 {
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 
@@ -80,8 +99,12 @@ func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciph
 	// Unmask the message.
 	plaintext := receiver.Unmask("message", nil, ciphertext[32:len(ciphertext)-64])
 
-	// Unmask the received commitment point. As we do not use it for calculations, leave it encoded.
+	// Unmask and validate the received commitment point.
 	receivedR := receiver.Unmask("commitment", nil, ciphertext[len(ciphertext)-64:len(ciphertext)-32])
+	r, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(receivedR)
+	if r == nil || r.Equal(identity) == 1 {
+		return nil, thyrse.ErrInvalidCiphertext
+	}
 
 	// Derive an expected challenge scalar from the signer's public key, the message, and the commitment point.
 	expectedC, _ := ristretto255.NewScalar().SetUniformBytes(receiver.Derive("challenge", nil, 64))
