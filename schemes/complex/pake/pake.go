@@ -2,6 +2,10 @@
 // share a possibly low-entropy secret (like a password) to establish a high-entropy shared protocol state for e.g.
 // encrypted communications.
 //
+// A completed exchange produces provisional protocol states: neither party knows that its peer derived the same state
+// until key confirmation succeeds. Before using the state as an authenticated session, each party must confirm the peer
+// by successfully opening a message sealed by that peer. See the package example for a mutual key-confirmation exchange.
+//
 // [Cpace]: https://www.ietf.org/archive/id/draft-irtf-cfrg-cpace-06.html
 package pake
 
@@ -21,7 +25,8 @@ type Finish = func(in []byte) (*thyrse.Protocol, error)
 // Initiate begins a key exchange as the initiator, using the given domain separation string, initiator ID, responder
 // ID, session ID, password, and random value (which must be exactly 64 bytes). It returns a Finish function and a
 // message to be sent to the responder. When the finish function is called with the responder's message, it will return
-// a thyrse.Protocol with a shared state.
+// a provisional thyrse.Protocol state. The initiator must successfully open a key-confirmation message from the
+// responder before treating the state as authenticated.
 //
 // Panics if rand is not exactly 64 bytes or produces an identity exchange point.
 func Initiate(domain string, initiatorID, responderID, sessionID, password, rand []byte) (finish Finish, out []byte) {
@@ -30,8 +35,9 @@ func Initiate(domain string, initiatorID, responderID, sessionID, password, rand
 
 // Respond establishes a key exchange as the responder, using the given domain separation string, initiator ID,
 // responder ID, session ID, password, random value (which must be exactly 64 bytes), and the initiator's message.
-// Returns a fully-keyed thyrse.Protocol and a message to be sent to the initiator to complete the exchange, or an
-// error.
+// Returns a provisional, fully-keyed thyrse.Protocol and a message to be sent to the initiator to complete the exchange,
+// or an error. The responder must successfully open a key-confirmation message from the initiator before treating the
+// state as authenticated.
 //
 // Panics if rand is not exactly 64 bytes or produces an identity exchange point.
 func Respond(domain string, initiatorID, responderID, sessionID, password, rand, msg []byte) (p *thyrse.Protocol, out []byte, err error) {

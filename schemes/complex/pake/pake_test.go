@@ -130,11 +130,24 @@ func Example() {
 		panic(err)
 	}
 
-	// Both initiator and responder share a protocol state.
+	// The responder confirms possession of the shared state to the initiator.
+	confirmation := pResponder.Seal("responder key confirmation", nil, nil)
+	if _, err := pInitiator.Open("responder key confirmation", nil, confirmation); err != nil {
+		panic(err)
+	}
+
+	// The initiator confirms possession of the shared state to the responder. The session is mutually authenticated only
+	// after both confirmations succeed.
+	confirmation = pInitiator.Seal("initiator key confirmation", nil, nil)
+	if _, err := pResponder.Open("initiator key confirmation", nil, confirmation); err != nil {
+		panic(err)
+	}
+
+	// Both initiator and responder now share a mutually authenticated protocol state.
 	fmt.Printf("responder: %x\n", pResponder.Derive("state", nil, 16))
 	fmt.Printf("initiator: %x\n", pInitiator.Derive("state", nil, 16))
 
 	// Output:
-	// responder: deedb28a2bca452a7e933bbdfa5c7e24
-	// initiator: deedb28a2bca452a7e933bbdfa5c7e24
+	// responder: 97c653b775a896007fa0a31d345d4108
+	// initiator: 97c653b775a896007fa0a31d345d4108
 }
