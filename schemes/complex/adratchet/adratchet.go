@@ -22,10 +22,12 @@ type State struct {
 	send, recv              *thyrse.Protocol
 	sendN, recvN, prevSendN uint32
 	skipped                 map[skippedKey]*thyrse.Protocol
+	localRatchetDone        bool
 }
 
 const (
-	// MaxSkip is the maximum number of messages that can be skipped in a single chain.
+	// MaxSkip is the maximum number of skipped message states retained across all chains, as well as the maximum gap
+	// accepted in a single chain.
 	MaxSkip = 1000
 	// Overhead is the number of bytes added to a message by State.SendMessage.
 	Overhead = headerSize + thyrse.TagSize
@@ -100,9 +102,14 @@ func (s *State) SendMessage(plaintext []byte) []byte {
 	return p.Seal("message", header, plaintext)
 }
 
-// Ratchet performs a voluntary DH ratchet step, generating a new local key and mixing it with the
-// remote public key into the sending protocol.
+// Ratchet performs a voluntary DH ratchet step, generating a new local key and mixing it with the remote public key into
+// the sending protocol. At most one local ratchet is performed for each remote public key; additional calls are
+// idempotent until a new remote key is received.
 func (s *State) Ratchet() {
+	if s.localRatchetDone {
+		return
+	}
+
 	for {
 		var b [64]byte
 		if _, err := rand.Read(b[:]); err != nil {
@@ -119,6 +126,7 @@ func (s *State) Ratchet() {
 	s.send.Mix("dh", dh.Bytes())
 	s.prevSendN = s.sendN
 	s.sendN = 0
+	s.localRatchetDone = true
 }
 
 // ReceiveMessage decrypts the given ciphertext and returns the plaintext. It handles out-of-order messages and performs
@@ -176,6 +184,7 @@ func (s *State) receiveMessage(header, msg []byte, pub *ristretto255.Element, n,
 		// Update the remote public key and reset the receiving counter.
 		s.remotePub = pub
 		s.recvN = 0
+		s.localRatchetDone = false
 
 		// Perform a voluntary DH ratchet step.
 		s.Ratchet()
@@ -243,7 +252,8 @@ func (s *State) advanceRecvChain(targetN uint32) error {
 	if targetN < s.recvN {
 		return nil
 	}
-	if targetN-s.recvN > MaxSkip {
+	gap := targetN - s.recvN
+	if gap > MaxSkip || len(s.skipped) > MaxSkip-int(gap) {
 		return thyrse.ErrInvalidCiphertext
 	}
 	for s.recvN < targetN {

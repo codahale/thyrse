@@ -151,6 +151,31 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 	})
 
+	t.Run("repeated voluntary ratchet is idempotent", func(t *testing.T) {
+		alice := adratchet.NewInitiator(p.Clone(), dA, qB)
+		bea := adratchet.NewResponder(p.Clone(), dB, qA)
+
+		first := alice.SendMessage([]byte("first"))
+		if _, err := bea.ReceiveMessage(first); err != nil {
+			t.Fatal(err)
+		}
+		reply := bea.SendMessage([]byte("reply"))
+		if _, err := alice.ReceiveMessage(reply); err != nil {
+			t.Fatal(err)
+		}
+
+		alice.Ratchet()
+		alice.Ratchet()
+		msg := alice.SendMessage([]byte("after ratchet"))
+		got, err := bea.ReceiveMessage(msg)
+		if err != nil {
+			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
+		}
+		if !bytes.Equal(got, []byte("after ratchet")) {
+			t.Errorf("ReceiveMessage() = %q, want %q", got, "after ratchet")
+		}
+	})
+
 	t.Run("failed new DH message is retryable", func(t *testing.T) {
 		alice := adratchet.NewInitiator(p.Clone(), dA, qB)
 		bea := adratchet.NewResponder(p.Clone(), dB, qA)
@@ -258,6 +283,31 @@ func TestState_ReceiveMessage(t *testing.T) {
 			msg = alice.SendMessage([]byte("hello"))
 		}
 
+		if _, err := bea.ReceiveMessage(msg); err == nil {
+			t.Error("ReceiveMessage() err = nil, want error")
+		}
+	})
+
+	t.Run("total skipped messages too large", func(t *testing.T) {
+		alice := adratchet.NewInitiator(p.Clone(), dA, qB)
+		bea := adratchet.NewResponder(p.Clone(), dB, qA)
+
+		var msg []byte
+		for range 601 {
+			msg = alice.SendMessage([]byte("first chain"))
+		}
+		if _, err := bea.ReceiveMessage(msg); err != nil {
+			t.Fatalf("ReceiveMessage() first chain err = %v, want nil", err)
+		}
+
+		reply := bea.SendMessage([]byte("ratchet"))
+		if _, err := alice.ReceiveMessage(reply); err != nil {
+			t.Fatalf("ReceiveMessage() reply err = %v, want nil", err)
+		}
+
+		for range 501 {
+			msg = alice.SendMessage([]byte("second chain"))
+		}
 		if _, err := bea.ReceiveMessage(msg); err == nil {
 			t.Error("ReceiveMessage() err = nil, want error")
 		}
