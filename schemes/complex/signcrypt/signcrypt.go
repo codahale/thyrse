@@ -103,6 +103,7 @@ func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciph
 	receivedR := receiver.Unmask("commitment", nil, ciphertext[len(ciphertext)-64:len(ciphertext)-32])
 	r, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(receivedR)
 	if r == nil || r.Equal(identity) == 1 {
+		clear(plaintext)
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 
@@ -112,6 +113,7 @@ func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciph
 	// Unmask the proof scalar. If not canonically encoded, the signature is invalid.
 	s, _ := ristretto255.NewScalar().SetCanonicalBytes(receiver.Unmask("proof", nil, ciphertext[len(ciphertext)-32:]))
 	if s == nil {
+		clear(plaintext)
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 
@@ -122,6 +124,7 @@ func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciph
 	// If the received and expected commitment points are equal (as compared in their encoded forms), the signature is
 	// valid.
 	if subtle.ConstantTimeCompare(receivedR, expectedR.Bytes()) == 0 {
+		clear(plaintext)
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 
