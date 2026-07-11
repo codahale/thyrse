@@ -122,9 +122,10 @@ func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto25
 	return groupKey, signers, verifyingShares, nil
 }
 
-// Commit generates a nonce pair and its public commitment for a signing round. The rand parameter should contain at
-// least 64 bytes of random data; the nonces are derived deterministically from the signer's share and the random data,
-// providing hedged nonce generation that protects against both nonce reuse and weak randomness.
+// Commit generates a nonce pair and its public commitment for a signing round. The rand parameter must contain at
+// least 64 bytes of fresh, uniformly random data. Commit does not validate this requirement: reusing rand repeats both
+// nonces deterministically and can expose the signer's signing share if they are used across multiple signing rounds.
+// The returned Nonce must be used exactly once and then discarded.
 func (s *Signer) Commit(rand []byte) (Nonce, Commitment) {
 	x := thyrse.New(s.domain)
 
