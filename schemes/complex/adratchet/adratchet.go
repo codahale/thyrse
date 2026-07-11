@@ -8,6 +8,7 @@ package adratchet
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"maps"
 
 	"github.com/codahale/thyrse"
 	"github.com/gtank/ristretto255"
@@ -209,9 +210,7 @@ func (s *State) clone() *State {
 	trial.send = s.send.Clone()
 	trial.recv = s.recv.Clone()
 	trial.skipped = make(map[skippedKey]*thyrse.Protocol, len(s.skipped))
-	for k, p := range s.skipped {
-		trial.skipped[k] = p
-	}
+	maps.Copy(trial.skipped, s.skipped)
 	return &trial
 }
 

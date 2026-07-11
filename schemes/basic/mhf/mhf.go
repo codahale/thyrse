@@ -99,12 +99,12 @@ func Hash(
 	defer clear(indexBlock)
 	defer clear(addressBlock)
 
-	for t := 0; t < timeCost; t++ {
-		for m := 0; m < spaceCost; m++ {
+	for t := range timeCost {
+		for m := range spaceCost {
 			prev := block((m - 1 + spaceCost) % spaceCost)
 			hash(block(m), prev, block(m))
 
-			for i := 0; i < delta; i++ {
+			for i := range delta {
 				clear(indexBlock)
 				binary.LittleEndian.PutUint64(indexBlock[0:8], uint64(t))
 				binary.LittleEndian.PutUint64(indexBlock[8:16], uint64(m))
