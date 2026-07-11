@@ -226,6 +226,17 @@ func TestWriter_Write(t *testing.T) {
 			t.Errorf("Write() err = %v, want %v", got, want)
 		}
 	})
+
+	t.Run("short write", func(t *testing.T) {
+		w := oae2.NewWriter(thyrse.New("example"), &testdata.ShortWriter{}, 64)
+		_, err := w.Write(bytes.Repeat([]byte("A"), 64))
+		if !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("Write() err = %v, want ErrShortWrite", err)
+		}
+		if _, err := w.Write([]byte("B")); !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("subsequent Write() err = %v, want ErrShortWrite", err)
+		}
+	})
 }
 
 func TestWriter_Close(t *testing.T) {
@@ -240,6 +251,13 @@ func TestWriter_Close(t *testing.T) {
 		}
 		if err := w.Close(); err != nil {
 			t.Errorf("Close() err = %v, want nil", err)
+		}
+	})
+
+	t.Run("short write", func(t *testing.T) {
+		w := oae2.NewWriter(thyrse.New("example"), &testdata.ShortWriter{}, 64)
+		if err := w.Close(); !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("Close() err = %v, want ErrShortWrite", err)
 		}
 	})
 }

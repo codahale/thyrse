@@ -115,6 +115,24 @@ func TestWriter_Write(t *testing.T) {
 			t.Errorf("Write() err = %v, want %v", got, want)
 		}
 	})
+
+	t.Run("short write", func(t *testing.T) {
+		w := aestream.NewWriter(thyrse.New("example"), &testdata.ShortWriter{})
+		n, err := w.Write([]byte("hello"))
+		if !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("Write() err = %v, want ErrShortWrite", err)
+		}
+		if n != 0 {
+			t.Errorf("Write() n = %d, want 0", n)
+		}
+	})
+
+	t.Run("short close", func(t *testing.T) {
+		w := aestream.NewWriter(thyrse.New("example"), &testdata.ShortWriter{})
+		if err := w.Close(); !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("Close() err = %v, want ErrShortWrite", err)
+		}
+	})
 }
 
 func TestNewReader(t *testing.T) {

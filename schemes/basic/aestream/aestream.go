@@ -88,8 +88,12 @@ func (s *Writer) sealAndWrite(p []byte) error {
 
 	// Seal the block, append it to the header block, and send it.
 	block = s.p.Seal("block", block, p)
-	if _, err := s.w.Write(block); err != nil {
+	n, err := s.w.Write(block)
+	if err != nil {
 		return err
+	}
+	if n != len(block) {
+		return io.ErrShortWrite
 	}
 
 	// Ratchet for forward secrecy.

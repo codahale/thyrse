@@ -8,3 +8,11 @@ type ErrWriter struct {
 func (e *ErrWriter) Write(_ []byte) (n int, err error) {
 	return 0, e.Err
 }
+
+// ShortWriter implements io.Writer by accepting all but the final byte without
+// returning an error.
+type ShortWriter struct{}
+
+func (*ShortWriter) Write(p []byte) (n int, err error) {
+	return max(len(p)-1, 0), nil
+}

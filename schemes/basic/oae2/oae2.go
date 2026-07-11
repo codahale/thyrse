@@ -100,10 +100,14 @@ func (w *Writer) Close() error {
 // flushBlock seals the buffer with the given label and writes the ciphertext.
 func (w *Writer) flushBlock(label string) error {
 	ciphertext := w.p.Seal(label, nil, w.buf)
-	_, err := w.w.Write(ciphertext)
+	n, err := w.w.Write(ciphertext)
 	if err != nil {
 		w.err = err
 		return err
+	}
+	if n != len(ciphertext) {
+		w.err = io.ErrShortWrite
+		return w.err
 	}
 	w.buf = w.buf[:0]
 	return nil
