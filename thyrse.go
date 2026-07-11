@@ -231,7 +231,7 @@ func (p *Protocol) Clone() *Protocol {
 // Clear overwrites the protocol state with zeros and invalidates the instance. After Clear, the instance must not be
 // used.
 func (p *Protocol) Clear() {
-	p.h.Reset()
+	p.h.Clear()
 	p.h = nil
 	clear(p.ctr[:])
 }
