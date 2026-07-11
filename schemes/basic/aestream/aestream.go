@@ -30,6 +30,7 @@ type Writer struct {
 	w      io.Writer
 	buf    []byte
 	closed bool
+	err    error
 }
 
 // NewWriter wraps the given thyrse.Protocol and io.Writer with a streaming authenticated encryption writer.
@@ -39,6 +40,7 @@ type Writer struct {
 //
 // For maximum throughput and transmission efficiency, the use of a bufio.Writer wrapper is strongly recommended.
 // Unbuffered writes will result in blocks the length of each write, rather than blocks of the maximum size.
+// After an underlying write error, all subsequent writes and closes return the same error.
 func NewWriter(p *thyrse.Protocol, w io.Writer) *Writer {
 	return &Writer{
 		p:      p,
@@ -49,6 +51,12 @@ func NewWriter(p *thyrse.Protocol, w io.Writer) *Writer {
 }
 
 func (s *Writer) Write(p []byte) (n int, err error) {
+	if s.err != nil {
+		return 0, s.err
+	}
+	if s.closed {
+		return 0, io.ErrClosedPipe
+	}
 	if len(p) == 0 {
 		return 0, nil
 	}
@@ -68,6 +76,9 @@ func (s *Writer) Write(p []byte) (n int, err error) {
 
 // Close ends the stream with a terminal block, ensuring no further writes can be made to the stream.
 func (s *Writer) Close() error {
+	if s.err != nil {
+		return s.err
+	}
 	if s.closed {
 		return nil
 	}
@@ -90,10 +101,12 @@ func (s *Writer) sealAndWrite(p []byte) error {
 	block = s.p.Seal("block", block, p)
 	n, err := s.w.Write(block)
 	if err != nil {
+		s.err = err
 		return err
 	}
 	if n != len(block) {
-		return io.ErrShortWrite
+		s.err = io.ErrShortWrite
+		return s.err
 	}
 
 	// Ratchet for forward secrecy.
@@ -108,6 +121,7 @@ type Reader struct {
 	r             io.Reader
 	buf, blockBuf []byte
 	eos           bool
+	err           error
 }
 
 // NewReader wraps the given thyrse.Protocol and io.Reader with a streaming authenticated encryption reader. See
@@ -116,6 +130,7 @@ type Reader struct {
 // If the stream has been modified or truncated, a thyrse.ErrInvalidCiphertext is returned.
 //
 // The provided thyrse.Protocol MUST NOT be used while the reader is open.
+// After a read or authentication error, all subsequent non-empty reads return the same error.
 func NewReader(p *thyrse.Protocol, r io.Reader) *Reader {
 	return &Reader{
 		p:        p,
@@ -129,6 +144,9 @@ func NewReader(p *thyrse.Protocol, r io.Reader) *Reader {
 func (o *Reader) Read(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
+	}
+	if o.err != nil {
+		return 0, o.err
 	}
 
 	for {
@@ -148,6 +166,7 @@ func (o *Reader) Read(p []byte) (n int, err error) {
 		// Read and unmask the header and decode the block length.
 		header, err := o.read(headerSize)
 		if err != nil {
+			o.err = err
 			return 0, err
 		}
 		header = o.p.Unmask("header", header[:0], header)
@@ -156,10 +175,12 @@ func (o *Reader) Read(p []byte) (n int, err error) {
 		// Read and open the block.
 		block, err := o.read(blockLen + thyrse.TagSize)
 		if err != nil {
+			o.err = err
 			return 0, err
 		}
 		block, err = o.p.Open("block", block[:0], block)
 		if err != nil {
+			o.err = err
 			return 0, err
 		}
 		o.eos = len(block) == 0

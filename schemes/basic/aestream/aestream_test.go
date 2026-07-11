@@ -114,6 +114,12 @@ func TestWriter_Write(t *testing.T) {
 		if got, want := err, ew.Err; !errors.Is(got, want) {
 			t.Errorf("Write() err = %v, want %v", got, want)
 		}
+		if _, err := w.Write([]byte("again")); !errors.Is(err, ew.Err) {
+			t.Errorf("subsequent Write() err = %v, want %v", err, ew.Err)
+		}
+		if err := w.Close(); !errors.Is(err, ew.Err) {
+			t.Errorf("Close() err = %v, want %v", err, ew.Err)
+		}
 	})
 
 	t.Run("short write", func(t *testing.T) {
@@ -125,12 +131,31 @@ func TestWriter_Write(t *testing.T) {
 		if n != 0 {
 			t.Errorf("Write() n = %d, want 0", n)
 		}
+		if _, err := w.Write([]byte("again")); !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("subsequent Write() err = %v, want ErrShortWrite", err)
+		}
+		if err := w.Close(); !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("Close() err = %v, want ErrShortWrite", err)
+		}
 	})
 
 	t.Run("short close", func(t *testing.T) {
 		w := aestream.NewWriter(thyrse.New("example"), &testdata.ShortWriter{})
 		if err := w.Close(); !errors.Is(err, io.ErrShortWrite) {
 			t.Errorf("Close() err = %v, want ErrShortWrite", err)
+		}
+		if err := w.Close(); !errors.Is(err, io.ErrShortWrite) {
+			t.Errorf("second Close() err = %v, want ErrShortWrite", err)
+		}
+	})
+
+	t.Run("write after close", func(t *testing.T) {
+		w := aestream.NewWriter(thyrse.New("example"), io.Discard)
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte("message")); !errors.Is(err, io.ErrClosedPipe) {
+			t.Errorf("Write() err = %v, want ErrClosedPipe", err)
 		}
 	})
 }
@@ -200,6 +225,9 @@ func TestReader_Read(t *testing.T) {
 		if got, want := err, er.Err; !errors.Is(got, want) {
 			t.Errorf("Read() err = %v, want %v", got, want)
 		}
+		if _, err := r.Read(make([]byte, 100)); !errors.Is(err, er.Err) {
+			t.Errorf("subsequent Read() err = %v, want %v", err, er.Err)
+		}
 	})
 
 	t.Run("empty stream", func(t *testing.T) {
@@ -223,6 +251,9 @@ func TestReader_Read(t *testing.T) {
 		_, err := io.ReadAll(r)
 		if got, want := err, thyrse.ErrInvalidCiphertext; !errors.Is(got, want) {
 			t.Errorf("Read() err = %v, want %v", got, want)
+		}
+		if _, err := r.Read(make([]byte, 1)); !errors.Is(err, thyrse.ErrInvalidCiphertext) {
+			t.Errorf("subsequent Read() err = %v, want %v", err, thyrse.ErrInvalidCiphertext)
 		}
 	})
 
