@@ -392,7 +392,7 @@ func (p *Protocol) writeIntOp(v uint64, op byte) {
 //	originOp [chainValue: 32B]  0x20 0x01  0x01 0x01  opChain
 //	                           ╰─RE(32)─╯ ╰─RE(1)──╯
 func (p *Protocol) resetChain(originOp byte, chainValue []byte) {
-	p.h.Reset()
+	p.h.Clear()
 
 	var buf [38]byte
 	buf[0] = originOp
@@ -411,7 +411,7 @@ func (p *Protocol) resetChain(originOp byte, chainValue []byte) {
 // and calculated tags, causing authentication failures to produce a distinct
 // subsequent state while successful operations remain synchronized.
 func (p *Protocol) resetSealChain(chainValue, wireTag, calculatedTag []byte) {
-	p.h.Reset()
+	p.h.Clear()
 
 	// The maximum frame is 106 bytes: a one-byte origin, three 32-byte
 	// values, four two-byte right encodings, and the chain operation byte.
