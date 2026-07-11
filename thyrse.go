@@ -125,7 +125,8 @@ func (p *Protocol) Ratchet(label string) {
 // external mechanisms. The plaintext length is bound into the protocol transcript and the ciphertext is absorbed into
 // it, so the transcript commits collision-resistantly to the ciphertext.
 //
-// Confidentiality requires that the transcript contains at least one unpredictable input (see [Protocol.Mix]).
+// Confidentiality requires that the transcript contain secret input keying material with sufficient entropy (see
+// [Protocol.Mix]). Public nonces and associated data do not provide confidentiality.
 func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 	p.writeLabel(label)
 	p.writeIntOp(uint64(len(plaintext)), opMask)
@@ -159,8 +160,9 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 }
 
 // Seal encrypts plaintext with authentication. Returns ciphertext with a [TagSize]-byte tag appended. The plaintext
-// length is bound into the protocol transcript. Confidentiality requires that the transcript contains at least one
-// unpredictable input (see [Protocol.Mix]).
+// length is bound into the protocol transcript. Confidentiality and authenticity require that the transcript contain
+// secret input keying material with sufficient entropy (see [Protocol.Mix]). Public nonces and associated data do not
+// provide either property.
 func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	ret, out := mem.SliceForAppend(dst, len(plaintext)+TagSize)
 	ciphertext, tagDst := out[:len(plaintext)], out[len(plaintext):]

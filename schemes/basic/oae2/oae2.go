@@ -27,8 +27,8 @@ type Writer struct {
 
 // NewWriter returns an io.WriteCloser that buffers written data into blocks of the given size.
 //
-// Each block is encrypted and authenticated using the provided protocol. The protocol's prior state must be
-// probabilistic to ensure OAE2 security.
+// Each block is encrypted and authenticated using the provided protocol. The protocol's prior state must contain
+// secret input keying material and be probabilistic to ensure OAE2 security.
 //
 // The returned io.WriteCloser MUST be closed for the encrypted stream to be valid. The provided thyrse.Protocol MUST
 // NOT be used while the writer is open.
