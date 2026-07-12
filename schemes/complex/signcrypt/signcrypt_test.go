@@ -104,8 +104,9 @@ func TestOpen(t *testing.T) {
 func TestSealRejectsIdentityKeys(t *testing.T) {
 	r, dS, _, _, qR, _, _ := setup()
 	for name, f := range map[string]func(){
-		"receiver": func() { signcrypt.Seal("signcrypt", dS, ristretto255.NewIdentityElement(), r, nil) },
-		"sender":   func() { signcrypt.Seal("signcrypt", ristretto255.NewScalar(), qR, r, nil) },
+		"receiver":   func() { signcrypt.Seal("signcrypt", dS, ristretto255.NewIdentityElement(), r, nil) },
+		"sender":     func() { signcrypt.Seal("signcrypt", ristretto255.NewScalar(), qR, r, nil) },
+		"short rand": func() { signcrypt.Seal("signcrypt", dS, qR, r[:32], nil) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {

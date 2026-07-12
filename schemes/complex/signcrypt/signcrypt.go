@@ -14,8 +14,16 @@ const Overhead = 32 + 32 + 32
 // Seal encrypts and signs the message to protect its confidentiality and authenticity. Only the owner of the
 // receiver's private key can decrypt it, and only the owner of the sender's private key could have sent it.
 //
-// Panics if a supplied or derived public point is the identity element.
+// The rand parameter must contain at least 64 bytes of fresh random data. The ephemeral key and commitment are
+// derived from the sender's private key, rand, and the message, so a repeated rand never reuses a commitment across
+// distinct messages, but sealing the same message with the same rand and keys produces an identical ciphertext,
+// revealing the repetition.
+//
+// Panics if rand is shorter than 64 bytes or if a supplied or derived public point is the identity element.
 func Seal(domain string, dS *ristretto255.Scalar, qR *ristretto255.Element, rand, message []byte) []byte {
+	if len(rand) < 64 {
+		panic("signcrypt: rand must be at least 64 bytes")
+	}
 	identity := ristretto255.NewIdentityElement()
 	if qR.Equal(identity) == 1 {
 		panic("signcrypt: receiver public key is identity")
