@@ -83,30 +83,35 @@ func (p *Protocol) Fork(label string, left, right []byte) (*Protocol, *Protocol)
 	return branches[0], branches[1]
 }
 
-// ForkN clones the protocol state into N independent branches and modifies the base. The base receives ordinal 0 with an
-// empty value. Each clone receives ordinals 1 through N with the corresponding value. Branches are domain-separated by
-// ordinal, so the values need not be distinct; they carry optional per-branch input.
+// ForkN irreversibly splits the protocol into N independent branches and advances the parent. The label and complete
+// ordered value list form a single fork descriptor. Finalizing that descriptor produces a bundle parsed as the new
+// parent chain value followed by one chain value per branch. The output position separates branches, so values need not
+// be distinct; they carry optional per-branch input.
+//
+// When the pre-fork state is secret, compromising any combination of resulting states does not reveal the pre-fork
+// state or any other resulting state. Use [Protocol.Clone] when a related copy without this one-way separation is
+// required.
 func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 	n := len(values)
+	branches := make([]*Protocol, n)
 
-	// Create clones BEFORE writing fork frame to base.
-	clones := make([]*Protocol, n)
+	// Finalize one fork descriptor and parse the XOF bundle as the parent
+	// chain value followed by one independent chain value per branch.
+	p.writeForkOp(label, values)
+	cv := p.finalize(nil)
 	for i := range n {
-		clone := p.Clone()
-		clone.writeLabel(label)
-		clone.writeInt(uint64(n))
-		clone.writeInt(uint64(i + 1))
-		clone.writeStringOp(values[i], opFork)
-		clones[i] = clone
+		var branchCV [chainValueSize]byte
+		_, _ = p.h.Read(branchCV[:])
+
+		branch := &Protocol{h: kt128.New(nil)}
+		branch.resetChain(opFork, branchCV[:])
+		branches[i] = branch
+		clear(branchCV[:])
 	}
 
-	// Now write base fork frame (ordinal 0, empty value).
-	p.writeLabel(label)
-	p.writeInt(uint64(n))
-	p.writeInt(0)
-	p.writeStringOp(nil, opFork)
+	p.resetChain(opFork, cv[:])
 
-	return clones
+	return branches
 }
 
 // Derive produces pseudorandom output that is a deterministic function of the full transcript. The outputLen must be
@@ -239,7 +244,8 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	return ret, nil
 }
 
-// Clone returns an independent copy of the protocol state. The original and clone evolve independently.
+// Clone returns a related copy of the protocol state. The original and clone evolve independently, but Clone does not
+// provide the one-way compromise separation of [Protocol.ForkN].
 func (p *Protocol) Clone() *Protocol {
 	return &Protocol{h: p.h.Clone()}
 }
@@ -291,6 +297,19 @@ func (p *Protocol) writeStringOp(data []byte, op byte) {
 	b := enc.RightEncode(buf[:0], uint64(len(data)))
 	b = append(b, op)
 	_, _ = p.h.Write(b)
+}
+
+// writeForkOp writes a finalizing fork descriptor containing the label and the
+// complete ordered branch-value list. The count to the right of the list makes
+// the frame recoverable when parsed from the trailing op code.
+func (p *Protocol) writeForkOp(label string, values [][]byte) {
+	p.writeLabel(label)
+	for _, value := range values {
+		var buf [enc.MaxIntSize]byte
+		_, _ = p.h.Write(value)
+		_, _ = p.h.Write(enc.RightEncode(buf[:0], uint64(len(value))))
+	}
+	p.writeIntOp(uint64(len(values)), opFork)
 }
 
 // writeMaskedStringOp encrypts (or decrypts) src under AES-128-CTR with key, writing the result to dst, and absorbs the

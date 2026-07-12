@@ -563,6 +563,64 @@ func TestForkN(t *testing.T) {
 			t.Fatal("ForkN is not deterministic")
 		}
 	})
+
+	t.Run("binds complete descriptor", func(t *testing.T) {
+		fork := func(values ...[]byte) (*Protocol, []*Protocol) {
+			p := New("test")
+			p.Mix("key", []byte("shared"))
+			return p, p.ForkN("role", values...)
+		}
+
+		base1, branches1 := fork([]byte("alice"), []byte("bob"))
+		base2, branches2 := fork([]byte("alice"), []byte("carol"))
+		if base1.Equal(base2) == 1 {
+			t.Fatal("parent does not bind all branch values")
+		}
+		if branches1[0].Equal(branches2[0]) == 1 {
+			t.Fatal("branch does not bind sibling values")
+		}
+	})
+
+	t.Run("positions separate duplicate values", func(t *testing.T) {
+		p := New("test")
+		branches := p.ForkN("role", nil, nil)
+		if branches[0].Equal(branches[1]) == 1 {
+			t.Fatal("duplicate values produced equal branches")
+		}
+	})
+
+	t.Run("uses derived chain values", func(t *testing.T) {
+		values := [][]byte{[]byte("alice"), []byte("bob")}
+
+		wantSource := New("test")
+		wantSource.Mix("key", []byte("shared"))
+		wantSource.writeForkOp("role", values)
+
+		parentCV := wantSource.finalize(nil)
+		wantParent := New("discarded")
+		wantParent.resetChain(opFork, parentCV[:])
+
+		wantBranches := make([]*Protocol, len(values))
+		for i := range values {
+			var branchCV [chainValueSize]byte
+			_, _ = wantSource.h.Read(branchCV[:])
+			wantBranches[i] = New("discarded")
+			wantBranches[i].resetChain(opFork, branchCV[:])
+		}
+
+		gotParent := New("test")
+		gotParent.Mix("key", []byte("shared"))
+		gotBranches := gotParent.ForkN("role", values...)
+
+		if gotParent.Equal(wantParent) != 1 {
+			t.Fatal("parent was not seeded from the first fork output")
+		}
+		for i := range gotBranches {
+			if gotBranches[i].Equal(wantBranches[i]) != 1 {
+				t.Fatalf("branch %d was not seeded from its fork output", i)
+			}
+		}
+	})
 }
 
 func TestClear(t *testing.T) {
