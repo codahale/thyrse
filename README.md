@@ -5,6 +5,10 @@
 > [!WARNING]
 > **This code has not been audited. This design has not been analyzed.** It is experimental and should not be used for
 > production systems or critical security applications. Use at your own risk.
+>
+> Security also rests on two external dependencies: [github.com/codahale/kt128](https://github.com/codahale/kt128) for
+> the KT128 hash function and [github.com/gtank/ristretto255](https://github.com/gtank/ristretto255) (lightly
+> maintained) for the group operations used by the `schemes/complex` packages.
 
 Thyrse is a transcript-based cryptographic protocol framework built on the KT128 hash function and AES-128-CTR
 encryption.

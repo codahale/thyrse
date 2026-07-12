@@ -1,4 +1,9 @@
 // Package thyrse implements a transcript-based cryptographic protocol framework.
+//
+// On platforms without hardware AES support, Go's fallback AES implementation is not constant-time, and
+// [Protocol.Mask], [Protocol.Unmask], [Protocol.Seal], and [Protocol.Open] may leak timing information about the
+// per-operation encryption key. Because each key is a one-way output of the transcript, such a leak compromises only
+// the affected message, not the protocol state.
 package thyrse
 
 import (
@@ -79,8 +84,8 @@ func (p *Protocol) Fork(label string, left, right []byte) (*Protocol, *Protocol)
 }
 
 // ForkN clones the protocol state into N independent branches and modifies the base. The base receives ordinal 0 with an
-// empty value. Each clone receives ordinals 1 through N with the corresponding value. Callers must ensure clone values
-// are distinct from each other.
+// empty value. Each clone receives ordinals 1 through N with the corresponding value. Branches are domain-separated by
+// ordinal, so the values need not be distinct; they carry optional per-branch input.
 func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 	n := len(values)
 

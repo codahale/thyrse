@@ -14,6 +14,9 @@ const ProofSize = 32 + 32 + 32
 // Prove generates n bytes of pseudorandom data for the given message and returns that and a proof which can be used to
 // verify and recalculate the PRF output given the message and the prover's public key.
 //
+// The proof commits to the output length: a proof generated for one value of n will not verify for another, so
+// verifiers must use the same n as the prover.
+//
 // Panics if the prover's public key or a derived proof point is the identity element.
 func Prove(domain string, d *ristretto255.Scalar, rand, m []byte, n int) (prf, proof []byte) {
 	identity := ristretto255.NewIdentityElement()
@@ -67,7 +70,8 @@ func Prove(domain string, d *ristretto255.Scalar, rand, m []byte, n int) (prf, p
 }
 
 // Verify checks the given proof against the given message. If the proof is valid, returns true and n bytes of PRF
-// output; otherwise, returns false and nil.
+// output; otherwise, returns false and nil. The n value must match the one used by [Prove]; proofs are bound to the
+// output length.
 func Verify(domain string, q *ristretto255.Element, m, proof []byte, n int) (valid bool, prf []byte) {
 	if len(proof) != ProofSize {
 		return false, nil

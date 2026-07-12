@@ -10,8 +10,13 @@ import (
 
 // New returns a new cipher.AEAD instance which uses the given domain string and key.
 //
-// Panics if nonceSize is less than 16 bytes. A minimum of 16 bytes is required to ensure
-// sufficient uniqueness and security for the nonce values.
+// As with any AEAD, a nonce must never be repeated for the same key: encrypting two plaintexts under the same (key,
+// nonce, additional data) triple reuses the keystream, revealing the XOR of the plaintexts (though, unlike
+// polynomial-MAC AEADs, no authentication key). The 16-byte minimum makes randomly generated nonces safe within the
+// 128-bit security level. Callers which cannot guarantee nonce uniqueness should use the misuse-resistant
+// [github.com/codahale/thyrse/schemes/basic/siv] scheme instead.
+//
+// Panics if nonceSize is less than 16 bytes.
 func New(domain string, key []byte, nonceSize int) cipher.AEAD {
 	if nonceSize < 16 {
 		panic("thyrse/aead: nonce size must be at least 16 bytes")

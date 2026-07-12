@@ -9,6 +9,10 @@
 // The reader reads the sealed header, opens it, decodes it into a block length, reads an encrypted block of that
 // length and its authentication tag, then opens the sealed block. When it encounters the empty block, it returns EOF.
 // If the stream terminates before that, an invalid ciphertext error is returned.
+//
+// The stream is self-delimiting: the reader stops at the terminal block and neither reads nor authenticates any data
+// following it in the underlying reader. Callers embedding a stream in a larger framing must authenticate any trailing
+// data themselves.
 package aestream
 
 import (
