@@ -8,6 +8,7 @@ package frost
 import (
 	"bytes"
 	"cmp"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"math"
@@ -84,16 +85,19 @@ type Commitment struct {
 // corresponding to each signer's share).
 //
 // Identifiers are 1-based: signers[i] has identifier i+1. The threshold must be at least 2 and at most maxSigners,
-// maxSigners must not exceed 65,535, and rand must contain at least 64 bytes of uniform randomness.
-func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto255.Element, []Signer, []*ristretto255.Element, error) {
-	if threshold < 2 || maxSigners < threshold || maxSigners > math.MaxUint16 || len(rand) < 64 {
+// and maxSigners must not exceed 65,535. KeyGen returns an error if the parameters are invalid.
+func KeyGen(domain string, maxSigners, threshold int) (*ristretto255.Element, []Signer, []*ristretto255.Element, error) {
+	if threshold < 2 || maxSigners < threshold || maxSigners > math.MaxUint16 {
 		return nil, nil, nil, ErrInvalidParameters
 	}
 
 	// Derive polynomial coefficients deterministically from the seed.
+	var seed [64]byte
+	_, _ = rand.Read(seed[:])
 	p := thyrse.New(domain)
 	keygen, _ := p.Fork("process", []byte("keygen"), []byte("commitment"))
-	keygen.Mix("seed", rand)
+	keygen.Mix("seed", seed[:])
+	clear(seed[:])
 
 	coeffs := make([]*ristretto255.Scalar, threshold)
 	for i := range threshold {
@@ -129,21 +133,18 @@ func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto25
 	return groupKey, signers, verifyingShares, nil
 }
 
-// Commit generates a nonce pair and its public commitment for a signing round. The rand parameter must contain at
-// least 64 bytes of fresh, uniformly random data; Commit panics if it is shorter. Freshness cannot be validated:
-// because the nonces cannot depend on the not-yet-known message, reusing rand repeats both nonces deterministically
-// and exposes the signer's signing share if they are used across signing rounds with different messages. The returned
-// Nonce must be used exactly once and then discarded.
-func (s *Signer) Commit(rand []byte) (Nonce, Commitment) {
-	if len(rand) < 64 {
-		panic("frost: rand must be at least 64 bytes")
-	}
+// Commit generates a nonce pair and its public commitment for a signing round. The returned Nonce must be used exactly
+// once and then discarded.
+func (s *Signer) Commit() (Nonce, Commitment) {
+	var random [64]byte
+	_, _ = rand.Read(random[:])
 
 	x := thyrse.New(s.domain)
 
 	_, c := x.Fork("process", []byte("keygen"), []byte("commitment"))
 	c.Mix("signing-share", s.signingShare.Bytes())
-	c.Mix("rand", rand)
+	c.Mix("rand", random[:])
+	clear(random[:])
 
 	hiding, _ := ristretto255.NewScalar().SetUniformBytes(c.Derive("hiding-nonce", nil, 64))
 	binding, _ := ristretto255.NewScalar().SetUniformBytes(c.Derive("binding-nonce", nil, 64))

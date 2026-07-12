@@ -17,7 +17,7 @@ func TestSign(t *testing.T) {
 	d, _ := drbg.KeyPair()
 
 	t.Run("successful", func(t *testing.T) {
-		signature, err := sig.Sign("sig", d, drbg.Data(64), strings.NewReader("this is a message"))
+		signature, err := sig.Sign("sig", d, strings.NewReader("this is a message"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -28,14 +28,14 @@ func TestSign(t *testing.T) {
 	})
 
 	t.Run("reader failure", func(t *testing.T) {
-		_, err := sig.Sign("sig", d, drbg.Data(64), &testdata.ErrReader{Err: errors.New("broken")})
+		_, err := sig.Sign("sig", d, &testdata.ErrReader{Err: errors.New("broken")})
 		if err == nil {
 			t.Error("Sign() err = nil, want error")
 		}
 	})
 
 	t.Run("identity signer", func(t *testing.T) {
-		_, err := sig.Sign("sig", ristretto255.NewScalar(), nil, strings.NewReader("this is a message"))
+		_, err := sig.Sign("sig", ristretto255.NewScalar(), strings.NewReader("this is a message"))
 		if err == nil {
 			t.Error("Sign() err = nil, want error")
 		}
@@ -47,7 +47,7 @@ func TestVerify(t *testing.T) {
 	d, q := drbg.KeyPair()
 	_, qX := drbg.KeyPair()
 
-	signature, err := sig.Sign("sig", d, drbg.Data(64), strings.NewReader("this is a message"))
+	signature, err := sig.Sign("sig", d, strings.NewReader("this is a message"))
 	if err != nil {
 		t.Fatal(err)
 	}

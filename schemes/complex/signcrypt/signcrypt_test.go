@@ -13,8 +13,8 @@ import (
 )
 
 func TestOpen(t *testing.T) {
-	r, dS, qS, dR, qR, dX, qX := setup()
-	ciphertext := signcrypt.Seal("signcrypt", dS, qR, r, []byte("this is a message"))
+	dS, qS, dR, qR, dX, qX := setup()
+	ciphertext := signcrypt.Seal("signcrypt", dS, qR, []byte("this is a message"))
 
 	t.Run("valid", func(t *testing.T) {
 		plaintext, err := signcrypt.Open("signcrypt", dR, qS, ciphertext)
@@ -102,11 +102,10 @@ func TestOpen(t *testing.T) {
 }
 
 func TestSealRejectsIdentityKeys(t *testing.T) {
-	r, dS, _, _, qR, _, _ := setup()
+	dS, _, _, qR, _, _ := setup()
 	for name, f := range map[string]func(){
-		"receiver":   func() { signcrypt.Seal("signcrypt", dS, ristretto255.NewIdentityElement(), r, nil) },
-		"sender":     func() { signcrypt.Seal("signcrypt", ristretto255.NewScalar(), qR, r, nil) },
-		"short rand": func() { signcrypt.Seal("signcrypt", dS, qR, r[:32], nil) },
+		"receiver": func() { signcrypt.Seal("signcrypt", dS, ristretto255.NewIdentityElement(), nil) },
+		"sender":   func() { signcrypt.Seal("signcrypt", ristretto255.NewScalar(), qR, nil) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
@@ -120,17 +119,17 @@ func TestSealRejectsIdentityKeys(t *testing.T) {
 }
 
 func BenchmarkSeal(b *testing.B) {
-	r, dS, _, _, qR, _, _ := setup()
+	dS, _, _, qR, _, _ := setup()
 	message := []byte("this is a message")
 	b.ReportAllocs()
 	for b.Loop() {
-		signcrypt.Seal("signcrypt", dS, qR, r, message)
+		signcrypt.Seal("signcrypt", dS, qR, message)
 	}
 }
 
 func BenchmarkOpen(b *testing.B) {
-	r, dS, qS, dR, qR, _, _ := setup()
-	ciphertext := signcrypt.Seal("signcrypt", dS, qR, r, []byte("this is a message"))
+	dS, qS, dR, qR, _, _ := setup()
+	ciphertext := signcrypt.Seal("signcrypt", dS, qR, []byte("this is a message"))
 
 	b.ReportAllocs()
 	for b.Loop() {
@@ -144,8 +143,8 @@ func FuzzOpen(f *testing.F) {
 		f.Add(drbg.Data(128))
 	}
 
-	r, dS, qS, dR, qR, _, _ := setup()
-	ciphertext := signcrypt.Seal("signcrypt", dS, qR, r, []byte("this is a message"))
+	dS, qS, dR, qR, _, _ := setup()
+	ciphertext := signcrypt.Seal("signcrypt", dS, qR, []byte("this is a message"))
 
 	badQE := slices.Clone(ciphertext)
 	badQE[0] ^= 1
@@ -175,10 +174,10 @@ func FuzzOpen(f *testing.F) {
 	})
 }
 
-func setup() ([]byte, *ristretto255.Scalar, *ristretto255.Element, *ristretto255.Scalar, *ristretto255.Element, *ristretto255.Scalar, *ristretto255.Element) {
+func setup() (*ristretto255.Scalar, *ristretto255.Element, *ristretto255.Scalar, *ristretto255.Element, *ristretto255.Scalar, *ristretto255.Element) {
 	drbg := testdata.New("thyrse hpke")
 	dR, qR := drbg.KeyPair()
 	dS, qS := drbg.KeyPair()
 	dX, qX := drbg.KeyPair()
-	return drbg.Data(64), dS, qS, dR, qR, dX, qX
+	return dS, qS, dR, qR, dX, qX
 }

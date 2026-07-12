@@ -63,6 +63,7 @@ func Initiate(
 // Respond receives the initiator's first message using the responder's Ristretto255 and ML-KEM private keys and
 // creates a double ratchet state. The given root protocol is consumed by the returned state on success and remains
 // unchanged on failure.
+// Returns an error if the message is invalid.
 // Panics if the Ristretto255 private key produces the identity element.
 func Respond(
 	p *thyrse.Protocol,
@@ -114,9 +115,7 @@ func (s *State) rotateSend() {
 	var localPub *ristretto255.Element
 	for {
 		var b [64]byte
-		if _, err := rand.Read(b[:]); err != nil {
-			panic(err)
-		}
+		_, _ = rand.Read(b[:])
 		localPriv, _ = ristretto255.NewScalar().SetUniformBytes(b[:])
 		localPub = ristretto255.NewIdentityElement().ScalarBaseMult(localPriv)
 		if localPub.Equal(ristretto255.NewIdentityElement()) == 0 {

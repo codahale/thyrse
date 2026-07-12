@@ -15,10 +15,9 @@ func TestOpen(t *testing.T) {
 	dR, qR := drbg.KeyPair()
 	dS, qS := drbg.KeyPair()
 	dX, qX := drbg.KeyPair()
-	r := drbg.Data(64)
 
 	message := []byte("this is a message")
-	ciphertext := hpke.Seal("hpke", qR, dS, r, message)
+	ciphertext := hpke.Seal("hpke", qR, dS, message)
 
 	t.Run("round trip", func(t *testing.T) {
 		plaintext, err := hpke.Open("hpke", dR, qS, ciphertext)
@@ -105,8 +104,8 @@ func TestSealRejectsIdentityKeys(t *testing.T) {
 	dS, _ := drbg.KeyPair()
 
 	for name, f := range map[string]func(){
-		"receiver": func() { hpke.Seal("hpke", ristretto255.NewIdentityElement(), dS, drbg.Data(64), nil) },
-		"sender":   func() { hpke.Seal("hpke", qR, ristretto255.NewScalar(), drbg.Data(64), nil) },
+		"receiver": func() { hpke.Seal("hpke", ristretto255.NewIdentityElement(), dS, nil) },
+		"sender":   func() { hpke.Seal("hpke", qR, ristretto255.NewScalar(), nil) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
@@ -127,9 +126,8 @@ func FuzzOpen(f *testing.F) {
 
 	dR, qR := drbg.KeyPair()
 	dS, qS := drbg.KeyPair()
-	r := drbg.Data(64)
 
-	ciphertext := hpke.Seal("hpke", qR, dS, r, []byte("this is a message"))
+	ciphertext := hpke.Seal("hpke", qR, dS, []byte("this is a message"))
 
 	badQE := slices.Clone(ciphertext)
 	badQE[2] ^= 1

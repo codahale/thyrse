@@ -2,6 +2,7 @@
 package signcrypt
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
 
 	"github.com/codahale/thyrse"
@@ -14,16 +15,8 @@ const Overhead = 32 + 32 + 32
 // Seal encrypts and signs the message to protect its confidentiality and authenticity. Only the owner of the
 // receiver's private key can decrypt it, and only the owner of the sender's private key could have sent it.
 //
-// The rand parameter must contain at least 64 bytes of fresh random data. The ephemeral key and commitment are
-// derived from the sender's private key, rand, and the message, so a repeated rand never reuses a commitment across
-// distinct messages, but sealing the same message with the same rand and keys produces an identical ciphertext,
-// revealing the repetition.
-//
-// Panics if rand is shorter than 64 bytes or if a supplied or derived public point is the identity element.
-func Seal(domain string, dS *ristretto255.Scalar, qR *ristretto255.Element, rand, message []byte) []byte {
-	if len(rand) < 64 {
-		panic("signcrypt: rand must be at least 64 bytes")
-	}
+// Panics if a supplied or derived public point is the identity element.
+func Seal(domain string, dS *ristretto255.Scalar, qR *ristretto255.Element, message []byte) []byte {
 	identity := ristretto255.NewIdentityElement()
 	if qR.Equal(identity) == 1 {
 		panic("signcrypt: receiver public key is identity")
@@ -41,10 +34,13 @@ func Seal(domain string, dS *ristretto255.Scalar, qR *ristretto255.Element, rand
 	// Fork the protocol into sender and receiver roles.
 	sender, receiver := p.Fork("role", []byte("sender"), []byte("receiver"))
 
-	// Mix the sender's private key, the user-supplied randomness, and the message into the sender. Use the sender to
-	// derive an ephemeral private key and commitment scalar which are unique to the inputs.
+	// Mix the sender's private key, fresh randomness, and the message into the sender. Use the sender to derive an
+	// ephemeral private key and commitment scalar which are unique to the inputs.
+	var random [64]byte
+	_, _ = rand.Read(random[:])
 	sender.Mix("sender-private", dS.Bytes())
-	sender.Mix("rand", rand)
+	sender.Mix("rand", random[:])
+	clear(random[:])
 	sender.Mix("message", message)
 	dE, _ := ristretto255.NewScalar().SetUniformBytes(sender.Derive("ephemeral-private", nil, 64))
 	qE := ristretto255.NewIdentityElement().ScalarBaseMult(dE)

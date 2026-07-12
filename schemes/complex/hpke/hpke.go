@@ -13,6 +13,8 @@
 package hpke
 
 import (
+	"crypto/rand"
+
 	"github.com/codahale/thyrse"
 	"github.com/gtank/ristretto255"
 )
@@ -20,12 +22,10 @@ import (
 // Overhead is the size, in bytes, of the additional data added to a message by Seal.
 const Overhead = 32 + thyrse.TagSize
 
-// Seal encrypts the given plaintext for the owner of the given public key, using the given sender's private key and
-// user-provided random data.
+// Seal encrypts the given plaintext for the owner of the given public key, using the given sender's private key.
 //
-// Panics if rand is not exactly 64 bytes or if a supplied or derived public key
-// is the identity element.
-func Seal(domain string, qR *ristretto255.Element, dS *ristretto255.Scalar, rand, plaintext []byte) []byte {
+// Panics if a supplied or derived public key is the identity element.
+func Seal(domain string, qR *ristretto255.Element, dS *ristretto255.Scalar, plaintext []byte) []byte {
 	if qR.Equal(ristretto255.NewIdentityElement()) == 1 {
 		panic("hpke: receiver public key is identity")
 	}
@@ -35,10 +35,10 @@ func Seal(domain string, qR *ristretto255.Element, dS *ristretto255.Scalar, rand
 	}
 
 	// Generate an ephemeral key.
-	dE, err := ristretto255.NewScalar().SetUniformBytes(rand)
-	if err != nil {
-		panic(err)
-	}
+	var random [64]byte
+	_, _ = rand.Read(random[:])
+	dE, _ := ristretto255.NewScalar().SetUniformBytes(random[:])
+	clear(random[:])
 	qE := ristretto255.NewIdentityElement().ScalarBaseMult(dE)
 	if qE.Equal(ristretto255.NewIdentityElement()) == 1 {
 		panic("hpke: ephemeral public key is identity")

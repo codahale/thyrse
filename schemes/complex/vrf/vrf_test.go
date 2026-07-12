@@ -14,9 +14,8 @@ func TestVerify(t *testing.T) {
 	drbg := testdata.New("thyrse vrf")
 	d, q := drbg.KeyPair()
 	_, qX := drbg.KeyPair()
-	r := drbg.Data(64)
 
-	prf, proof := vrf.Prove("domain", d, r, []byte("message"), 32)
+	prf, proof := vrf.Prove("domain", d, []byte("message"), 32)
 
 	t.Run("valid", func(t *testing.T) {
 		valid, got := vrf.Verify("domain", q, []byte("message"), proof, 32)
@@ -138,7 +137,7 @@ func TestProveRejectsIdentityKey(t *testing.T) {
 			t.Fatal("Prove() did not panic")
 		}
 	}()
-	vrf.Prove("domain", ristretto255.NewScalar(), nil, nil, 32)
+	vrf.Prove("domain", ristretto255.NewScalar(), nil, 32)
 }
 
 func FuzzVerify(f *testing.F) {

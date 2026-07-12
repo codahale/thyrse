@@ -2,6 +2,7 @@
 package vrf
 
 import (
+	"crypto/rand"
 	"slices"
 
 	"github.com/codahale/thyrse"
@@ -18,7 +19,7 @@ const ProofSize = 32 + 32 + 32
 // verifiers must use the same n as the prover.
 //
 // Panics if the prover's public key or a derived proof point is the identity element.
-func Prove(domain string, d *ristretto255.Scalar, rand, m []byte, n int) (prf, proof []byte) {
+func Prove(domain string, d *ristretto255.Scalar, m []byte, n int) (prf, proof []byte) {
 	identity := ristretto255.NewIdentityElement()
 	q := ristretto255.NewIdentityElement().ScalarBaseMult(d)
 	if q.Equal(identity) == 1 {
@@ -47,8 +48,11 @@ func Prove(domain string, d *ristretto255.Scalar, rand, m []byte, n int) (prf, p
 	prover, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))
 
 	// Calculate a hedged nonce k.
+	var random [64]byte
+	_, _ = rand.Read(random[:])
 	prover.Mix("prover-private", d.Bytes())
-	prover.Mix("rand", rand)
+	prover.Mix("rand", random[:])
+	clear(random[:])
 	k, _ := ristretto255.NewScalar().SetUniformBytes(prover.Derive("commitment", nil, 64))
 
 	// Calculate the commitment points.

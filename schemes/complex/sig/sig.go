@@ -3,6 +3,7 @@ package sig
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"io"
 
@@ -13,11 +14,11 @@ import (
 // Size is the length of a signature in bytes.
 const Size = 64
 
-// Sign uses the given Ristretto255 private key and an optional slice of random data to generate a strongly unforgeable
-// digital signature of the reader's contents.
+// Sign uses the given Ristretto255 private key to generate a strongly unforgeable digital signature of the reader's
+// contents.
 //
 // Returns any error from the underlying reader.
-func Sign(domain string, d *ristretto255.Scalar, rand []byte, message io.Reader) ([]byte, error) {
+func Sign(domain string, d *ristretto255.Scalar, message io.Reader) ([]byte, error) {
 	q := ristretto255.NewIdentityElement().ScalarBaseMult(d)
 	if q.Equal(ristretto255.NewIdentityElement()) == 1 {
 		return nil, errors.New("sig: signer public key is identity")
@@ -32,15 +33,18 @@ func Sign(domain string, d *ristretto255.Scalar, rand []byte, message io.Reader)
 	}
 	p.Mix("message", msg)
 
-	// Fork the protocol into prover/verifier roles and mix both the signer's private key and the provided random data
-	// (if any) into the prover.
+	// Fork the protocol into prover/verifier roles and mix both the signer's private key and fresh random data into the
+	// prover.
+	var random [64]byte
+	_, _ = rand.Read(random[:])
 	prover, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))
 	prover.Mix("signer-private", d.Bytes())
-	prover.Mix("hedged-rand", rand)
+	prover.Mix("hedged-rand", random[:])
+	clear(random[:])
 
 	// Use the prover to derive a commitment scalar and commitment point which is guaranteed to be unique for the
 	// combination of signer and message. This eliminates the risk of private key recovery via nonce reuse, and the
-	// user-provided random data hedges the deterministic scheme against fault attacks.
+	// fresh random data hedges the deterministic scheme against fault attacks.
 	k, _ := ristretto255.NewScalar().SetUniformBytes(prover.Derive("commitment", nil, 64))
 	r := ristretto255.NewIdentityElement().ScalarBaseMult(k)
 	if r.Equal(ristretto255.NewIdentityElement()) == 1 {

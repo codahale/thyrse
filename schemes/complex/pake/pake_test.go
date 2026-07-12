@@ -5,19 +5,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/pake"
 	"github.com/gtank/ristretto255"
 )
 
 func TestPake(t *testing.T) {
-	drbg := testdata.New("thyrse pake")
-	r1 := drbg.Data(64)
-	r2 := drbg.Data(64)
-
 	t.Run("successful exchange", func(t *testing.T) {
-		finish, initiate := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), r1)
-		pResponder, response, err := pake.Respond("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), r2, initiate)
+		finish, initiate := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"))
+		pResponder, response, err := pake.Respond("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), initiate)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,8 +27,8 @@ func TestPake(t *testing.T) {
 	})
 
 	t.Run("wrong password", func(t *testing.T) {
-		finish, initiate := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p1"), r1)
-		pResponder, response, err := pake.Respond("example", []byte("a"), []byte("b"), []byte("s"), []byte("p2"), r2, initiate)
+		finish, initiate := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p1"))
+		pResponder, response, err := pake.Respond("example", []byte("a"), []byte("b"), []byte("s"), []byte("p2"), initiate)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,8 +43,8 @@ func TestPake(t *testing.T) {
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
-		finish, initiate := pake.Initiate("example1", []byte("a"), []byte("b"), []byte("s"), []byte("p"), r1)
-		pResponder, response, err := pake.Respond("example2", []byte("a"), []byte("b"), []byte("s"), []byte("p"), r2, initiate)
+		finish, initiate := pake.Initiate("example1", []byte("a"), []byte("b"), []byte("s"), []byte("p"))
+		pResponder, response, err := pake.Respond("example2", []byte("a"), []byte("b"), []byte("s"), []byte("p"), initiate)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,7 +59,7 @@ func TestPake(t *testing.T) {
 	})
 
 	t.Run("invalid responder message", func(t *testing.T) {
-		finish, _ := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), r1)
+		finish, _ := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"))
 
 		_, err := finish(make([]byte, 31)) // invalid length
 		if !errors.Is(err, pake.ErrInvalidHandshake) {
@@ -73,28 +68,16 @@ func TestPake(t *testing.T) {
 	})
 
 	t.Run("identity element", func(t *testing.T) {
-		finish, _ := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), r1)
+		finish, _ := pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"))
 		_, err := finish(ristretto255.NewIdentityElement().Bytes())
 		if !errors.Is(err, pake.ErrInvalidHandshake) {
 			t.Errorf("finish() err = %v, want ErrInvalidHandshake", err)
 		}
 	})
 
-	t.Run("identity local exchange point", func(t *testing.T) {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("Initiate() did not panic")
-			}
-		}()
-		pake.Initiate("example", []byte("a"), []byte("b"), []byte("s"), []byte("p"), make([]byte, 64))
-	})
 }
 
 func Example() {
-	drbg := testdata.New("thyrse pake")
-	r1 := drbg.Data(64)
-	r2 := drbg.Data(64)
-
 	// The initiator begins the exchange, generating a callback function and a message to send.
 	finish, initiate := pake.Initiate(
 		"example",
@@ -102,7 +85,6 @@ func Example() {
 		[]byte("server"),
 		[]byte("session"),
 		[]byte("the bravest toaster"),
-		r1,
 	)
 
 	// The initiator sends `initiate` to the responder.
@@ -115,7 +97,6 @@ func Example() {
 		[]byte("server"),
 		[]byte("session"),
 		[]byte("the bravest toaster"),
-		r2,
 		initiate,
 	)
 	if err != nil {
@@ -144,10 +125,8 @@ func Example() {
 	}
 
 	// Both initiator and responder now share a mutually authenticated protocol state.
-	fmt.Printf("responder: %x\n", pResponder.Derive("state", nil, 16))
-	fmt.Printf("initiator: %x\n", pInitiator.Derive("state", nil, 16))
+	fmt.Printf("states equal: %t\n", pResponder.Equal(pInitiator) == 1)
 
 	// Output:
-	// responder: 97c653b775a896007fa0a31d345d4108
-	// initiator: 97c653b775a896007fa0a31d345d4108
+	// states equal: true
 }

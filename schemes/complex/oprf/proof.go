@@ -31,9 +31,7 @@ func generateProof(domain string, k *ristretto255.Scalar, a, b *ristretto255.Ele
 	// random data directly. A repeated or biased RNG output therefore never repeats a nonce across distinct
 	// transcripts, which would otherwise expose the private key.
 	var x [64]byte
-	if _, err := rand.Read(x[:]); err != nil {
-		panic(err)
-	}
+	_, _ = rand.Read(x[:])
 	np := thyrse.New(domain)
 	np.Mix("proof-private", k.Bytes())
 	np.Mix("a", a.Bytes())

@@ -10,6 +10,7 @@
 package pake
 
 import (
+	"crypto/rand"
 	"errors"
 
 	"github.com/codahale/thyrse"
@@ -23,30 +24,28 @@ var ErrInvalidHandshake = errors.New("thyrse/pake: invalid handshake")
 type Finish = func(in []byte) (*thyrse.Protocol, error)
 
 // Initiate begins a key exchange as the initiator, using the given domain separation string, initiator ID, responder
-// ID, session ID, password, and random value (which must be exactly 64 bytes). It returns a Finish function and a
-// message to be sent to the responder. When the finish function is called with the responder's message, it will return
-// a provisional thyrse.Protocol state. The initiator must successfully open a key-confirmation message from the
-// responder before treating the state as authenticated.
+// ID, session ID, and password. It returns a Finish function and a message to be sent to the responder. When the finish
+// function is called with the responder's message, it will return a provisional thyrse.Protocol state. The initiator
+// must successfully open a key-confirmation message from the responder before treating the state as authenticated.
 //
-// Panics if rand is not exactly 64 bytes or produces an identity exchange point.
-func Initiate(domain string, initiatorID, responderID, sessionID, password, rand []byte) (finish Finish, out []byte) {
-	return exchange(domain, initiatorID, responderID, sessionID, password, rand, true)
+// Panics if the generated scalar produces an identity exchange point.
+func Initiate(domain string, initiatorID, responderID, sessionID, password []byte) (finish Finish, out []byte) {
+	return exchange(domain, initiatorID, responderID, sessionID, password, true)
 }
 
 // Respond establishes a key exchange as the responder, using the given domain separation string, initiator ID,
-// responder ID, session ID, password, random value (which must be exactly 64 bytes), and the initiator's message.
-// Returns a provisional, fully-keyed thyrse.Protocol and a message to be sent to the initiator to complete the exchange,
-// or an error. The responder must successfully open a key-confirmation message from the initiator before treating the
-// state as authenticated.
+// responder ID, session ID, password, and the initiator's message. Returns a provisional, fully-keyed thyrse.Protocol
+// and a message to be sent to the initiator to complete the exchange, or an error. The responder must successfully open
+// a key-confirmation message from the initiator before treating the state as authenticated.
 //
-// Panics if rand is not exactly 64 bytes or produces an identity exchange point.
-func Respond(domain string, initiatorID, responderID, sessionID, password, rand, msg []byte) (p *thyrse.Protocol, out []byte, err error) {
-	finish, out := exchange(domain, initiatorID, responderID, sessionID, password, rand, false)
+// Panics if the generated scalar produces an identity exchange point.
+func Respond(domain string, initiatorID, responderID, sessionID, password, msg []byte) (p *thyrse.Protocol, out []byte, err error) {
+	finish, out := exchange(domain, initiatorID, responderID, sessionID, password, false)
 	p, err = finish(msg)
 	return p, out, err
 }
 
-func exchange(domain string, initiatorID, responderID, sessionID, password, rand []byte, initiator bool) (finisher Finish, out []byte) {
+func exchange(domain string, initiatorID, responderID, sessionID, password []byte, initiator bool) (finisher Finish, out []byte) {
 	// Initialize a protocol and mix in the various data.
 	p := thyrse.New(domain)
 	p.Mix("initiator", initiatorID)
@@ -61,10 +60,10 @@ func exchange(domain string, initiatorID, responderID, sessionID, password, rand
 	}
 
 	// Generate a random secret value.
-	a, err := ristretto255.NewScalar().SetUniformBytes(rand)
-	if err != nil {
-		panic(err)
-	}
+	var random [64]byte
+	_, _ = rand.Read(random[:])
+	a, _ := ristretto255.NewScalar().SetUniformBytes(random[:])
+	clear(random[:])
 
 	// Calculate the exchange point and encode it.
 	exchangePoint := ristretto255.NewIdentityElement().ScalarMult(a, gP)

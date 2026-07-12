@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/cryptotest"
 
 	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/frost"
@@ -15,10 +16,8 @@ import (
 const domain = "frost-test"
 
 func TestKeyGen(t *testing.T) {
-	drbg := testdata.New("frost keygen")
-
 	t.Run("valid 3-of-5", func(t *testing.T) {
-		groupKey, signers, verifyingShares, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+		groupKey, signers, verifyingShares, err := frost.KeyGen(domain, 5, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,40 +50,33 @@ func TestKeyGen(t *testing.T) {
 	})
 
 	t.Run("threshold too low", func(t *testing.T) {
-		_, _, _, err := frost.KeyGen(domain, 5, 1, drbg.Data(64))
+		_, _, _, err := frost.KeyGen(domain, 5, 1)
 		if err == nil {
 			t.Error("KeyGen() err = nil, want error")
 		}
 	})
 
 	t.Run("threshold exceeds max signers", func(t *testing.T) {
-		_, _, _, err := frost.KeyGen(domain, 2, 3, drbg.Data(64))
+		_, _, _, err := frost.KeyGen(domain, 2, 3)
 		if err == nil {
 			t.Error("KeyGen() err = nil, want error")
 		}
 	})
 
 	t.Run("too many signers", func(t *testing.T) {
-		_, _, _, err := frost.KeyGen(domain, 1<<16, 2, drbg.Data(64))
+		_, _, _, err := frost.KeyGen(domain, 1<<16, 2)
 		if err != frost.ErrInvalidParameters {
 			t.Errorf("KeyGen() err = %v, want ErrInvalidParameters", err)
 		}
 	})
 
-	t.Run("insufficient randomness", func(t *testing.T) {
-		_, _, _, err := frost.KeyGen(domain, 5, 3, drbg.Data(32))
-		if err == nil {
-			t.Error("KeyGen() err = nil, want error")
-		}
-	})
 }
 
 func TestSignAndVerify(t *testing.T) {
-	drbg := testdata.New("frost sign")
 	message := []byte("this is a test message")
 
 	t.Run("3-of-5 threshold", func(t *testing.T) {
-		groupKey, signers, _, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+		groupKey, signers, _, err := frost.KeyGen(domain, 5, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +88,7 @@ func TestSignAndVerify(t *testing.T) {
 		nonces := make([]frost.Nonce, len(subset))
 		commitments := make([]frost.Commitment, len(subset))
 		for i, idx := range subset {
-			nonces[i], commitments[i] = signers[idx].Commit(drbg.Data(64))
+			nonces[i], commitments[i] = signers[idx].Commit()
 		}
 
 		// Round 2: Produce signature shares.
@@ -129,7 +121,7 @@ func TestSignAndVerify(t *testing.T) {
 	})
 
 	t.Run("2-of-3 threshold", func(t *testing.T) {
-		groupKey, signers, _, err := frost.KeyGen(domain, 3, 2, drbg.Data(64))
+		groupKey, signers, _, err := frost.KeyGen(domain, 3, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -139,7 +131,7 @@ func TestSignAndVerify(t *testing.T) {
 		nonces := make([]frost.Nonce, len(subset))
 		commitments := make([]frost.Commitment, len(subset))
 		for i, idx := range subset {
-			nonces[i], commitments[i] = signers[idx].Commit(drbg.Data(64))
+			nonces[i], commitments[i] = signers[idx].Commit()
 		}
 
 		shares := make([][]byte, len(subset))
@@ -161,7 +153,7 @@ func TestSignAndVerify(t *testing.T) {
 	})
 
 	t.Run("different subsets produce compatible signatures", func(t *testing.T) {
-		groupKey, signers, _, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+		groupKey, signers, _, err := frost.KeyGen(domain, 5, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -171,7 +163,7 @@ func TestSignAndVerify(t *testing.T) {
 			nonces := make([]frost.Nonce, len(subset))
 			commitments := make([]frost.Commitment, len(subset))
 			for i, idx := range subset {
-				nonces[i], commitments[i] = signers[idx].Commit(drbg.Data(64))
+				nonces[i], commitments[i] = signers[idx].Commit()
 			}
 
 			shares := make([][]byte, len(subset))
@@ -195,10 +187,9 @@ func TestSignAndVerify(t *testing.T) {
 }
 
 func TestSigVerifyCompatibility(t *testing.T) {
-	drbg := testdata.New("frost sig compat")
 	message := []byte("cross-verify message")
 
-	groupKey, signers, _, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+	groupKey, signers, _, err := frost.KeyGen(domain, 5, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +198,7 @@ func TestSigVerifyCompatibility(t *testing.T) {
 	nonces := make([]frost.Nonce, 3)
 	commitments := make([]frost.Commitment, 3)
 	for i := range 3 {
-		nonces[i], commitments[i] = signers[i].Commit(drbg.Data(64))
+		nonces[i], commitments[i] = signers[i].Commit()
 	}
 
 	shares := make([][]byte, 3)
@@ -234,10 +225,9 @@ func TestSigVerifyCompatibility(t *testing.T) {
 }
 
 func TestVerifyShare(t *testing.T) {
-	drbg := testdata.New("frost verify share")
 	message := []byte("share verification message")
 
-	groupKey, signers, verifyingShares, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+	groupKey, signers, verifyingShares, err := frost.KeyGen(domain, 5, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +237,7 @@ func TestVerifyShare(t *testing.T) {
 	nonces := make([]frost.Nonce, len(subset))
 	commitments := make([]frost.Commitment, len(subset))
 	for i, idx := range subset {
-		nonces[i], commitments[i] = signers[idx].Commit(drbg.Data(64))
+		nonces[i], commitments[i] = signers[idx].Commit()
 	}
 
 	shares := make([][]byte, len(subset))
@@ -303,10 +293,9 @@ func TestVerifyShare(t *testing.T) {
 }
 
 func TestVerifyInvalid(t *testing.T) {
-	drbg := testdata.New("frost verify invalid")
 	message := []byte("verification test message")
 
-	groupKey, signers, _, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+	groupKey, signers, _, err := frost.KeyGen(domain, 5, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +303,7 @@ func TestVerifyInvalid(t *testing.T) {
 	nonces := make([]frost.Nonce, 3)
 	commitments := make([]frost.Commitment, 3)
 	for i := range 3 {
-		nonces[i], commitments[i] = signers[i].Commit(drbg.Data(64))
+		nonces[i], commitments[i] = signers[i].Commit()
 	}
 
 	shares := make([][]byte, 3)
@@ -343,7 +332,7 @@ func TestVerifyInvalid(t *testing.T) {
 	})
 
 	t.Run("wrong group key", func(t *testing.T) {
-		otherGroupKey, _, _, _ := frost.KeyGen(domain, 3, 2, drbg.Data(64))
+		otherGroupKey, _, _, _ := frost.KeyGen(domain, 3, 2)
 		if frost.Verify(domain, otherGroupKey, message, signature) {
 			t.Error("Verify() = true, want false")
 		}
@@ -394,27 +383,10 @@ func TestVerifyInvalid(t *testing.T) {
 	})
 }
 
-func TestCommitInsufficientRandomness(t *testing.T) {
-	drbg := testdata.New("frost commit rand")
-
-	_, signers, _, err := frost.KeyGen(domain, 3, 2, drbg.Data(64))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() {
-		if recover() == nil {
-			t.Error("Commit() did not panic")
-		}
-	}()
-	signers[0].Commit(drbg.Data(32))
-}
-
 func TestSignErrors(t *testing.T) {
-	drbg := testdata.New("frost sign errors")
 	message := []byte("error test")
 
-	_, signers, _, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+	_, signers, _, err := frost.KeyGen(domain, 5, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +394,7 @@ func TestSignErrors(t *testing.T) {
 	nonces := make([]frost.Nonce, 3)
 	commitments := make([]frost.Commitment, 3)
 	for i := range 3 {
-		nonces[i], commitments[i] = signers[i].Commit(drbg.Data(64))
+		nonces[i], commitments[i] = signers[i].Commit()
 	}
 
 	t.Run("signer not in commitments", func(t *testing.T) {
@@ -452,9 +424,7 @@ func TestSignErrors(t *testing.T) {
 }
 
 func TestAggregateErrors(t *testing.T) {
-	drbg := testdata.New("frost aggregate errors")
-
-	groupKey, _, _, err := frost.KeyGen(domain, 5, 3, drbg.Data(64))
+	groupKey, _, _, err := frost.KeyGen(domain, 5, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -494,14 +464,14 @@ func TestAggregateErrors(t *testing.T) {
 }
 
 func TestDeterministicKeyGen(t *testing.T) {
-	seed := testdata.New("frost deterministic").Data(64)
-
-	groupKey1, signers1, vs1, err := frost.KeyGen(domain, 5, 3, seed)
+	cryptotest.SetGlobalRandom(t, 1)
+	groupKey1, signers1, vs1, err := frost.KeyGen(domain, 5, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	groupKey2, signers2, vs2, err := frost.KeyGen(domain, 5, 3, seed)
+	cryptotest.SetGlobalRandom(t, 1)
+	groupKey2, signers2, vs2, err := frost.KeyGen(domain, 5, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +493,7 @@ func TestDeterministicKeyGen(t *testing.T) {
 
 func FuzzVerify(f *testing.F) {
 	drbg := testdata.New("frost fuzz verify")
-	_, signers, _, _ := frost.KeyGen(domain, 3, 2, drbg.Data(64))
+	_, signers, _, _ := frost.KeyGen(domain, 3, 2)
 
 	for range 10 {
 		f.Add(drbg.Data(frost.SignatureSize), drbg.Data(32))
