@@ -156,17 +156,18 @@ func (s *Signer) Commit(rand []byte) (Nonce, Commitment) {
 	}
 }
 
-// Sign produces a signature share for the given message. The commitments slice must contain the commitments of all
+// Sign produces a signature share for the given message under the domain the signer was generated with, which is also
+// the domain [Aggregate] and [Verify] must be called with. The commitments slice must contain the commitments of all
 // participants in this signing round, including this signer's own commitment. The nonce must be the same one returned
 // by [Signer.Commit] for this round and must not be reused.
-func (s *Signer) Sign(domain string, nonce Nonce, message []byte, commitments []Commitment) ([]byte, error) {
+func (s *Signer) Sign(nonce Nonce, message []byte, commitments []Commitment) ([]byte, error) {
 	sorted := sortCommitments(commitments)
 
 	if err := validateCommitments(sorted, s.identifier); err != nil {
 		return nil, err
 	}
 
-	bindingFactors, err := computeBindingFactors(domain, s.groupKey, message, sorted)
+	bindingFactors, err := computeBindingFactors(s.domain, s.groupKey, message, sorted)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +177,7 @@ func (s *Signer) Sign(domain string, nonce Nonce, message []byte, commitments []
 		return nil, err
 	}
 
-	challenge := computeChallenge(domain, s.groupKey, message, groupCommitment)
+	challenge := computeChallenge(s.domain, s.groupKey, message, groupCommitment)
 
 	identifiers := make([]uint16, len(sorted))
 	for i, c := range sorted {
