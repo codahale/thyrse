@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"testing"
 
@@ -15,6 +16,63 @@ func newKeyed(label string, key []byte) *Protocol {
 	p := New(label)
 	p.Mix("key", key)
 	return p
+}
+
+func TestMixWriter(t *testing.T) {
+	t.Run("matches Mix", func(t *testing.T) {
+		got := New("test")
+		w := got.MixWriter("data")
+		for _, chunk := range [][]byte{[]byte("one"), nil, []byte("two"), []byte("three")} {
+			if n, err := w.Write(chunk); err != nil || n != len(chunk) {
+				t.Fatalf("Write() = (%d, %v), want (%d, nil)", n, err, len(chunk))
+			}
+		}
+		if err := w.Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+
+		want := New("test")
+		want.Mix("data", []byte("onetwothree"))
+		if got.Equal(want) != 1 {
+			t.Fatal("MixWriter transcript differs from Mix")
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		got := New("test")
+		if err := got.MixWriter("data").Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+
+		want := New("test")
+		want.Mix("data", nil)
+		if got.Equal(want) != 1 {
+			t.Fatal("empty MixWriter transcript differs from Mix")
+		}
+	})
+
+	t.Run("closed", func(t *testing.T) {
+		got := New("test")
+		w := got.MixWriter("data")
+		if _, err := w.Write([]byte("one")); err != nil {
+			t.Fatalf("Write() err = %v, want nil", err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatalf("second Close() err = %v, want nil", err)
+		}
+		if n, err := w.Write([]byte("two")); n != 0 || !errors.Is(err, io.ErrClosedPipe) {
+			t.Fatalf("Write() after Close() = (%d, %v), want (0, io.ErrClosedPipe)", n, err)
+		}
+
+		want := New("test")
+		want.Mix("data", []byte("one"))
+		if got.Equal(want) != 1 {
+			t.Fatal("Close or rejected Write mutated the transcript")
+		}
+	})
 }
 
 func TestDerive(t *testing.T) {

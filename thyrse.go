@@ -11,6 +11,7 @@ import (
 	"crypto/cipher"
 	"crypto/subtle"
 	"errors"
+	"io"
 
 	"github.com/codahale/kt128"
 	"github.com/codahale/thyrse/internal/enc"
@@ -75,6 +76,38 @@ func (*Protocol) GoString() string {
 func (p *Protocol) Mix(label string, data []byte) {
 	p.writeLabel(label)
 	p.writeStringOp(data, opMix)
+}
+
+// MixWriter returns a writer that absorbs data into the protocol transcript. Closing the writer completes the Mix
+// operation. The Protocol must not be used for another operation until the writer is closed.
+func (p *Protocol) MixWriter(label string) io.WriteCloser {
+	p.writeLabel(label)
+	return &mixWriter{p: p}
+}
+
+type mixWriter struct {
+	p      *Protocol
+	n      uint64
+	closed bool
+}
+
+func (w *mixWriter) Write(p []byte) (int, error) {
+	if w.closed {
+		return 0, io.ErrClosedPipe
+	}
+
+	n, err := w.p.h.Write(p)
+	w.n += uint64(n)
+	return n, err
+}
+
+func (w *mixWriter) Close() error {
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	w.p.writeIntOp(w.n, opMix)
+	return nil
 }
 
 // Fork calls ForkN with the given label and values and returns the two branches.
