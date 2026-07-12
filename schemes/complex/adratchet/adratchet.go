@@ -1,11 +1,14 @@
-// Package adratchet implements an asynchronous double ratchet mechanism with Thyrse and Ristretto255.
+// Package adratchet implements an asynchronous double ratchet mechanism with Thyrse, Ristretto255, and ML-KEM-768.
 //
-// DH ratchet steps alternate between the initiator and responder. A single root protocol absorbs the DH sequence and
-// forks independent chain protocols; each chain in turn forks an independent protocol for every message.
+// Hybrid ratchet steps alternate between the initiator and responder. A single root protocol absorbs each Ristretto255
+// DH and ML-KEM shared secret and forks independent chain protocols; each chain in turn forks an independent protocol
+// for every message.
 package adratchet
 
 import (
+	"crypto/mlkem"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"maps"
 
@@ -16,8 +19,11 @@ import (
 // State maintains the state of an asynchronous double ratchet.
 type State struct {
 	localPriv               *ristretto255.Scalar
-	localPub                *ristretto255.Element
 	remotePub               *ristretto255.Element
+	localKEM                *mlkem.DecapsulationKey768
+	remoteKEM               *mlkem.EncapsulationKey768
+	localRatchet            [ratchetHeaderSize]byte
+	remoteRatchet           [sha256.Size]byte
 	root                    *thyrse.Protocol
 	send, recv              *thyrse.Protocol
 	sendN, recvN, prevSendN uint32
@@ -32,23 +38,21 @@ const (
 	Overhead = headerSize + thyrse.TagSize
 )
 
-// Initiate creates a double ratchet state for the initiating party and sends the first message. The given root protocol
-// is consumed by the returned state.
-// Panics if either public key is the identity element.
+// Initiate creates a double ratchet state for the initiating party and sends the first message using the responder's
+// Ristretto255 and ML-KEM public keys. The given root protocol is consumed by the returned state.
+// Panics if the Ristretto255 public key is the identity element.
 func Initiate(
 	p *thyrse.Protocol,
-	local *ristretto255.Scalar,
 	remote *ristretto255.Element,
+	remoteKEM *mlkem.EncapsulationKey768,
 	plaintext []byte,
 ) (*State, []byte) {
-	localPub := ristretto255.NewIdentityElement().ScalarBaseMult(local)
-	if localPub.Equal(ristretto255.NewIdentityElement()) == 1 || remote.Equal(ristretto255.NewIdentityElement()) == 1 {
+	if remote.Equal(ristretto255.NewIdentityElement()) == 1 {
 		panic("adratchet: identity public key")
 	}
 	s := &State{
-		localPriv: local,
-		localPub:  localPub,
 		remotePub: remote,
+		remoteKEM: remoteKEM,
 		root:      p,
 		skipped:   make(map[skippedKey]*thyrse.Protocol),
 	}
@@ -56,23 +60,23 @@ func Initiate(
 	return s, s.SendMessage(plaintext)
 }
 
-// Respond receives the initiator's first message and creates a double ratchet state for the responding party. The given
-// root protocol is consumed by the returned state on success and remains unchanged on failure.
-// Panics if either public key is the identity element.
+// Respond receives the initiator's first message using the responder's Ristretto255 and ML-KEM private keys and
+// creates a double ratchet state. The given root protocol is consumed by the returned state on success and remains
+// unchanged on failure.
+// Panics if the Ristretto255 private key produces the identity element.
 func Respond(
 	p *thyrse.Protocol,
 	local *ristretto255.Scalar,
-	remote *ristretto255.Element,
+	localKEM *mlkem.DecapsulationKey768,
 	ciphertext []byte,
 ) (*State, []byte, error) {
 	localPub := ristretto255.NewIdentityElement().ScalarBaseMult(local)
-	if localPub.Equal(ristretto255.NewIdentityElement()) == 1 || remote.Equal(ristretto255.NewIdentityElement()) == 1 {
+	if localPub.Equal(ristretto255.NewIdentityElement()) == 1 {
 		panic("adratchet: identity public key")
 	}
 	s := &State{
 		localPriv: local,
-		localPub:  localPub,
-		remotePub: remote,
+		localKEM:  localKEM,
 		root:      p,
 		skipped:   make(map[skippedKey]*thyrse.Protocol),
 	}
@@ -88,9 +92,9 @@ func Respond(
 func (s *State) SendMessage(plaintext []byte) []byte {
 	// Encode the header.
 	header := make([]byte, headerSize)
-	copy(header[:32], s.localPub.Bytes())
-	binary.LittleEndian.PutUint32(header[32:36], s.sendN)
-	binary.LittleEndian.PutUint32(header[36:40], s.prevSendN)
+	copy(header[:ratchetHeaderSize], s.localRatchet[:])
+	binary.LittleEndian.PutUint32(header[messageNumberOffset:previousChainOffset], s.sendN)
+	binary.LittleEndian.PutUint32(header[previousChainOffset:headerSize], s.prevSendN)
 
 	// Advance the sending chain and split off this message's protocol.
 	p := forkMessage(s.send, s.sendN)
@@ -103,8 +107,8 @@ func (s *State) SendMessage(plaintext []byte) []byte {
 	return ciphertext
 }
 
-// rotateSend generates the local half of the next DH ratchet step and derives
-// its sending chain from the root protocol.
+// rotateSend generates the local half of the next hybrid ratchet step and
+// derives its sending chain from the root protocol.
 func (s *State) rotateSend() {
 	var localPriv *ristretto255.Scalar
 	var localPub *ristretto255.Element
@@ -120,23 +124,34 @@ func (s *State) rotateSend() {
 		}
 	}
 
+	localKEM, err := mlkem.GenerateKey768()
+	if err != nil {
+		panic(err)
+	}
+	kemShared, kemCiphertext := s.remoteKEM.Encapsulate()
+
+	var ratchet [ratchetHeaderSize]byte
+	encodeRatchetHeader(ratchet[:], localPub, localKEM.EncapsulationKey(), kemCiphertext)
 	dh := ristretto255.NewIdentityElement().ScalarMult(localPriv, s.remotePub)
-	chain := s.deriveChain(localPub, dh)
+	chain := s.deriveChain(ratchet[:], dh.Bytes(), kemShared)
+	clear(kemShared)
 	if s.send != nil {
 		s.send.Clear()
 	}
 	s.localPriv = localPriv
-	s.localPub = localPub
+	s.localKEM = localKEM
+	s.localRatchet = ratchet
 	s.send = chain
 	s.prevSendN = s.sendN
 	s.sendN = 0
 }
 
-// deriveChain absorbs one DH ratchet step into the root and splits off the
-// chain associated with the advertised public key.
-func (s *State) deriveChain(pub, dh *ristretto255.Element) *thyrse.Protocol {
-	s.root.Mix("dh", dh.Bytes())
-	return s.root.ForkN("chain", pub.Bytes())[0]
+// deriveChain absorbs one hybrid ratchet step into the root and splits off the
+// chain associated with the complete public ratchet descriptor.
+func (s *State) deriveChain(ratchet, dh, kem []byte) *thyrse.Protocol {
+	s.root.Mix("dh", dh)
+	s.root.Mix("ml-kem", kem)
+	return s.root.ForkN("chain", ratchet)[0]
 }
 
 // ReceiveMessage decrypts the given ciphertext and returns the plaintext. It handles out-of-order messages and performs
@@ -148,15 +163,21 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 	header := ciphertext[:headerSize]
 	msg := ciphertext[headerSize:]
 
-	pub, err := ristretto255.NewIdentityElement().SetCanonicalBytes(header[:32])
+	pub, err := ristretto255.NewIdentityElement().SetCanonicalBytes(header[dhPublicKeyOffset:kemPublicKeyOffset])
 	if err != nil || pub.Equal(ristretto255.NewIdentityElement()) == 1 {
 		return nil, thyrse.ErrInvalidCiphertext
 	}
-	n := binary.LittleEndian.Uint32(header[32:36])
-	pn := binary.LittleEndian.Uint32(header[36:40])
+	kemPub, err := mlkem.NewEncapsulationKey768(header[kemPublicKeyOffset:kemCiphertextOffset])
+	if err != nil {
+		return nil, thyrse.ErrInvalidCiphertext
+	}
+	kemCiphertext := header[kemCiphertextOffset:messageNumberOffset]
+	ratchetID := sha256.Sum256(header[:ratchetHeaderSize])
+	n := binary.LittleEndian.Uint32(header[messageNumberOffset:previousChainOffset])
+	pn := binary.LittleEndian.Uint32(header[previousChainOffset:headerSize])
 
 	trial := s.clone()
-	plaintext, err := trial.receiveMessage(header, msg, pub, n, pn)
+	plaintext, err := trial.receiveMessage(header, msg, pub, kemPub, kemCiphertext, ratchetID, n, pn)
 	if err != nil {
 		s.discard(trial)
 		return nil, err
@@ -165,9 +186,16 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func (s *State) receiveMessage(header, msg []byte, pub *ristretto255.Element, n, pn uint32) ([]byte, error) {
+func (s *State) receiveMessage(
+	header, msg []byte,
+	pub *ristretto255.Element,
+	kemPub *mlkem.EncapsulationKey768,
+	kemCiphertext []byte,
+	ratchetID [sha256.Size]byte,
+	n, pn uint32,
+) ([]byte, error) {
 	// Check for a skipped message key.
-	sk := newSK(pub, n)
+	sk := newSK(ratchetID, n)
 	if p, ok := s.skipped[sk]; ok {
 		p = p.Clone()
 		p.Mix("header", header)
@@ -180,16 +208,21 @@ func (s *State) receiveMessage(header, msg []byte, pub *ristretto255.Element, n,
 		return plaintext, nil
 	}
 
-	newRemote := pub.Equal(s.remotePub) == 0
+	newRemote := s.recv == nil || ratchetID != s.remoteRatchet
 	if newRemote {
 		// Catch up on the previous receiving chain.
 		if err := s.advanceRecvChain(pn); err != nil {
 			return nil, err
 		}
 
-		// Derive the receiving chain from the peer's half of the next DH step.
+		// Derive the receiving chain from the peer's half of the next hybrid step.
+		kemShared, err := s.localKEM.Decapsulate(kemCiphertext)
+		if err != nil {
+			return nil, thyrse.ErrInvalidCiphertext
+		}
 		dh := ristretto255.NewIdentityElement().ScalarMult(s.localPriv, pub)
-		chain := s.deriveChain(pub, dh)
+		chain := s.deriveChain(header[:ratchetHeaderSize], dh.Bytes(), kemShared)
+		clear(kemShared)
 		if s.recv != nil {
 			s.recv.Clear()
 		}
@@ -197,6 +230,8 @@ func (s *State) receiveMessage(header, msg []byte, pub *ristretto255.Element, n,
 
 		// Update the remote public key and reset the receiving counter.
 		s.remotePub = pub
+		s.remoteKEM = kemPub
+		s.remoteRatchet = ratchetID
 		s.recvN = 0
 	}
 	if s.recv == nil {
@@ -221,7 +256,7 @@ func (s *State) receiveMessage(header, msg []byte, pub *ristretto255.Element, n,
 	}
 
 	// A successfully authenticated new remote key obligates the local half of
-	// the next DH step. No other operation rotates the local key.
+	// the next hybrid step. No other operation rotates the local keys.
 	if newRemote {
 		s.rotateSend()
 	}
@@ -297,7 +332,7 @@ func (s *State) advanceRecvChain(targetN uint32) error {
 	}
 	for s.recvN < targetN {
 		p := forkMessage(s.recv, s.recvN)
-		s.skipped[newSK(s.remotePub, s.recvN)] = p
+		s.skipped[newSK(s.remoteRatchet, s.recvN)] = p
 		s.recvN++
 	}
 	return nil
@@ -310,15 +345,34 @@ func forkMessage(chain *thyrse.Protocol, n uint32) *thyrse.Protocol {
 }
 
 type skippedKey struct {
-	pub [32]byte
-	n   uint32
+	ratchet [sha256.Size]byte
+	n       uint32
 }
 
-func newSK(q *ristretto255.Element, n uint32) skippedKey {
+func newSK(ratchet [sha256.Size]byte, n uint32) skippedKey {
 	return skippedKey{
-		pub: [32]byte(q.Bytes()),
-		n:   n,
+		ratchet: ratchet,
+		n:       n,
 	}
 }
 
-const headerSize = 32 + 4 + 4
+func encodeRatchetHeader(
+	dst []byte,
+	dh *ristretto255.Element,
+	kem *mlkem.EncapsulationKey768,
+	kemCiphertext []byte,
+) {
+	copy(dst[dhPublicKeyOffset:kemPublicKeyOffset], dh.Bytes())
+	copy(dst[kemPublicKeyOffset:kemCiphertextOffset], kem.Bytes())
+	copy(dst[kemCiphertextOffset:ratchetHeaderSize], kemCiphertext)
+}
+
+const (
+	dhPublicKeyOffset   = 0
+	kemPublicKeyOffset  = dhPublicKeyOffset + 32
+	kemCiphertextOffset = kemPublicKeyOffset + mlkem.EncapsulationKeySize768
+	ratchetHeaderSize   = kemCiphertextOffset + mlkem.CiphertextSize768
+	messageNumberOffset = ratchetHeaderSize
+	previousChainOffset = messageNumberOffset + 4
+	headerSize          = previousChainOffset + 4
+)

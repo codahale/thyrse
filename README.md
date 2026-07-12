@@ -54,7 +54,7 @@ Thyrse ships with a library of ready-to-use cryptographic schemes built on the c
 | **vrf**       | Verifiable random function with proofs                                       |
 | **pake**      | Password-authenticated key exchange (CPace-style)                            |
 | **frost**     | FROST threshold signatures (Flexible Round-Optimized Schnorr Threshold)      |
-| **adratchet** | Asynchronous double ratchet with forward secrecy and break-in recovery       |
+| **adratchet** | Hybrid Ristretto255/ML-KEM-768 asynchronous double ratchet                   |
 
 All schemes are in `schemes/basic/` and `schemes/complex/` respectively.
 

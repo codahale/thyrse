@@ -2,6 +2,7 @@ package adratchet_test
 
 import (
 	"bytes"
+	"crypto/mlkem"
 	"fmt"
 	"slices"
 	"testing"
@@ -12,24 +13,29 @@ import (
 	"github.com/gtank/ristretto255"
 )
 
+const (
+	testKEMCiphertextOffset = 32 + mlkem.EncapsulationKeySize768
+	testRatchetHeaderSize   = testKEMCiphertextOffset + mlkem.CiphertextSize768
+)
+
 func Example() {
 	drbg := testdata.New("thyrse async double ratchet")
 
-	// Alice has a private and public key.
-	dA, qA := drbg.KeyPair()
-
-	// Bea has a private and public key.
+	// Bea publishes initial Ristretto255 and ML-KEM keys.
 	dB, qB := drbg.KeyPair()
+	kB, _ := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
 
 	// Alice and Bea have a shared protocol state, probably thanks to an ECDH handshake.
 	p := thyrse.New("example")
 	p.Mix("shared key", []byte("ok then"))
 
 	// Alice initiates the ratchet with her first message.
-	a, msgA := adratchet.Initiate(p.Clone(), dA, qB, []byte("this is my first message"))
+	a, msgA := adratchet.Initiate(
+		p.Clone(), qB, kB.EncapsulationKey(), []byte("this is my first message"),
+	)
 
 	// Bea receives the first message and establishes her ratchet state.
-	b, v, err := adratchet.Respond(p.Clone(), dB, qA, msgA)
+	b, v, err := adratchet.Respond(p.Clone(), dB, kB, msgA)
 	if err != nil {
 		panic(err)
 	}
@@ -52,13 +58,18 @@ func Example() {
 
 func TestInitiateRespondRejectIdentityKeys(t *testing.T) {
 	drbg := testdata.New("thyrse async double ratchet identity")
-	d, q := drbg.KeyPair()
+	k, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for name, f := range map[string]func(){
-		"initiator local":  func() { adratchet.Initiate(thyrse.New("test"), ristretto255.NewScalar(), q, nil) },
-		"initiator remote": func() { adratchet.Initiate(thyrse.New("test"), d, ristretto255.NewIdentityElement(), nil) },
-		"responder local":  func() { adratchet.Respond(thyrse.New("test"), ristretto255.NewScalar(), q, nil) },
-		"responder remote": func() { adratchet.Respond(thyrse.New("test"), d, ristretto255.NewIdentityElement(), nil) },
+		"initiator remote": func() {
+			adratchet.Initiate(thyrse.New("test"), ristretto255.NewIdentityElement(), k.EncapsulationKey(), nil)
+		},
+		"responder local": func() {
+			adratchet.Respond(thyrse.New("test"), ristretto255.NewScalar(), k, nil)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
@@ -71,17 +82,22 @@ func TestInitiateRespondRejectIdentityKeys(t *testing.T) {
 	}
 }
 
+func TestOverhead(t *testing.T) {
+	if got, want := adratchet.Overhead, testRatchetHeaderSize+8+thyrse.TagSize; got != want {
+		t.Errorf("Overhead = %d, want %d", got, want)
+	}
+}
+
 func newPair(
 	t *testing.T,
 	p *thyrse.Protocol,
-	dA *ristretto255.Scalar,
-	qA *ristretto255.Element,
 	dB *ristretto255.Scalar,
 	qB *ristretto255.Element,
+	kB *mlkem.DecapsulationKey768,
 ) (*adratchet.State, *adratchet.State) {
 	t.Helper()
-	alice, initial := adratchet.Initiate(p.Clone(), dA, qB, []byte("initial"))
-	bea, plaintext, err := adratchet.Respond(p.Clone(), dB, qA, initial)
+	alice, initial := adratchet.Initiate(p.Clone(), qB, kB.EncapsulationKey(), []byte("initial"))
+	bea, plaintext, err := adratchet.Respond(p.Clone(), dB, kB, initial)
 	if err != nil {
 		t.Fatalf("Respond() err = %v, want nil", err)
 	}
@@ -93,22 +109,25 @@ func newPair(
 
 func TestState_ReceiveMessage(t *testing.T) {
 	drbg := testdata.New("thyrse async double ratchet receive test")
-	dA, qA := drbg.KeyPair()
 	dB, qB := drbg.KeyPair()
+	kB, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	p := thyrse.New("test")
 	p.Mix("shared key", []byte("secret"))
 
-	t.Run("failed initial message is retryable", func(t *testing.T) {
-		alice, initial := adratchet.Initiate(p.Clone(), dA, qB, []byte("initial"))
+	t.Run("failed initial encapsulation is retryable", func(t *testing.T) {
+		alice, initial := adratchet.Initiate(p.Clone(), qB, kB.EncapsulationKey(), []byte("initial"))
 		tampered := slices.Clone(initial)
-		tampered[len(tampered)-1] ^= 0xff
+		tampered[testKEMCiphertextOffset] ^= 0xff
 
 		root := p.Clone()
-		if _, _, err := adratchet.Respond(root, dB, qA, tampered); err == nil {
+		if _, _, err := adratchet.Respond(root, dB, kB, tampered); err == nil {
 			t.Error("Respond() err = nil, want error")
 		}
-		bea, plaintext, err := adratchet.Respond(root, dB, qA, initial)
+		bea, plaintext, err := adratchet.Respond(root, dB, kB, initial)
 		if err != nil {
 			t.Fatalf("Respond() retry err = %v, want nil", err)
 		}
@@ -127,7 +146,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("out of order", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		// Alice sends 5 messages.
 		msgs := make([][]byte, 5)
@@ -148,8 +167,8 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("DH ratchet", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+	t.Run("hybrid ratchet", func(t *testing.T) {
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		// Alice sends msg 1.
 		msg1 := alice.SendMessage([]byte("msg1"))
@@ -159,7 +178,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 
-		// Bea sends msg 2 (triggers DH ratchet on Alice side when she receives it).
+		// Bea sends msg 2 (triggers a hybrid ratchet on Alice's side when she receives it).
 		msg2 := bea.SendMessage([]byte("msg2"))
 
 		// Alice receives msg 2.
@@ -167,7 +186,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 
-		// Alice sends msg 3 and msg 4. (These will have a new DH key).
+		// Alice sends msg 3 and msg 4. These have new Ristretto255 and ML-KEM keys.
 		msg3 := alice.SendMessage([]byte("msg3"))
 		msg4 := alice.SendMessage([]byte("msg4"))
 
@@ -190,12 +209,12 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("DH updates alternate", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+	t.Run("hybrid updates alternate", func(t *testing.T) {
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		first := alice.SendMessage([]byte("first"))
 		second := alice.SendMessage([]byte("second"))
-		if !bytes.Equal(first[:32], second[:32]) {
+		if !bytes.Equal(first[:testRatchetHeaderSize], second[:testRatchetHeaderSize]) {
 			t.Fatal("initiator changed ratchet key within a sending chain")
 		}
 
@@ -204,10 +223,10 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 		reply := bea.SendMessage([]byte("reply"))
 		reply2 := bea.SendMessage([]byte("reply 2"))
-		if !bytes.Equal(reply[:32], reply2[:32]) {
+		if !bytes.Equal(reply[:testRatchetHeaderSize], reply2[:testRatchetHeaderSize]) {
 			t.Fatal("responder changed ratchet key within a sending chain")
 		}
-		if bytes.Equal(first[:32], reply[:32]) {
+		if bytes.Equal(first[:testRatchetHeaderSize], reply[:testRatchetHeaderSize]) {
 			t.Fatal("responder did not change the ratchet key after receiving")
 		}
 
@@ -215,7 +234,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 			t.Fatal(err)
 		}
 		msg := alice.SendMessage([]byte("next turn"))
-		if bytes.Equal(msg[:32], first[:32]) {
+		if bytes.Equal(msg[:testRatchetHeaderSize], first[:testRatchetHeaderSize]) {
 			t.Fatal("initiator did not change the ratchet key after receiving")
 		}
 		got, err := bea.ReceiveMessage(msg)
@@ -227,8 +246,8 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("failed new DH message is retryable", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+	t.Run("failed new ratchet message is retryable", func(t *testing.T) {
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		msg := bea.SendMessage([]byte("hello"))
 		tampered := slices.Clone(msg)
@@ -256,7 +275,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("failed current chain message is retryable", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		first := alice.SendMessage([]byte("first"))
 		if _, err := bea.ReceiveMessage(first); err != nil {
@@ -279,7 +298,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("failed skipped message is retryable", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		first := alice.SendMessage([]byte("first"))
 		second := alice.SendMessage([]byte("second"))
@@ -302,14 +321,14 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("too short", func(t *testing.T) {
-		alice, _ := adratchet.Initiate(p.Clone(), dA, qB, nil)
+		alice, _ := adratchet.Initiate(p.Clone(), qB, kB.EncapsulationKey(), nil)
 		if _, err := alice.ReceiveMessage([]byte("too short")); err == nil {
 			t.Error("ReceiveMessage() err = nil, want error")
 		}
 	})
 
 	t.Run("already received", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		msg := alice.SendMessage([]byte("hello"))
 		if _, err := bea.ReceiveMessage(msg); err != nil {
@@ -322,7 +341,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("gap too large", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		var msg []byte
 		for range 1002 {
@@ -335,7 +354,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("total skipped messages too large", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		var msg []byte
 		for range 601 {
@@ -359,7 +378,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("invalid public key", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		msg := alice.SendMessage([]byte("hello"))
 		// Ristretto255 points are 32 bytes, and the highest bit must be 0 for canonical encoding.
@@ -371,7 +390,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("identity public key", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		msg := alice.SendMessage([]byte("hello"))
 		copy(msg[:32], ristretto255.NewIdentityElement().Bytes())
@@ -382,7 +401,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 	})
 
 	t.Run("new key gap too large", func(t *testing.T) {
-		alice, bea := newPair(t, p, dA, qA, dB, qB)
+		alice, bea := newPair(t, p, dB, qB, kB)
 
 		// Bea receives only the first message under Alice's first key.
 		first := alice.SendMessage([]byte("first"))
@@ -414,9 +433,12 @@ func TestState_ReceiveMessage(t *testing.T) {
 
 func FuzzReceiveMessage(f *testing.F) {
 	drbg := testdata.New("thyrse adratchet fuzz")
-	dA, _ := drbg.KeyPair()
 	_, qB := drbg.KeyPair()
-	alice, _ := adratchet.Initiate(thyrse.New("fuzz"), dA, qB, nil)
+	kB, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
+	if err != nil {
+		f.Fatal(err)
+	}
+	alice, _ := adratchet.Initiate(thyrse.New("fuzz"), qB, kB.EncapsulationKey(), nil)
 
 	for range 10 {
 		f.Add(drbg.Data(128))
