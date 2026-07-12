@@ -27,11 +27,21 @@ func computeCompositesFast(domain string, k *ristretto255.Scalar, b *ristretto25
 func generateProof(domain string, k *ristretto255.Scalar, a, b *ristretto255.Element, cM, dM []*ristretto255.Element) (c, s *ristretto255.Scalar) {
 	m, z := computeCompositesFast(domain, k, b, cM, dM)
 
+	// Derive the proof nonce from the private key, the proof transcript, and fresh random data rather than using the
+	// random data directly. A repeated or biased RNG output therefore never repeats a nonce across distinct
+	// transcripts, which would otherwise expose the private key.
 	var x [64]byte
 	if _, err := rand.Read(x[:]); err != nil {
 		panic(err)
 	}
-	r, _ := ristretto255.NewScalar().SetUniformBytes(x[:])
+	np := thyrse.New(domain)
+	np.Mix("proof-private", k.Bytes())
+	np.Mix("a", a.Bytes())
+	np.Mix("b", b.Bytes())
+	np.Mix("m", m.Bytes())
+	np.Mix("z", z.Bytes())
+	np.Mix("rand", x[:])
+	r, _ := ristretto255.NewScalar().SetUniformBytes(np.Derive("nonce", nil, 64))
 	t2 := ristretto255.NewIdentityElement().ScalarMult(r, a)
 	t3 := ristretto255.NewIdentityElement().ScalarMult(r, m)
 
