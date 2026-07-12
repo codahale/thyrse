@@ -113,9 +113,6 @@ func (s *Writer) sealAndWrite(p []byte) error {
 		return s.err
 	}
 
-	// Ratchet for forward secrecy.
-	s.p.Ratchet("block")
-
 	return nil
 }
 
@@ -190,8 +187,6 @@ func (o *Reader) Read(p []byte) (n int, err error) {
 		o.eos = len(block) == 0
 		o.blockBuf = block
 
-		// Ratchet for forward secrecy.
-		o.p.Ratchet("block")
 	}
 }
 
