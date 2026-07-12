@@ -68,7 +68,7 @@ func TestInitiateRespondRejectIdentityKeys(t *testing.T) {
 			adratchet.Initiate(thyrse.New("test"), ristretto255.NewIdentityElement(), k.EncapsulationKey(), nil)
 		},
 		"responder local": func() {
-			adratchet.Respond(thyrse.New("test"), ristretto255.NewScalar(), k, nil)
+			_, _, _ = adratchet.Respond(thyrse.New("test"), ristretto255.NewScalar(), k, nil)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

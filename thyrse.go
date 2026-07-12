@@ -390,12 +390,6 @@ func (p *Protocol) ctrXORSmall(block cipher.Block, dst, src []byte) {
 	clear(ks)
 }
 
-// writeInt writes right_encode(v).
-func (p *Protocol) writeInt(v uint64) {
-	var buf [enc.MaxIntSize]byte
-	_, _ = p.h.Write(enc.RightEncode(buf[:0], v))
-}
-
 // writeIntOp writes right_encode(v) || op, an integer field closing the current frame, in a single call to h.Write.
 func (p *Protocol) writeIntOp(v uint64, op byte) {
 	var buf [enc.MaxIntSize + 1]byte
