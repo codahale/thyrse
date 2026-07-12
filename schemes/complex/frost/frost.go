@@ -130,10 +130,15 @@ func KeyGen(domain string, maxSigners, threshold int, rand []byte) (*ristretto25
 }
 
 // Commit generates a nonce pair and its public commitment for a signing round. The rand parameter must contain at
-// least 64 bytes of fresh, uniformly random data. Commit does not validate this requirement: reusing rand repeats both
-// nonces deterministically and can expose the signer's signing share if they are used across multiple signing rounds.
-// The returned Nonce must be used exactly once and then discarded.
+// least 64 bytes of fresh, uniformly random data; Commit panics if it is shorter. Freshness cannot be validated:
+// because the nonces cannot depend on the not-yet-known message, reusing rand repeats both nonces deterministically
+// and exposes the signer's signing share if they are used across signing rounds with different messages. The returned
+// Nonce must be used exactly once and then discarded.
 func (s *Signer) Commit(rand []byte) (Nonce, Commitment) {
+	if len(rand) < 64 {
+		panic("frost: rand must be at least 64 bytes")
+	}
+
 	x := thyrse.New(s.domain)
 
 	_, c := x.Fork("process", []byte("keygen"), []byte("commitment"))

@@ -394,6 +394,22 @@ func TestVerifyInvalid(t *testing.T) {
 	})
 }
 
+func TestCommitInsufficientRandomness(t *testing.T) {
+	drbg := testdata.New("frost commit rand")
+
+	_, signers, _, err := frost.KeyGen(domain, 3, 2, drbg.Data(64))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if recover() == nil {
+			t.Error("Commit() did not panic")
+		}
+	}()
+	signers[0].Commit(drbg.Data(32))
+}
+
 func TestSignErrors(t *testing.T) {
 	drbg := testdata.New("frost sign errors")
 	message := []byte("error test")
