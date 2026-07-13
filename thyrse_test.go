@@ -416,6 +416,27 @@ func TestMask(t *testing.T) {
 		}
 	})
 
+	t.Run("length-independent keystream", func(t *testing.T) {
+		key := []byte("key")
+		shortPlaintext := []byte("common prefix")
+		longPlaintext := append(slices.Clone(shortPlaintext), []byte(" and suffix")...)
+
+		short := New("test.mask")
+		short.Mix("key", key)
+		shortCiphertext := short.Mask("msg", nil, shortPlaintext)
+
+		long := New("test.mask")
+		long.Mix("key", key)
+		longCiphertext := long.Mask("msg", nil, longPlaintext)
+
+		if !bytes.Equal(shortCiphertext, longCiphertext[:len(shortCiphertext)]) {
+			t.Fatal("plaintext length changed the Mask keystream")
+		}
+		if short.Equal(long) != 0 {
+			t.Fatal("completed Mask transcripts do not commit to ciphertext length")
+		}
+	})
+
 	t.Run("then seal", func(t *testing.T) {
 		key := []byte("key-material")
 		pt := []byte("hello")

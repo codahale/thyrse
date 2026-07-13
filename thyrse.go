@@ -188,14 +188,13 @@ func (p *Protocol) Ratchet(label string) {
 }
 
 // Mask encrypts plaintext without authentication. The caller is responsible for authenticating the ciphertext through
-// external mechanisms. The plaintext length is bound into the protocol transcript and the ciphertext is absorbed into
-// it, so the transcript commits collision-resistantly to the ciphertext.
+// external mechanisms. The ciphertext and its length are absorbed after encryption, so the completed transcript
+// commits collision-resistantly to the ciphertext without requiring the plaintext length before encryption begins.
 //
 // Confidentiality requires that the transcript contain secret input keying material with sufficient entropy (see
 // [Protocol.Mix]). Public nonces and associated data do not provide confidentiality.
 func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
-	p.writeLabel(label)
-	p.writeIntOp(uint64(len(plaintext)), opMask)
+	p.writeLabelOp(label, opMask)
 
 	var key [keySize]byte
 	cv := p.finalize(key[:])
@@ -211,8 +210,7 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 // Unmask decrypts ciphertext encrypted with [Protocol.Mask]. Both sides must have identical transcript state at the
 // point of the Mask or Unmask call.
 func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
-	p.writeLabel(label)
-	p.writeIntOp(uint64(len(ciphertext)), opMask)
+	p.writeLabelOp(label, opMask)
 
 	var key [keySize]byte
 	cv := p.finalize(key[:])
