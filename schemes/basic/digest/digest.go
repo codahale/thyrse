@@ -43,19 +43,17 @@ func NewKeyed(domain string, key []byte) hash.Hash {
 
 type digest struct {
 	base *thyrse.Protocol
-	p    *thyrse.Protocol
-	buf  []byte
+	w    *thyrse.MixWriter
 	size int
 }
 
 func (d *digest) Write(p []byte) (n int, err error) {
-	d.buf = append(d.buf, p...)
-	return len(p), nil
+	return d.w.Write(p)
 }
 
 func (d *digest) Sum(b []byte) []byte {
-	p := d.p.Clone()
-	p.Mix("message", d.buf)
+	p, w := d.w.Clone()
+	_ = w.Close()
 	var label string
 	if d.size == KeyedSize {
 		label = "tag"
@@ -66,8 +64,8 @@ func (d *digest) Sum(b []byte) []byte {
 }
 
 func (d *digest) Reset() {
-	d.p = d.base.Clone()
-	d.buf = d.buf[:0]
+	p := d.base.Clone()
+	d.w = p.MixWriter("message")
 }
 
 func (d *digest) Size() int {

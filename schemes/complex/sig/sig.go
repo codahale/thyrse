@@ -27,11 +27,9 @@ func Sign(domain string, d *ristretto255.Scalar, message io.Reader) ([]byte, err
 	// Initialize the protocol and mix in the signer's public key and the message.
 	p := thyrse.New(domain)
 	p.Mix("signer", q.Bytes())
-	msg, err := io.ReadAll(message)
-	if err != nil {
+	if err := mixReader(p, "message", message); err != nil {
 		return nil, err
 	}
-	p.Mix("message", msg)
 
 	// Fork the protocol into prover/verifier roles and mix both the signer's private key and fresh random data into the
 	// prover.
@@ -85,11 +83,9 @@ func Verify(domain string, q *ristretto255.Element, sig []byte, message io.Reade
 	// Initialize the protocol and mix in the signer's public key and the message.
 	p := thyrse.New(domain)
 	p.Mix("signer", q.Bytes())
-	msg, err := io.ReadAll(message)
-	if err != nil {
+	if err := mixReader(p, "message", message); err != nil {
 		return false, err
 	}
-	p.Mix("message", msg)
 
 	// Fork the protocol, keeping only the verifier.
 	_, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))
@@ -112,4 +108,13 @@ func Verify(domain string, q *ristretto255.Element, sig []byte, message io.Reade
 	// If the received and expected commitment points are equal (as compared in their encoded forms), the signature is
 	// valid.
 	return bytes.Equal(sig[:32], expectedR.Bytes()), nil
+}
+
+func mixReader(p *thyrse.Protocol, label string, r io.Reader) error {
+	w := p.MixWriter(label)
+	if _, err := io.Copy(w, r); err != nil {
+		_ = w.Close()
+		return err
+	}
+	return w.Close()
 }

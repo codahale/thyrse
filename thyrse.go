@@ -80,18 +80,19 @@ func (p *Protocol) Mix(label string, data []byte) {
 
 // MixWriter returns a writer that absorbs data into the protocol transcript. Closing the writer completes the Mix
 // operation. The Protocol must not be used for another operation until the writer is closed.
-func (p *Protocol) MixWriter(label string) io.WriteCloser {
+func (p *Protocol) MixWriter(label string) *MixWriter {
 	p.writeLabel(label)
-	return &mixWriter{p: p}
+	return &MixWriter{p: p}
 }
 
-type mixWriter struct {
+// MixWriter incrementally absorbs a Mix operation into a Protocol.
+type MixWriter struct {
 	p      *Protocol
 	n      uint64
 	closed bool
 }
 
-func (w *mixWriter) Write(p []byte) (int, error) {
+func (w *MixWriter) Write(p []byte) (int, error) {
 	if w.closed {
 		return 0, io.ErrClosedPipe
 	}
@@ -101,7 +102,8 @@ func (w *mixWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (w *mixWriter) Close() error {
+// Close completes the Mix operation. It is safe to call Close more than once.
+func (w *MixWriter) Close() error {
 	if w.closed {
 		return nil
 	}
@@ -109,6 +111,19 @@ func (w *mixWriter) Close() error {
 	w.p.writeIntOp(w.n, opMix)
 	return nil
 }
+
+// Clone returns an independent copy of the underlying Protocol and a MixWriter for its in-progress Mix operation.
+// Closing either writer does not affect the other.
+func (w *MixWriter) Clone() (*Protocol, *MixWriter) {
+	p := w.p.Clone()
+	return p, &MixWriter{
+		p:      p,
+		n:      w.n,
+		closed: w.closed,
+	}
+}
+
+var _ io.WriteCloser = (*MixWriter)(nil)
 
 // Fork calls ForkN with the given label and values and returns the two branches.
 func (p *Protocol) Fork(label string, left, right []byte) (*Protocol, *Protocol) {

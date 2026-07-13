@@ -41,7 +41,6 @@ func TestDigest_Sum(t *testing.T) {
 	}
 
 	// Verify idempotency of Sum (it shouldn't reset the state)
-	// Although our implementation reconstructs the state, so it naturally is idempotent w.r.t the buffer.
 	sum2 := h.Sum(nil)
 	if got, want := sum2, sum; !bytes.Equal(got, want) {
 		t.Errorf("Sum() = %x, want %x", got, want)
@@ -52,6 +51,20 @@ func TestDigest_Sum(t *testing.T) {
 	sum3 := h.Sum(nil)
 	if bytes.Equal(sum, sum3) {
 		t.Error("Sum() should change after Write()")
+	}
+}
+
+func TestDigest_WriteChunking(t *testing.T) {
+	oneWrite := digest.New("com.example.test")
+	oneWrite.Write([]byte("Hello, world!"))
+
+	chunked := digest.New("com.example.test")
+	chunked.Write([]byte("Hello, "))
+	chunked.Write(nil)
+	chunked.Write([]byte("world!"))
+
+	if got, want := chunked.Sum(nil), oneWrite.Sum(nil); !bytes.Equal(got, want) {
+		t.Errorf("chunked Sum() = %x, want %x", got, want)
 	}
 }
 

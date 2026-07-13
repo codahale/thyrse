@@ -73,6 +73,36 @@ func TestMixWriter(t *testing.T) {
 			t.Fatal("Close or rejected Write mutated the transcript")
 		}
 	})
+
+	t.Run("clone", func(t *testing.T) {
+		got := New("test")
+		w := got.MixWriter("data")
+		if _, err := w.Write([]byte("one")); err != nil {
+			t.Fatalf("Write() err = %v, want nil", err)
+		}
+
+		clone, cloneWriter := w.Clone()
+		if err := cloneWriter.Close(); err != nil {
+			t.Fatalf("clone Close() err = %v, want nil", err)
+		}
+		wantClone := New("test")
+		wantClone.Mix("data", []byte("one"))
+		if clone.Equal(wantClone) != 1 {
+			t.Fatal("cloned MixWriter transcript differs from Mix")
+		}
+
+		if _, err := w.Write([]byte("two")); err != nil {
+			t.Fatalf("Write() after Clone() err = %v, want nil", err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+		want := New("test")
+		want.Mix("data", []byte("onetwo"))
+		if got.Equal(want) != 1 {
+			t.Fatal("original MixWriter was affected by clone")
+		}
+	})
 }
 
 func TestDerive(t *testing.T) {
