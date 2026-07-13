@@ -28,9 +28,10 @@ func TestSign(t *testing.T) {
 	})
 
 	t.Run("reader failure", func(t *testing.T) {
-		_, err := sig.Sign("sig", d, &testdata.ErrReader{Err: errors.New("broken")})
-		if err == nil {
-			t.Error("Sign() err = nil, want error")
+		wantErr := errors.New("broken")
+		_, err := sig.Sign("sig", d, &testdata.ErrReader{Err: wantErr})
+		if !errors.Is(err, wantErr) {
+			t.Errorf("Sign() err = %v, want %v", err, wantErr)
 		}
 	})
 
@@ -86,9 +87,10 @@ func TestVerify(t *testing.T) {
 	})
 
 	t.Run("reader failure", func(t *testing.T) {
-		_, err := sig.Verify("sig", q, signature, &testdata.ErrReader{Err: errors.New("broken")})
-		if err == nil {
-			t.Error("Verify() err = nil, want error")
+		wantErr := errors.New("broken")
+		_, err := sig.Verify("sig", q, signature, &testdata.ErrReader{Err: wantErr})
+		if !errors.Is(err, wantErr) {
+			t.Errorf("Verify() err = %v, want %v", err, wantErr)
 		}
 	})
 

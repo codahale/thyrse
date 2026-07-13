@@ -113,8 +113,7 @@ func Verify(domain string, q *ristretto255.Element, sig []byte, message io.Reade
 func mixReader(p *thyrse.Protocol, label string, r io.Reader) error {
 	w := p.MixWriter(label)
 	if _, err := io.Copy(w, r); err != nil {
-		_ = w.Close()
-		return err
+		return errors.Join(err, w.Close())
 	}
 	return w.Close()
 }
