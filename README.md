@@ -90,7 +90,8 @@ p.Mix("nonce", nonce)
 ct := p.Seal("message", nil, plaintext) // encrypt + authenticate
 ```
 
-Key operations: `Mix`, `Derive`, `Ratchet`, `Mask`/`Unmask`, `Seal`/`Open`, `Fork`/`ForkN`, `Clone`, `Clear`.
+Key operations: `Mix`, `Derive`, `Ratchet`, `Mask`/`Unmask`, `MaskStream`/`UnmaskStream`, `Seal`/`Open`, `Fork`/`ForkN`,
+`Clone`, `Clear`.
 
 ## License
 

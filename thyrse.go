@@ -223,6 +223,113 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	return ret
 }
 
+// MaskStream begins a streaming Mask operation. The returned stream encrypts and absorbs data incrementally and must
+// be closed to complete the operation. The Protocol must not be used for another operation until the stream is closed.
+func (p *Protocol) MaskStream(label string) *MaskStream {
+	return &MaskStream{state: p.newMaskStream(label)}
+}
+
+// UnmaskStream begins a streaming Unmask operation. The returned stream absorbs and decrypts data incrementally and
+// must be closed to complete the operation. The Protocol must not be used for another operation until the stream is
+// closed.
+func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
+	return &UnmaskStream{state: p.newMaskStream(label)}
+}
+
+// MaskStream incrementally encrypts and absorbs a Mask operation.
+type MaskStream struct {
+	state maskStream
+}
+
+// XORKeyStream encrypts src into dst and absorbs the resulting ciphertext into the protocol transcript. It panics if
+// dst is shorter than src, the buffers overlap inexactly, or the stream has been closed.
+func (s *MaskStream) XORKeyStream(dst, src []byte) {
+	s.state.xorKeyStream(dst, src, false)
+}
+
+// Close completes the Mask operation. It is safe to call Close more than once.
+func (s *MaskStream) Close() error {
+	return s.state.close()
+}
+
+// UnmaskStream incrementally absorbs and decrypts an Unmask operation.
+type UnmaskStream struct {
+	state maskStream
+}
+
+// XORKeyStream absorbs the ciphertext in src and decrypts it into dst. It panics if dst is shorter than src, the
+// buffers overlap inexactly, or the stream has been closed.
+func (s *UnmaskStream) XORKeyStream(dst, src []byte) {
+	s.state.xorKeyStream(dst, src, true)
+}
+
+// Close completes the Unmask operation. It is safe to call Close more than once.
+func (s *UnmaskStream) Close() error {
+	return s.state.close()
+}
+
+type maskStream struct {
+	p      *Protocol
+	stream cipher.Stream
+	n      uint64
+	closed bool
+}
+
+func (p *Protocol) newMaskStream(label string) maskStream {
+	p.writeLabelOp(label, opMask)
+
+	var key [keySize]byte
+	cv := p.finalize(key[:])
+	block, err := aes.NewCipher(key[:])
+	clear(key[:])
+	if err != nil {
+		panic("thyrse: " + err.Error())
+	}
+
+	p.resetChain(opMask, cv[:])
+	return maskStream{
+		p:      p,
+		stream: cipher.NewCTR(block, zeroIV[:]),
+	}
+}
+
+func (s *maskStream) xorKeyStream(dst, src []byte, decrypt bool) {
+	if s.closed {
+		panic("thyrse: XORKeyStream after Close")
+	}
+	if len(dst) < len(src) {
+		panic("thyrse: output smaller than input")
+	}
+
+	if decrypt {
+		_, _ = s.p.h.Write(src)
+		s.stream.XORKeyStream(dst, src)
+	} else {
+		s.stream.XORKeyStream(dst, src)
+		_, _ = s.p.h.Write(dst[:len(src)])
+	}
+	s.n += uint64(len(src))
+}
+
+func (s *maskStream) close() error {
+	if s.closed {
+		return nil
+	}
+
+	s.p.writeIntOp(s.n, opMaskData)
+	s.closed = true
+	s.p = nil
+	s.stream = nil
+	return nil
+}
+
+var (
+	_ cipher.Stream = (*MaskStream)(nil)
+	_ io.Closer     = (*MaskStream)(nil)
+	_ cipher.Stream = (*UnmaskStream)(nil)
+	_ io.Closer     = (*UnmaskStream)(nil)
+)
+
 // Seal encrypts plaintext with authentication. Returns ciphertext with a [TagSize]-byte tag appended. The plaintext
 // length is bound into the protocol transcript. Confidentiality and authenticity require that the transcript contain
 // secret input keying material with sufficient entropy (see [Protocol.Mix]). Public nonces and associated data do not

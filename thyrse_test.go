@@ -2,6 +2,7 @@ package thyrse
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"errors"
 	"fmt"
 	"io"
@@ -461,6 +462,95 @@ func TestMask(t *testing.T) {
 			t.Fatalf("Open: got %q, want %q", pt2, pt)
 		}
 	})
+}
+
+func TestMaskStream(t *testing.T) {
+	key := []byte("key-material")
+	plaintext := bytes.Repeat([]byte("streaming plaintext"), 100)
+
+	t.Run("matches Mask", func(t *testing.T) {
+		wantProtocol := newKeyed("test.mask-stream", key)
+		want := wantProtocol.Mask("message", nil, plaintext)
+
+		gotProtocol := newKeyed("test.mask-stream", key)
+		stream := gotProtocol.MaskStream("message")
+		got := make([]byte, len(plaintext))
+		xorInChunks(stream, got, plaintext)
+		if err := stream.Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+
+		if !bytes.Equal(got, want) {
+			t.Fatalf("ciphertext = %x, want %x", got, want)
+		}
+		if gotProtocol.Equal(wantProtocol) != 1 {
+			t.Fatal("MaskStream transcript differs from Mask")
+		}
+	})
+
+	t.Run("in-place Unmask", func(t *testing.T) {
+		enc := newKeyed("test.mask-stream", key)
+		ciphertext := enc.Mask("message", nil, plaintext)
+
+		wantProtocol := newKeyed("test.mask-stream", key)
+		want := wantProtocol.Unmask("message", nil, ciphertext)
+
+		gotProtocol := newKeyed("test.mask-stream", key)
+		stream := gotProtocol.UnmaskStream("message")
+		got := slices.Clone(ciphertext)
+		xorInChunks(stream, got, got)
+		if err := stream.Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+
+		if !bytes.Equal(got, want) {
+			t.Fatalf("plaintext = %x, want %x", got, want)
+		}
+		if gotProtocol.Equal(wantProtocol) != 1 {
+			t.Fatal("UnmaskStream transcript differs from Unmask")
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		got := newKeyed("test.mask-stream", key)
+		stream := got.MaskStream("message")
+		stream.XORKeyStream(nil, nil)
+		if err := stream.Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+
+		want := newKeyed("test.mask-stream", key)
+		want.Mask("message", nil, nil)
+		if got.Equal(want) != 1 {
+			t.Fatal("empty MaskStream transcript differs from Mask")
+		}
+	})
+
+	t.Run("closed", func(t *testing.T) {
+		stream := New("test.mask-stream").MaskStream("message")
+		if err := stream.Close(); err != nil {
+			t.Fatalf("Close() err = %v, want nil", err)
+		}
+		if err := stream.Close(); err != nil {
+			t.Fatalf("second Close() err = %v, want nil", err)
+		}
+
+		defer func() {
+			if recover() == nil {
+				t.Fatal("XORKeyStream() after Close did not panic")
+			}
+		}()
+		stream.XORKeyStream(nil, nil)
+	})
+}
+
+func xorInChunks(stream cipher.Stream, dst, src []byte) {
+	chunkSizes := [...]int{1, 15, 16, 17, 63, 128, 7}
+	for off, i := 0, 0; off < len(src); i++ {
+		end := min(off+chunkSizes[i%len(chunkSizes)], len(src))
+		stream.XORKeyStream(dst[off:end], src[off:end])
+		off = end
+	}
 }
 
 func TestRatchet(t *testing.T) {
