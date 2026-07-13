@@ -3,95 +3,114 @@
 ![A diagram of a botanical thyrse.](thyrse.png)
 
 > [!WARNING]
-> **This code has not been audited. This design has not been analyzed.** It is experimental and should not be used for
-> production systems or critical security applications. Use at your own risk.
+> Thyrse is experimental. Neither the design nor the implementation has been independently analyzed or audited. Do not
+> use it in production systems or for critical security applications.
 >
-> Security also rests on two external dependencies: [github.com/codahale/kt128](https://github.com/codahale/kt128) for
-> the KT128 hash function and [github.com/gtank/ristretto255](https://github.com/gtank/ristretto255) (lightly
-> maintained) for the group operations used by the `schemes/complex` packages.
+> Thyrse depends on [github.com/codahale/kt128](https://github.com/codahale/kt128) for KT128 and
+> [github.com/gtank/ristretto255](https://github.com/gtank/ristretto255) for the group operations used by
+> `schemes/complex`. The latter is lightly maintained.
 
-Thyrse is a transcript-based cryptographic protocol framework built on the KT128 hash function and AES-128-CTR
-encryption.
-Inspired by [STROBE], [Noise Protocol], and [Xoodyak], it replaces the usual grab-bag of hash functions, MACs, and KDFs
-with a single construction.  Optimized for modern CPUs (AVX-512, NEON/FEAT_SHA3, hardware AES), Thyrse
-delivers 10+ Gb/s on modern processors at a 128-bit security level.
+Thyrse is a Go framework for transcript-based cryptographic protocols. A `Protocol` records labeled operations in a
+KT128 transcript and derives per-operation keys, tags, and pseudorandom output from the accumulated state. Encryption
+uses AES-128-CTR. The construction targets a 128-bit security level.
 
-Confidentiality comes from AES-128-CTR; authenticity comes from KT128 itself, which absorbs the ciphertext into the
-transcript, so every output commits collision-resistantly to it. The security of every scheme therefore reduces to the
-properties of the underlying hash function (indifferentiability from a random oracle, pseudorandom function security,
-and collision resistance) and the AES-128-CTR encryption, all at a
-128-bit security level ($2^{128}$ against generic attacks). A single analysis covers the framework's transcript layer.
+On supported modern processors, core operations reach 10+ Gb/sec using SIMD implementations of KT128 and hardware AES.
+Actual throughput depends on the operation, message size, processor, and Go version.
+
+Thyrse is influenced by [STROBE], the [Noise Protocol], and [Xoodyak].
 
 [STROBE]: https://strobe.sourceforge.io
-
 [Noise Protocol]: http://www.noiseprotocol.org
-
 [Xoodyak]: https://keccak.team/xoodyak.html
+
+## Security model
+
+Confidentiality and authenticity require secret input with sufficient entropy to be mixed into the transcript. Public
+nonces, labels, and associated data provide domain separation and context, but do not key the protocol.
+
+`Mask` and `MaskStream` provide unauthenticated AES-128-CTR encryption. They absorb the ciphertext into the transcript,
+but callers must provide authentication separately. `Seal` encrypts the plaintext, absorbs the ciphertext, and derives
+an authentication tag from the resulting keyed transcript. `Open` verifies that tag before returning plaintext.
+
+Operations are encoded with their labels, types, and variable-length field boundaries. Finalizing operations replace
+the accumulated transcript with a derived chain value, so later operations depend on the complete prior transcript.
+
+On platforms without hardware AES support, Go uses a software AES implementation that is not constant-time. `Mask`,
+`Unmask`, `MaskStream`, `UnmaskStream`, `Seal`, and `Open` can therefore leak timing information about their
+per-operation keys on those platforms.
 
 ## Schemes
 
-Thyrse ships with a library of ready-to-use cryptographic schemes built on the core `Protocol` type.
+The repository includes schemes built on the core `Protocol` type.
 
 ### Basic
 
-| Scheme       | What it does                                                               |
-|--------------|----------------------------------------------------------------------------|
-| **digest**   | Hash (32 bytes) and MAC (16 bytes) via `New` / `NewKeyed`                  |
-| **aead**     | Authenticated encryption implementing `crypto/cipher.AEAD`                 |
-| **siv**      | Nonce-misuse-resistant AEAD (Synthetic Initialization Vector)              |
-| **aestream** | Streaming authenticated encryption with `io.Reader` / `io.Writer` wrappers |
-| **oae2**     | Online authenticated encryption with block-based streaming                 |
-| **mhf**      | Balloon memory-hard password hashing                                       |
+| Package    | Function                                                        |
+|------------|-----------------------------------------------------------------|
+| `digest`   | 32-byte hashes and 16-byte keyed digests                        |
+| `aead`     | Authenticated encryption implementing `crypto/cipher.AEAD`      |
+| `siv`      | Nonce-misuse-resistant authenticated encryption                 |
+| `aestream` | Streaming authenticated encryption over `io.Reader`/`io.Writer` |
+| `oae2`     | Block-based online authenticated encryption                     |
+| `mhf`      | Balloon-based memory-hard password hashing                      |
 
 ### Complex
 
-| Scheme        | What it does                                                                 |
-|---------------|------------------------------------------------------------------------------|
-| **sig**       | EdDSA-style Schnorr signatures over Ristretto255                             |
-| **hpke**      | Hybrid public-key encryption (static-ephemeral DH)                           |
-| **signcrypt** | Signcryption — confidentiality, authenticity, and signer privacy in one shot |
-| **oprf**      | Oblivious pseudorandom function with blinding (RFC 9497-style)               |
-| **vrf**       | Verifiable random function with proofs                                       |
-| **pake**      | Password-authenticated key exchange (CPace-style)                            |
-| **frost**     | FROST threshold signatures (Flexible Round-Optimized Schnorr Threshold)      |
-| **adratchet** | Hybrid Ristretto255/ML-KEM-768 asynchronous double ratchet                   |
+| Package     | Function                                                      |
+|-------------|---------------------------------------------------------------|
+| `sig`       | Schnorr signatures over Ristretto255                          |
+| `hpke`      | Static-ephemeral public-key encryption                        |
+| `signcrypt` | Signcryption with sender privacy                              |
+| `oprf`      | Blinded pseudorandom function evaluation with proofs          |
+| `vrf`       | Verifiable pseudorandom function                              |
+| `pake`      | Password-authenticated key exchange                           |
+| `frost`     | Threshold Schnorr signatures                                  |
+| `adratchet` | Asynchronous double ratchet using Ristretto255 and ML-KEM-768 |
 
-All schemes are in `schemes/basic/` and `schemes/complex/` respectively.
+The packages are under `schemes/basic` and `schemes/complex`.
 
 ## Performance
 
-Under the hood, Thyrse hashes inputs and derives keys with [KT128], a tree-parallel, permutation-based construction that
-uses SIMD instructions for lower latency on short inputs and higher throughput on long ones.
+[KT128] is tree-parallel and uses architecture-specific SIMD where available. Encryption uses AES-128-CTR from Go's
+standard library, including AES-NI on x86-64 and ARMv8 AES instructions on ARM64. Large one-shot encryption operations
+interleave encryption and transcript absorption over bounded windows. The streaming APIs process data incrementally
+and do not retain the complete input.
 
-| Platform | SIMD             | Parallel lanes        |
-|----------|------------------|-----------------------|
-| x86-64   | AVX-512 / AVX2   | 8-wide                |
-| ARM64    | NEON / FEAT_SHA3 | up to 4-wide          |
-| Any      | Pure Go          | all widths (portable) |
+| Platform | KT128 implementation | AES implementation           |
+|----------|----------------------|------------------------------|
+| x86-64   | AVX-512 or AVX2      | AES-NI when available        |
+| ARM64    | NEON or FEAT_SHA3    | ARMv8 AES when available     |
+| Other    | Pure Go              | Go standard library fallback |
 
-Encryption uses AES-128-CTR from the Go standard library — AES-NI on x86-64, ARMv8 AES on ARM64. Authenticity does not
-need a separate primitive: the ciphertext is absorbed into the KT128 transcript and the tag is squeezed from it.
-Encryption and absorption are interleaved over a bounded window, so a large message's working set stays cache-resident
-between the two passes. On platforms without hardware AES the standard library falls back to a portable software
-implementation that, like Go's `crypto/aes`, is not constant-time.
-
-Build with `-tags purego` to disable assembly on any platform.
+Build with `-tags purego` to disable assembly implementations.
 
 [KT128]: https://github.com/codahale/kt128
 
-## The Protocol API
+## Protocol API
 
-At the core is a `Protocol` — a transcript that accumulates data and derives cryptographic outputs.
+A protocol begins with a domain-separation label:
 
 ```go
 p := thyrse.New("myapp.v1")
 p.Mix("user-id", userID)
 p.Mix("nonce", nonce)
-ct := p.Seal("message", nil, plaintext) // encrypt + authenticate
+sealed := p.Seal("message", nil, plaintext)
 ```
 
-Key operations: `Mix`, `Derive`, `Ratchet`, `Mask`/`Unmask`, `MaskStream`/`UnmaskStream`, `Seal`/`Open`, `Fork`/`ForkN`,
-`Clone`, `Clear`.
+| Operation                     | Function                                                         |
+|-------------------------------|------------------------------------------------------------------|
+| `Mix`, `MixWriter`            | Absorb public or secret input                                    |
+| `Derive`                      | Produce deterministic pseudorandom output                        |
+| `Ratchet`                     | Advance the state without producing output                       |
+| `Mask`, `Unmask`              | Encrypt or decrypt without authentication                        |
+| `MaskStream`, `UnmaskStream`  | Stream unauthenticated encryption or decryption                  |
+| `Seal`, `Open`                | Authenticated encryption or decryption                           |
+| `Fork`, `ForkN`               | Split the state into independent branches                        |
+| `Clone`                       | Copy the current state without one-way separation                |
+| `Clear`                       | Erase and invalidate the protocol state                          |
+
+Writers and streams must be closed to complete their transcript operation. The associated `Protocol` must not be used
+for another operation until they are closed.
 
 ## License
 
