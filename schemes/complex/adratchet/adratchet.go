@@ -1,11 +1,12 @@
-// Package adratchet implements an asynchronous double ratchet mechanism with Thyrse, Ristretto255, and ML-KEM-768.
+// Package adratchet implements an asynchronous double ratchet mechanism with Thyrse, X25519, and ML-KEM-768.
 //
-// Hybrid ratchet steps alternate between the initiator and responder. A single root protocol absorbs each Ristretto255
+// Hybrid ratchet steps alternate between the initiator and responder. A single root protocol absorbs each X25519
 // DH and ML-KEM shared secret and forks independent chain protocols; each chain in turn forks an independent protocol
 // for every message.
 package adratchet
 
 import (
+	"crypto/ecdh"
 	"crypto/mlkem"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,13 +14,12 @@ import (
 	"maps"
 
 	"github.com/codahale/thyrse"
-	"github.com/gtank/ristretto255"
 )
 
 // State maintains the state of an asynchronous double ratchet.
 type State struct {
-	localPriv               *ristretto255.Scalar
-	remotePub               *ristretto255.Element
+	localPriv               *ecdh.PrivateKey
+	remotePub               *ecdh.PublicKey
 	localKEM                *mlkem.DecapsulationKey768
 	remoteKEM               *mlkem.EncapsulationKey768
 	localRatchet            [ratchetHeaderSize]byte
@@ -39,17 +39,14 @@ const (
 )
 
 // Initiate creates a double ratchet state for the initiating party and sends the first message using the responder's
-// Ristretto255 and ML-KEM public keys. The given root protocol is consumed by the returned state.
-// Panics if the Ristretto255 public key is the identity element.
+// X25519 and ML-KEM public keys. The given root protocol is consumed by the returned state.
+// Panics if the X25519 public key produces an invalid shared secret.
 func Initiate(
 	p *thyrse.Protocol,
-	remote *ristretto255.Element,
+	remote *ecdh.PublicKey,
 	remoteKEM *mlkem.EncapsulationKey768,
 	plaintext []byte,
 ) (*State, []byte) {
-	if remote.Equal(ristretto255.NewIdentityElement()) == 1 {
-		panic("adratchet: identity public key")
-	}
 	s := &State{
 		remotePub: remote,
 		remoteKEM: remoteKEM,
@@ -60,21 +57,16 @@ func Initiate(
 	return s, s.SendMessage(plaintext)
 }
 
-// Respond receives the initiator's first message using the responder's Ristretto255 and ML-KEM private keys and
+// Respond receives the initiator's first message using the responder's X25519 and ML-KEM private keys and
 // creates a double ratchet state. The given root protocol is consumed by the returned state on success and remains
 // unchanged on failure.
 // Returns an error if the message is invalid.
-// Panics if the Ristretto255 private key produces the identity element.
 func Respond(
 	p *thyrse.Protocol,
-	local *ristretto255.Scalar,
+	local *ecdh.PrivateKey,
 	localKEM *mlkem.DecapsulationKey768,
 	ciphertext []byte,
 ) (*State, []byte, error) {
-	localPub := ristretto255.NewIdentityElement().ScalarBaseMult(local)
-	if localPub.Equal(ristretto255.NewIdentityElement()) == 1 {
-		panic("adratchet: identity public key")
-	}
 	s := &State{
 		localPriv: local,
 		localKEM:  localKEM,
@@ -111,16 +103,14 @@ func (s *State) SendMessage(plaintext []byte) []byte {
 // rotateSend generates the local half of the next hybrid ratchet step and
 // derives its sending chain from the root protocol.
 func (s *State) rotateSend() {
-	var localPriv *ristretto255.Scalar
-	var localPub *ristretto255.Element
-	for {
-		var b [64]byte
-		_, _ = rand.Read(b[:])
-		localPriv, _ = ristretto255.NewScalar().SetUniformBytes(b[:])
-		localPub = ristretto255.NewIdentityElement().ScalarBaseMult(localPriv)
-		if localPub.Equal(ristretto255.NewIdentityElement()) == 0 {
-			break
-		}
+	localPriv, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	localPub := localPriv.PublicKey()
+	dh, err := localPriv.ECDH(s.remotePub)
+	if err != nil {
+		panic("adratchet: invalid X25519 public key")
 	}
 
 	localKEM, err := mlkem.GenerateKey768()
@@ -131,8 +121,8 @@ func (s *State) rotateSend() {
 
 	var ratchet [ratchetHeaderSize]byte
 	encodeRatchetHeader(ratchet[:], localPub, localKEM.EncapsulationKey(), kemCiphertext)
-	dh := ristretto255.NewIdentityElement().ScalarMult(localPriv, s.remotePub)
-	chain := s.deriveChain(ratchet[:], dh.Bytes(), kemShared)
+	chain := s.deriveChain(ratchet[:], dh, kemShared)
+	clear(dh)
 	clear(kemShared)
 	if s.send != nil {
 		s.send.Clear()
@@ -162,8 +152,8 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 	header := ciphertext[:headerSize]
 	msg := ciphertext[headerSize:]
 
-	pub, err := ristretto255.NewIdentityElement().SetCanonicalBytes(header[dhPublicKeyOffset:kemPublicKeyOffset])
-	if err != nil || pub.Equal(ristretto255.NewIdentityElement()) == 1 {
+	pub, err := ecdh.X25519().NewPublicKey(header[dhPublicKeyOffset:kemPublicKeyOffset])
+	if err != nil {
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 	kemPub, err := mlkem.NewEncapsulationKey768(header[kemPublicKeyOffset:kemCiphertextOffset])
@@ -187,7 +177,7 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 
 func (s *State) receiveMessage(
 	header, msg []byte,
-	pub *ristretto255.Element,
+	pub *ecdh.PublicKey,
 	kemPub *mlkem.EncapsulationKey768,
 	kemCiphertext []byte,
 	ratchetID [sha256.Size]byte,
@@ -219,8 +209,13 @@ func (s *State) receiveMessage(
 		if err != nil {
 			return nil, thyrse.ErrInvalidCiphertext
 		}
-		dh := ristretto255.NewIdentityElement().ScalarMult(s.localPriv, pub)
-		chain := s.deriveChain(header[:ratchetHeaderSize], dh.Bytes(), kemShared)
+		dh, err := s.localPriv.ECDH(pub)
+		if err != nil {
+			clear(kemShared)
+			return nil, thyrse.ErrInvalidCiphertext
+		}
+		chain := s.deriveChain(header[:ratchetHeaderSize], dh, kemShared)
+		clear(dh)
 		clear(kemShared)
 		if s.recv != nil {
 			s.recv.Clear()
@@ -357,7 +352,7 @@ func newSK(ratchet [sha256.Size]byte, n uint32) skippedKey {
 
 func encodeRatchetHeader(
 	dst []byte,
-	dh *ristretto255.Element,
+	dh *ecdh.PublicKey,
 	kem *mlkem.EncapsulationKey768,
 	kemCiphertext []byte,
 ) {

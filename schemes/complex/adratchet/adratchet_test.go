@@ -2,6 +2,7 @@ package adratchet_test
 
 import (
 	"bytes"
+	"crypto/ecdh"
 	"crypto/mlkem"
 	"fmt"
 	"slices"
@@ -10,7 +11,6 @@ import (
 	"github.com/codahale/thyrse"
 	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/adratchet"
-	"github.com/gtank/ristretto255"
 )
 
 const (
@@ -21,8 +21,8 @@ const (
 func Example() {
 	drbg := testdata.New("thyrse async double ratchet")
 
-	// Bea publishes initial Ristretto255 and ML-KEM keys.
-	dB, qB := drbg.KeyPair()
+	// Bea publishes initial X25519 and ML-KEM keys.
+	dB, qB := x25519KeyPair(drbg)
 	kB, _ := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
 
 	// Alice and Bea have a shared protocol state, probably thanks to an ECDH handshake.
@@ -56,30 +56,23 @@ func Example() {
 	// message from B: "no, this is _my_ first message"
 }
 
-func TestInitiateRespondRejectIdentityKeys(t *testing.T) {
-	drbg := testdata.New("thyrse async double ratchet identity")
+func TestInitiateRejectsLowOrderKey(t *testing.T) {
+	drbg := testdata.New("thyrse async double ratchet low order")
 	k, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	for name, f := range map[string]func(){
-		"initiator remote": func() {
-			adratchet.Initiate(thyrse.New("test"), ristretto255.NewIdentityElement(), k.EncapsulationKey(), nil)
-		},
-		"responder local": func() {
-			_, _, _ = adratchet.Respond(thyrse.New("test"), ristretto255.NewScalar(), k, nil)
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("constructor did not panic")
-				}
-			}()
-			f()
-		})
+	lowOrder, err := ecdh.X25519().NewPublicKey(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Initiate did not panic")
+		}
+	}()
+	adratchet.Initiate(thyrse.New("test"), lowOrder, k.EncapsulationKey(), nil)
 }
 
 func TestOverhead(t *testing.T) {
@@ -91,8 +84,8 @@ func TestOverhead(t *testing.T) {
 func newPair(
 	t *testing.T,
 	p *thyrse.Protocol,
-	dB *ristretto255.Scalar,
-	qB *ristretto255.Element,
+	dB *ecdh.PrivateKey,
+	qB *ecdh.PublicKey,
 	kB *mlkem.DecapsulationKey768,
 ) (*adratchet.State, *adratchet.State) {
 	t.Helper()
@@ -109,7 +102,7 @@ func newPair(
 
 func TestState_ReceiveMessage(t *testing.T) {
 	drbg := testdata.New("thyrse async double ratchet receive test")
-	dB, qB := drbg.KeyPair()
+	dB, qB := x25519KeyPair(drbg)
 	kB, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +179,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 			t.Fatalf("ReceiveMessage() err = %v, want nil", err)
 		}
 
-		// Alice sends msg 3 and msg 4. These have new Ristretto255 and ML-KEM keys.
+		// Alice sends msg 3 and msg 4. These have new X25519 and ML-KEM keys.
 		msg3 := alice.SendMessage([]byte("msg3"))
 		msg4 := alice.SendMessage([]byte("msg4"))
 
@@ -377,23 +370,11 @@ func TestState_ReceiveMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid public key", func(t *testing.T) {
+	t.Run("low-order public key", func(t *testing.T) {
 		alice, bea := newPair(t, p, dB, qB, kB)
 
 		msg := alice.SendMessage([]byte("hello"))
-		// Ristretto255 points are 32 bytes, and the highest bit must be 0 for canonical encoding.
-		msg[31] |= 0x80
-
-		if _, err := bea.ReceiveMessage(msg); err == nil {
-			t.Error("ReceiveMessage() err = nil, want error")
-		}
-	})
-
-	t.Run("identity public key", func(t *testing.T) {
-		alice, bea := newPair(t, p, dB, qB, kB)
-
-		msg := alice.SendMessage([]byte("hello"))
-		copy(msg[:32], ristretto255.NewIdentityElement().Bytes())
+		clear(msg[:32])
 
 		if _, err := bea.ReceiveMessage(msg); err == nil {
 			t.Error("ReceiveMessage() err = nil, want error")
@@ -433,7 +414,7 @@ func TestState_ReceiveMessage(t *testing.T) {
 
 func FuzzReceiveMessage(f *testing.F) {
 	drbg := testdata.New("thyrse adratchet fuzz")
-	_, qB := drbg.KeyPair()
+	_, qB := x25519KeyPair(drbg)
 	kB, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
 	if err != nil {
 		f.Fatal(err)
@@ -450,4 +431,12 @@ func FuzzReceiveMessage(f *testing.F) {
 			t.Errorf("ReceiveMessage(ciphertext=%x) = plaintext=%x, want = err", ciphertext, v)
 		}
 	})
+}
+
+func x25519KeyPair(drbg *testdata.DRBG) (*ecdh.PrivateKey, *ecdh.PublicKey) {
+	private, err := ecdh.X25519().NewPrivateKey(drbg.Data(32))
+	if err != nil {
+		panic(err)
+	}
+	return private, private.PublicKey()
 }

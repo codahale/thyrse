@@ -65,7 +65,7 @@ The repository includes schemes built on the core `Protocol` type.
 | `vrf`       | Verifiable pseudorandom function                              |
 | `pake`      | Password-authenticated key exchange                           |
 | `frost`     | Threshold Schnorr signatures                                  |
-| `adratchet` | Asynchronous double ratchet using Ristretto255 and ML-KEM-768 |
+| `adratchet` | Asynchronous double ratchet using X25519 and ML-KEM-768      |
 
 The packages are under `schemes/basic` and `schemes/complex`.
 
