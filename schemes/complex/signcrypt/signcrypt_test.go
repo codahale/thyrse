@@ -2,22 +2,23 @@ package signcrypt_test
 
 import (
 	"bytes"
+	"crypto/mlkem"
 	"errors"
 	"slices"
 	"testing"
 
+	"filippo.io/mldsa"
 	"github.com/codahale/thyrse"
 	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/signcrypt"
-	"github.com/gtank/ristretto255"
 )
 
 func TestOpen(t *testing.T) {
-	dS, qS, dR, qR, dX, qX := setup()
-	ciphertext := signcrypt.Seal("signcrypt", dS, qR, []byte("this is a message"))
+	keys := setup(t)
+	ciphertext := signcrypt.Seal("signcrypt", keys.sender, keys.receiver.EncapsulationKey(), []byte("this is a message"))
 
 	t.Run("valid", func(t *testing.T) {
-		plaintext, err := signcrypt.Open("signcrypt", dR, qS, ciphertext)
+		plaintext, err := signcrypt.Open("signcrypt", keys.receiver, keys.sender.PublicKey(), ciphertext)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -27,157 +28,185 @@ func TestOpen(t *testing.T) {
 		}
 	})
 
-	t.Run("wrong receiver", func(t *testing.T) {
-		plaintext, err := signcrypt.Open("signcrypt", dX, qS, ciphertext)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
+	t.Run("empty message", func(t *testing.T) {
+		ciphertext := signcrypt.Seal("signcrypt", keys.sender, keys.receiver.EncapsulationKey(), nil)
+		if got, want := len(ciphertext), signcrypt.Overhead; got != want {
+			t.Fatalf("len(Seal(nil)) = %d, want %d", got, want)
+		}
+
+		plaintext, err := signcrypt.Open("signcrypt", keys.receiver, keys.sender.PublicKey(), ciphertext)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(plaintext) != 0 {
+			t.Errorf("Open() = %x, want empty plaintext", plaintext)
 		}
 	})
 
-	t.Run("wrong sender", func(t *testing.T) {
-		plaintext, err := signcrypt.Open("signcrypt", dR, qX, ciphertext)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("identity sender", func(t *testing.T) {
-		plaintext, err := signcrypt.Open("signcrypt", dR, ristretto255.NewIdentityElement(), ciphertext)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("identity receiver", func(t *testing.T) {
-		plaintext, err := signcrypt.Open("signcrypt", ristretto255.NewScalar(), qS, ciphertext)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("identity ephemeral", func(t *testing.T) {
-		identityQE := slices.Clone(ciphertext)
-		copy(identityQE[:32], ristretto255.NewIdentityElement().Bytes())
-		plaintext, err := signcrypt.Open("signcrypt", dR, qS, identityQE)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("invalid ephemeral public key", func(t *testing.T) {
-		badQE := slices.Clone(ciphertext)
-		badQE[0] ^= 1
-		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badQE)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("invalid message", func(t *testing.T) {
-		badM := slices.Clone(ciphertext)
-		badM[33] ^= 1
-		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badM)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("invalid I", func(t *testing.T) {
-		badI := slices.Clone(ciphertext)
-		badI[len(badI)-61] ^= 1
-		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badI)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("invalid s", func(t *testing.T) {
-		badS := slices.Clone(ciphertext)
-		badS[len(badS)-30] ^= 1
-		plaintext, err := signcrypt.Open("signcrypt", dR, qS, badS)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-}
-
-func TestSealRejectsIdentityKeys(t *testing.T) {
-	dS, _, _, qR, _, _ := setup()
-	for name, f := range map[string]func(){
-		"receiver": func() { signcrypt.Seal("signcrypt", dS, ristretto255.NewIdentityElement(), nil) },
-		"sender":   func() { signcrypt.Seal("signcrypt", ristretto255.NewScalar(), qR, nil) },
-	} {
+	tests := map[string]struct {
+		domain     string
+		receiver   *mlkem.DecapsulationKey768
+		sender     *mldsa.PublicKey
+		ciphertext []byte
+	}{
+		"wrong domain": {
+			domain:     "other",
+			receiver:   keys.receiver,
+			sender:     keys.sender.PublicKey(),
+			ciphertext: ciphertext,
+		},
+		"wrong receiver": {
+			domain:     "signcrypt",
+			receiver:   keys.otherReceiver,
+			sender:     keys.sender.PublicKey(),
+			ciphertext: ciphertext,
+		},
+		"wrong sender": {
+			domain:     "signcrypt",
+			receiver:   keys.receiver,
+			sender:     keys.otherSender.PublicKey(),
+			ciphertext: ciphertext,
+		},
+		"modified ML-KEM ciphertext": {
+			domain:     "signcrypt",
+			receiver:   keys.receiver,
+			sender:     keys.sender.PublicKey(),
+			ciphertext: modified(ciphertext, 0),
+		},
+		"modified message": {
+			domain:     "signcrypt",
+			receiver:   keys.receiver,
+			sender:     keys.sender.PublicKey(),
+			ciphertext: modified(ciphertext, mlkem.CiphertextSize768+1),
+		},
+		"modified signature": {
+			domain:     "signcrypt",
+			receiver:   keys.receiver,
+			sender:     keys.sender.PublicKey(),
+			ciphertext: modified(ciphertext, len(ciphertext)-1),
+		},
+		"truncated": {
+			domain:     "signcrypt",
+			receiver:   keys.receiver,
+			sender:     keys.sender.PublicKey(),
+			ciphertext: ciphertext[:signcrypt.Overhead-1],
+		},
+	}
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("Seal() did not panic")
-				}
-			}()
-			f()
+			plaintext, err := signcrypt.Open(test.domain, test.receiver, test.sender, test.ciphertext)
+			if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
+				t.Errorf("Open() = (%x, %v), want ErrInvalidCiphertext", plaintext, err)
+			}
 		})
 	}
 }
 
+func TestRejectsWrongMLDSAParameters(t *testing.T) {
+	keys := setup(t)
+	drbg := testdata.New("thyrse signcrypt wrong parameters")
+	wrongSender, err := mldsa.NewPrivateKey(mldsa.MLDSA65(), drbg.Data(mldsa.PrivateKeySize))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Seal", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("Seal() did not panic")
+			}
+		}()
+		signcrypt.Seal("signcrypt", wrongSender, keys.receiver.EncapsulationKey(), nil)
+	})
+
+	t.Run("Open", func(t *testing.T) {
+		ciphertext := signcrypt.Seal("signcrypt", keys.sender, keys.receiver.EncapsulationKey(), nil)
+		plaintext, err := signcrypt.Open("signcrypt", keys.receiver, wrongSender.PublicKey(), ciphertext)
+		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
+			t.Errorf("Open() = (%x, %v), want ErrInvalidCiphertext", plaintext, err)
+		}
+	})
+}
+
 func BenchmarkSeal(b *testing.B) {
-	dS, _, _, qR, _, _ := setup()
+	keys := setup(b)
 	message := []byte("this is a message")
 	b.ReportAllocs()
 	for b.Loop() {
-		signcrypt.Seal("signcrypt", dS, qR, message)
+		signcrypt.Seal("signcrypt", keys.sender, keys.receiver.EncapsulationKey(), message)
 	}
 }
 
 func BenchmarkOpen(b *testing.B) {
-	dS, qS, dR, qR, _, _ := setup()
-	ciphertext := signcrypt.Seal("signcrypt", dS, qR, []byte("this is a message"))
+	keys := setup(b)
+	ciphertext := signcrypt.Seal("signcrypt", keys.sender, keys.receiver.EncapsulationKey(), []byte("this is a message"))
 
 	b.ReportAllocs()
 	for b.Loop() {
-		_, _ = signcrypt.Open("signcrypt", dR, qS, ciphertext)
+		_, _ = signcrypt.Open("signcrypt", keys.receiver, keys.sender.PublicKey(), ciphertext)
 	}
 }
 
 func FuzzOpen(f *testing.F) {
 	drbg := testdata.New("thyrse signcrypt fuzz")
 	for range 10 {
-		f.Add(drbg.Data(128))
+		f.Add(drbg.Data(256))
 	}
 
-	dS, qS, dR, qR, _, _ := setup()
-	ciphertext := signcrypt.Seal("signcrypt", dS, qR, []byte("this is a message"))
+	keys := setup(f)
+	ciphertext := signcrypt.Seal("signcrypt", keys.sender, keys.receiver.EncapsulationKey(), []byte("this is a message"))
+	f.Add(modified(ciphertext, 0))
+	f.Add(modified(ciphertext, mlkem.CiphertextSize768+1))
+	f.Add(modified(ciphertext, len(ciphertext)-1))
 
-	badQE := slices.Clone(ciphertext)
-	badQE[0] ^= 1
-
-	badCT := slices.Clone(ciphertext)
-	badCT[33] ^= 1
-
-	badI := slices.Clone(ciphertext)
-	badI[len(badI)-60] ^= 1
-
-	badS := slices.Clone(ciphertext)
-	badS[len(badS)-20] ^= 1
-
-	f.Add(badQE)
-	f.Add(badCT)
-	f.Add(badI)
-	f.Add(badS)
 	f.Fuzz(func(t *testing.T, modifiedCiphertext []byte) {
 		if bytes.Equal(ciphertext, modifiedCiphertext) {
 			t.Skip()
 		}
 
-		plaintext, err := signcrypt.Open("signcrypt", dR, qS, modifiedCiphertext)
+		plaintext, err := signcrypt.Open("signcrypt", keys.receiver, keys.sender.PublicKey(), modifiedCiphertext)
 		if !errors.Is(err, thyrse.ErrInvalidCiphertext) {
-			t.Errorf("Open(ciphertext=%x) = (plaintext=%x, err=%v), want = ErrInvalidCiphertext", modifiedCiphertext, plaintext, err)
+			t.Errorf("Open(ciphertext=%x) = (plaintext=%x, err=%v), want ErrInvalidCiphertext", modifiedCiphertext, plaintext, err)
 		}
 	})
 }
 
-func setup() (*ristretto255.Scalar, *ristretto255.Element, *ristretto255.Scalar, *ristretto255.Element, *ristretto255.Scalar, *ristretto255.Element) {
-	drbg := testdata.New("thyrse hpke")
-	dR, qR := drbg.KeyPair()
-	dS, qS := drbg.KeyPair()
-	dX, qX := drbg.KeyPair()
-	return dS, qS, dR, qR, dX, qX
+type testKeys struct {
+	sender        *mldsa.PrivateKey
+	receiver      *mlkem.DecapsulationKey768
+	otherSender   *mldsa.PrivateKey
+	otherReceiver *mlkem.DecapsulationKey768
+}
+
+func setup(t testing.TB) testKeys {
+	t.Helper()
+	drbg := testdata.New("thyrse signcrypt")
+
+	newSender := func() *mldsa.PrivateKey {
+		key, err := mldsa.NewPrivateKey(mldsa.MLDSA44(), drbg.Data(mldsa.PrivateKeySize))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return key
+	}
+	newReceiver := func() *mlkem.DecapsulationKey768 {
+		key, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return key
+	}
+
+	return testKeys{
+		sender:        newSender(),
+		receiver:      newReceiver(),
+		otherSender:   newSender(),
+		otherReceiver: newReceiver(),
+	}
+}
+
+func modified(ciphertext []byte, offset int) []byte {
+	modified := slices.Clone(ciphertext)
+	modified[offset] ^= 1
+	return modified
 }

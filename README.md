@@ -60,7 +60,7 @@ The repository includes schemes built on the core `Protocol` type.
 |-------------|---------------------------------------------------------------|
 | `sig`       | Schnorr signatures over Ristretto255                          |
 | `hpke`      | Anonymous X25519/ML-KEM hybrid public-key encryption          |
-| `signcrypt` | Signcryption with sender privacy                              |
+| `signcrypt` | ML-KEM-768/ML-DSA-44 signcryption with sender privacy        |
 | `oprf`      | Blinded pseudorandom function evaluation with proofs          |
 | `vrf`       | Verifiable pseudorandom function                              |
 | `pake`      | Password-authenticated key exchange                           |
