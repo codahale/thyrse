@@ -2,119 +2,117 @@ package hpke_test
 
 import (
 	"bytes"
+	"crypto/ecdh"
+	"crypto/mlkem"
 	"slices"
 	"testing"
 
+	"github.com/codahale/thyrse"
 	"github.com/codahale/thyrse/internal/testdata"
 	"github.com/codahale/thyrse/schemes/complex/hpke"
-	"github.com/gtank/ristretto255"
 )
+
+const testHeaderSize = 32 + mlkem.CiphertextSize768
 
 func TestOpen(t *testing.T) {
 	drbg := testdata.New("thyrse hpke")
-	dR, qR := drbg.KeyPair()
-	dS, qS := drbg.KeyPair()
-	dX, qX := drbg.KeyPair()
+	dR, qR := x25519KeyPair(drbg)
+	kR := mlkemKey(t, drbg)
+	dX, _ := x25519KeyPair(drbg)
+	kX := mlkemKey(t, drbg)
 
 	message := []byte("this is a message")
-	ciphertext := hpke.Seal("hpke", qR, dS, message)
+	ciphertext := hpke.Seal("hpke", qR, kR.EncapsulationKey(), message)
 
 	t.Run("round trip", func(t *testing.T) {
-		plaintext, err := hpke.Open("hpke", dR, qS, ciphertext)
+		plaintext, err := hpke.Open("hpke", dR, kR, ciphertext)
 		if err != nil {
 			t.Fatal(err)
 		}
-
 		if got, want := plaintext, message; !bytes.Equal(got, want) {
 			t.Errorf("Open() = %x, want = %x", got, want)
 		}
 	})
 
-	t.Run("wrong receiver", func(t *testing.T) {
-		plaintext, err := hpke.Open("hpke", dX, qS, ciphertext)
+	t.Run("wrong X25519 receiver", func(t *testing.T) {
+		plaintext, err := hpke.Open("hpke", dX, kR, ciphertext)
 		if err == nil {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
-	t.Run("wrong sender", func(t *testing.T) {
-		plaintext, err := hpke.Open("hpke", dR, qX, ciphertext)
+	t.Run("wrong ML-KEM receiver", func(t *testing.T) {
+		plaintext, err := hpke.Open("hpke", dR, kX, ciphertext)
 		if err == nil {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
-	t.Run("identity sender", func(t *testing.T) {
-		plaintext, err := hpke.Open("hpke", dR, ristretto255.NewIdentityElement(), ciphertext)
+	t.Run("low-order ephemeral", func(t *testing.T) {
+		modified := slices.Clone(ciphertext)
+		clear(modified[:32])
+		plaintext, err := hpke.Open("hpke", dR, kR, modified)
 		if err == nil {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
-	t.Run("identity receiver", func(t *testing.T) {
-		plaintext, err := hpke.Open("hpke", ristretto255.NewScalar(), qS, ciphertext)
+	t.Run("modified ephemeral", func(t *testing.T) {
+		modified := slices.Clone(ciphertext)
+		modified[2] ^= 1
+		plaintext, err := hpke.Open("hpke", dR, kR, modified)
 		if err == nil {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
-	t.Run("identity ephemeral", func(t *testing.T) {
-		identityQE := slices.Clone(ciphertext)
-		copy(identityQE[:32], ristretto255.NewIdentityElement().Bytes())
-		plaintext, err := hpke.Open("hpke", dR, qS, identityQE)
+	t.Run("modified ML-KEM ciphertext", func(t *testing.T) {
+		modified := slices.Clone(ciphertext)
+		modified[32] ^= 1
+		plaintext, err := hpke.Open("hpke", dR, kR, modified)
 		if err == nil {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
-	t.Run("bad qE", func(t *testing.T) {
-		badQE := slices.Clone(ciphertext)
-		badQE[2] ^= 1
-
-		plaintext, err := hpke.Open("hpke", dR, qS, badQE)
+	t.Run("modified ciphertext", func(t *testing.T) {
+		modified := slices.Clone(ciphertext)
+		modified[testHeaderSize+2] ^= 1
+		plaintext, err := hpke.Open("hpke", dR, kR, modified)
 		if err == nil {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 
-	t.Run("bad ciphertext", func(t *testing.T) {
-		badCT := slices.Clone(ciphertext)
-		badCT[34] ^= 1
-
-		plaintext, err := hpke.Open("hpke", dR, qS, badCT)
-		if err == nil {
-			t.Errorf("Open() = %x, want error", plaintext)
-		}
-	})
-
-	t.Run("bad tag", func(t *testing.T) {
-		badTag := slices.Clone(ciphertext)
-		badTag[len(badTag)-2] ^= 1
-
-		plaintext, err := hpke.Open("hpke", dR, qS, badTag)
+	t.Run("modified tag", func(t *testing.T) {
+		modified := slices.Clone(ciphertext)
+		modified[len(modified)-2] ^= 1
+		plaintext, err := hpke.Open("hpke", dR, kR, modified)
 		if err == nil {
 			t.Errorf("Open() = %x, want error", plaintext)
 		}
 	})
 }
 
-func TestSealRejectsIdentityKeys(t *testing.T) {
-	drbg := testdata.New("thyrse hpke identity")
-	_, qR := drbg.KeyPair()
-	dS, _ := drbg.KeyPair()
+func TestSealRejectsLowOrderReceiver(t *testing.T) {
+	drbg := testdata.New("thyrse hpke low order")
+	kR := mlkemKey(t, drbg)
+	lowOrder, err := ecdh.X25519().NewPublicKey(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	for name, f := range map[string]func(){
-		"receiver": func() { hpke.Seal("hpke", ristretto255.NewIdentityElement(), dS, nil) },
-		"sender":   func() { hpke.Seal("hpke", qR, ristretto255.NewScalar(), nil) },
-	} {
-		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("Seal() did not panic")
-				}
-			}()
-			f()
-		})
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Seal() did not panic")
+		}
+	}()
+	hpke.Seal("hpke", lowOrder, kR.EncapsulationKey(), nil)
+}
+
+func TestOverhead(t *testing.T) {
+	if got, want := hpke.Overhead, testHeaderSize+thyrse.TagSize; got != want {
+		t.Errorf("Overhead = %d, want = %d", got, want)
 	}
 }
 
@@ -124,31 +122,54 @@ func FuzzOpen(f *testing.F) {
 		f.Add(drbg.Data(128))
 	}
 
-	dR, qR := drbg.KeyPair()
-	dS, qS := drbg.KeyPair()
+	dR, qR := x25519KeyPair(drbg)
+	kR, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
+	if err != nil {
+		f.Fatal(err)
+	}
+	ciphertext := hpke.Seal("hpke", qR, kR.EncapsulationKey(), []byte("this is a message"))
 
-	ciphertext := hpke.Seal("hpke", qR, dS, []byte("this is a message"))
+	modifiedEphemeral := slices.Clone(ciphertext)
+	modifiedEphemeral[2] ^= 1
+	f.Add(modifiedEphemeral)
 
-	badQE := slices.Clone(ciphertext)
-	badQE[2] ^= 1
-	f.Add(badQE)
+	modifiedKEM := slices.Clone(ciphertext)
+	modifiedKEM[32] ^= 1
+	f.Add(modifiedKEM)
 
-	badCT := slices.Clone(ciphertext)
-	badCT[34] ^= 1
-	f.Add(badCT)
+	modifiedCiphertext := slices.Clone(ciphertext)
+	modifiedCiphertext[testHeaderSize+2] ^= 1
+	f.Add(modifiedCiphertext)
 
-	badTag := slices.Clone(ciphertext)
-	badTag[len(badTag)-2] ^= 1
-	f.Add(badTag)
+	modifiedTag := slices.Clone(ciphertext)
+	modifiedTag[len(modifiedTag)-2] ^= 1
+	f.Add(modifiedTag)
 
 	f.Fuzz(func(t *testing.T, ct []byte) {
 		if bytes.Equal(ct, ciphertext) {
 			t.Skip()
 		}
 
-		plaintext, err := hpke.Open("hpke", dR, qS, ct)
+		plaintext, err := hpke.Open("hpke", dR, kR, ct)
 		if err == nil {
 			t.Errorf("Open(ciphertext=%x) = plaintext=%x, want = err", ct, plaintext)
 		}
 	})
+}
+
+func x25519KeyPair(drbg *testdata.DRBG) (*ecdh.PrivateKey, *ecdh.PublicKey) {
+	private, err := ecdh.X25519().NewPrivateKey(drbg.Data(32))
+	if err != nil {
+		panic(err)
+	}
+	return private, private.PublicKey()
+}
+
+func mlkemKey(t *testing.T, drbg *testdata.DRBG) *mlkem.DecapsulationKey768 {
+	t.Helper()
+	key, err := mlkem.NewDecapsulationKey768(drbg.Data(mlkem.SeedSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
 }

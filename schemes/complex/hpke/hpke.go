@@ -1,85 +1,120 @@
-// Package hpke implements a hybrid public key encryption (HPKE) scheme.
+// Package hpke implements anonymous hybrid public key encryption using X25519 and ML-KEM-768.
 //
-// Messages are encrypted using a static-ephemeral Diffie-Hellman shared secret over Ristretto255 as the key. An
-// authentication tag is appended to the end of the ciphertext, ensuring that the ciphertext can only be modified by
-// someone in possession of either private key.
-//
-// In the signcryption model (which is suitable for analyzing confidentiality and authenticity in the public key model),
-// this scheme is outsider-secure for both confidentiality and authenticity. No attacker only in possession of public
-// keys can read plaintexts or forge ciphertexts. It is also insider-secure for confidentiality: an attacker who has
-// the sender's private key but not the receiver's private key cannot read plaintexts. It is not, however,
-// insider-secure for authenticity. An attacker in possession of the receiver's private key can forge messages from any
-// sender whose public key they possess (aka Key Compromise Impersonation).
+// Seal generates a fresh X25519 key and ML-KEM encapsulation for each message. The resulting shared secrets are
+// combined in a Thyrse transcript and used to encrypt and authenticate the plaintext. The scheme authenticates the
+// ciphertext, not its sender: anyone with the receiver's public keys can create a valid ciphertext.
 package hpke
 
 import (
+	"crypto/ecdh"
+	"crypto/mlkem"
 	"crypto/rand"
 
 	"github.com/codahale/thyrse"
-	"github.com/gtank/ristretto255"
 )
 
-// Overhead is the size, in bytes, of the additional data added to a message by Seal.
-const Overhead = 32 + thyrse.TagSize
+const (
+	x25519PublicKeySize = 32
+	headerSize          = x25519PublicKeySize + mlkem.CiphertextSize768
 
-// Seal encrypts the given plaintext for the owner of the given public key, using the given sender's private key.
+	// Overhead is the size, in bytes, of the additional data added to a message by Seal.
+	Overhead = headerSize + thyrse.TagSize
+)
+
+// Seal encrypts plaintext for the owners of the receiver's X25519 and ML-KEM public keys.
 //
-// Panics if a supplied or derived public key is the identity element.
-func Seal(domain string, qR *ristretto255.Element, dS *ristretto255.Scalar, plaintext []byte) []byte {
-	if qR.Equal(ristretto255.NewIdentityElement()) == 1 {
-		panic("hpke: receiver public key is identity")
+// Panics if the X25519 public key produces an invalid shared secret.
+func Seal(
+	domain string,
+	receiver *ecdh.PublicKey,
+	receiverKEM *mlkem.EncapsulationKey768,
+	plaintext []byte,
+) []byte {
+	ephemeral, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
 	}
-	qS := ristretto255.NewIdentityElement().ScalarBaseMult(dS)
-	if qS.Equal(ristretto255.NewIdentityElement()) == 1 {
-		panic("hpke: sender public key is identity")
+	ephemeralPublic := ephemeral.PublicKey()
+
+	x25519Shared, err := ephemeral.ECDH(receiver)
+	if err != nil {
+		panic("hpke: invalid X25519 receiver public key")
 	}
+	mlkemShared, mlkemCiphertext := receiverKEM.Encapsulate()
 
-	// Generate an ephemeral key.
-	var random [64]byte
-	_, _ = rand.Read(random[:])
-	dE, _ := ristretto255.NewScalar().SetUniformBytes(random[:])
-	clear(random[:])
-	qE := ristretto255.NewIdentityElement().ScalarBaseMult(dE)
-	if qE.Equal(ristretto255.NewIdentityElement()) == 1 {
-		panic("hpke: ephemeral public key is identity")
-	}
+	header := make([]byte, headerSize)
+	copy(header[:x25519PublicKeySize], ephemeralPublic.Bytes())
+	copy(header[x25519PublicKeySize:], mlkemCiphertext)
 
-	// Calculate the ephemeral and static shared secrets.
-	ssE := ristretto255.NewIdentityElement().ScalarMult(dE, qR)
-	ssS := ristretto255.NewIdentityElement().ScalarMult(dS, qR)
-
-	p := thyrse.New(domain)
-	p.Mix("sender", qS.Bytes())
-	p.Mix("receiver", qR.Bytes())
-	p.Mix("ephemeral", qE.Bytes())
-	p.Mix("ephemeral ecdh", ssE.Bytes())
-	p.Mix("static ecdh", ssS.Bytes())
-	return p.Seal("message", qE.Bytes(), plaintext)
+	p := newProtocol(
+		domain,
+		receiver,
+		receiverKEM,
+		ephemeralPublic,
+		mlkemCiphertext,
+		x25519Shared,
+		mlkemShared,
+	)
+	clear(x25519Shared)
+	clear(mlkemShared)
+	return p.Seal("message", header, plaintext)
 }
 
-// Open decrypts the ciphertext produced by Seal.
-func Open(domain string, dR *ristretto255.Scalar, qS *ristretto255.Element, ciphertext []byte) ([]byte, error) {
+// Open decrypts a ciphertext produced by Seal using the receiver's X25519 and ML-KEM private keys.
+func Open(
+	domain string,
+	receiver *ecdh.PrivateKey,
+	receiverKEM *mlkem.DecapsulationKey768,
+	ciphertext []byte,
+) ([]byte, error) {
 	if len(ciphertext) < Overhead {
 		return nil, thyrse.ErrInvalidCiphertext
 	}
-	qR := ristretto255.NewIdentityElement().ScalarBaseMult(dR)
-	identity := ristretto255.NewIdentityElement()
-	if qR.Equal(identity) == 1 || qS.Equal(identity) == 1 {
+
+	header := ciphertext[:headerSize]
+	ephemeralPublic, err := ecdh.X25519().NewPublicKey(header[:x25519PublicKeySize])
+	if err != nil {
+		return nil, thyrse.ErrInvalidCiphertext
+	}
+	x25519Shared, err := receiver.ECDH(ephemeralPublic)
+	if err != nil {
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 
-	qE, _ := ristretto255.NewIdentityElement().SetCanonicalBytes(ciphertext[:32])
-	if qE == nil || qE.Equal(identity) == 1 {
+	mlkemCiphertext := header[x25519PublicKeySize:]
+	mlkemShared, err := receiverKEM.Decapsulate(mlkemCiphertext)
+	if err != nil {
+		clear(x25519Shared)
 		return nil, thyrse.ErrInvalidCiphertext
 	}
-	ssE := ristretto255.NewIdentityElement().ScalarMult(dR, qE)
-	ssS := ristretto255.NewIdentityElement().ScalarMult(dR, qS)
 
+	p := newProtocol(
+		domain,
+		receiver.PublicKey(),
+		receiverKEM.EncapsulationKey(),
+		ephemeralPublic,
+		mlkemCiphertext,
+		x25519Shared,
+		mlkemShared,
+	)
+	clear(x25519Shared)
+	clear(mlkemShared)
+	return p.Open("message", nil, ciphertext[headerSize:])
+}
+
+func newProtocol(
+	domain string,
+	receiver *ecdh.PublicKey,
+	receiverKEM *mlkem.EncapsulationKey768,
+	ephemeral *ecdh.PublicKey,
+	mlkemCiphertext, x25519Shared, mlkemShared []byte,
+) *thyrse.Protocol {
 	p := thyrse.New(domain)
-	p.Mix("sender", qS.Bytes())
-	p.Mix("receiver", qR.Bytes())
-	p.Mix("ephemeral", qE.Bytes())
-	p.Mix("ephemeral ecdh", ssE.Bytes())
-	p.Mix("static ecdh", ssS.Bytes())
-	return p.Open("message", nil, ciphertext[32:])
+	p.Mix("receiver x25519", receiver.Bytes())
+	p.Mix("receiver ml-kem", receiverKEM.Bytes())
+	p.Mix("ephemeral x25519", ephemeral.Bytes())
+	p.Mix("ml-kem ciphertext", mlkemCiphertext)
+	p.Mix("x25519 shared secret", x25519Shared)
+	p.Mix("ml-kem shared secret", mlkemShared)
+	return p
 }
