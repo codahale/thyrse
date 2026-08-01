@@ -55,13 +55,17 @@ func TestDigest_Sum(t *testing.T) {
 }
 
 func TestDigest_WriteChunking(t *testing.T) {
+	input := bytes.Repeat([]byte("Hello, world!"), 10_000)
 	oneWrite := digest.New("com.example.test")
-	oneWrite.Write([]byte("Hello, world!"))
+	oneWrite.Write(input)
 
 	chunked := digest.New("com.example.test")
-	chunked.Write([]byte("Hello, "))
+	for off := 0; off < len(input); {
+		end := min(off+17, len(input))
+		chunked.Write(input[off:end])
+		off = end
+	}
 	chunked.Write(nil)
-	chunked.Write([]byte("world!"))
 
 	if got, want := chunked.Sum(nil), oneWrite.Sum(nil); !bytes.Equal(got, want) {
 		t.Errorf("chunked Sum() = %x, want %x", got, want)

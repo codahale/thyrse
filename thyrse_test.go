@@ -466,7 +466,7 @@ func TestMask(t *testing.T) {
 
 func TestMaskStream(t *testing.T) {
 	key := []byte("key-material")
-	plaintext := bytes.Repeat([]byte("streaming plaintext"), 100)
+	plaintext := bytes.Repeat([]byte("streaming plaintext"), 10_000)
 
 	t.Run("matches Mask", func(t *testing.T) {
 		wantProtocol := newKeyed("test.mask-stream", key)
@@ -476,6 +476,9 @@ func TestMaskStream(t *testing.T) {
 		stream := gotProtocol.MaskStream("message")
 		got := make([]byte, len(plaintext))
 		xorInChunks(stream, got, plaintext)
+		if stream.state.hash.Buffered() == 0 {
+			t.Fatal("streaming ciphertext was not buffered")
+		}
 		if err := stream.Close(); err != nil {
 			t.Fatalf("Close() err = %v, want nil", err)
 		}

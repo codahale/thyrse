@@ -7,6 +7,7 @@
 package thyrse
 
 import (
+	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/subtle"
@@ -65,8 +66,8 @@ func (p *Protocol) Equal(other *Protocol) int {
 	equal := subtle.ConstantTimeCompare(leftOutput[:], rightOutput[:])
 	clear(leftOutput[:])
 	clear(rightOutput[:])
-	left.Clear()
-	right.Clear()
+	left.Reset()
+	right.Reset()
 
 	return equal
 }
@@ -93,6 +94,9 @@ func (p *Protocol) Mix(label string, data []byte) {
 
 // MixWriter returns a writer that absorbs data into the protocol transcript. Closing the writer completes the Mix
 // operation. The Protocol must not be used for another operation until the writer is closed.
+//
+// For bulk throughput with many small writes, wrap the returned writer in a bufio.Writer of at least
+// 8 * kt128.ChunkSize bytes and flush it before closing the MixWriter.
 func (p *Protocol) MixWriter(label string) *MixWriter {
 	p.writeLabel(label)
 	return &MixWriter{p: p}
@@ -284,6 +288,7 @@ func (s *UnmaskStream) Close() error {
 type maskStream struct {
 	p      *Protocol
 	stream cipher.Stream
+	hash   *bufio.Writer
 	n      uint64
 	closed bool
 }
@@ -303,6 +308,7 @@ func (p *Protocol) newMaskStream(label string) maskStream {
 	return maskStream{
 		p:      p,
 		stream: cipher.NewCTR(block, zeroIV[:]),
+		hash:   bufio.NewWriterSize(p.h, streamHashBufferSize),
 	}
 }
 
@@ -315,11 +321,11 @@ func (s *maskStream) xorKeyStream(dst, src []byte, decrypt bool) {
 	}
 
 	if decrypt {
-		_, _ = s.p.h.Write(src)
+		_, _ = s.hash.Write(src)
 		s.stream.XORKeyStream(dst, src)
 	} else {
 		s.stream.XORKeyStream(dst, src)
-		_, _ = s.p.h.Write(dst[:len(src)])
+		_, _ = s.hash.Write(dst[:len(src)])
 	}
 	s.n += uint64(len(src))
 }
@@ -329,10 +335,21 @@ func (s *maskStream) close() error {
 		return nil
 	}
 
+	err := s.hash.Flush()
+	kt128.ClearWriter(s.hash)
+	if err != nil {
+		s.closed = true
+		s.p = nil
+		s.stream = nil
+		s.hash = nil
+		return err
+	}
+
 	s.p.writeIntOp(s.n, opMaskData)
 	s.closed = true
 	s.p = nil
 	s.stream = nil
+	s.hash = nil
 	return nil
 }
 
@@ -419,7 +436,7 @@ func (p *Protocol) Clone() *Protocol {
 // Clear overwrites the protocol state with zeros and invalidates the instance. After Clear, the instance must not be
 // used.
 func (p *Protocol) Clear() {
-	p.h.Clear()
+	p.h.Reset()
 	p.h = nil
 	clear(p.ctr[:])
 }
@@ -576,7 +593,7 @@ func (p *Protocol) writeIntOp(v uint64, op byte) {
 //	originOp [chainValue: 32B]  0x20 0x01  0x01 0x01  opChain
 //	                           ╰─RE(32)─╯ ╰─RE(1)──╯
 func (p *Protocol) resetChain(originOp byte, chainValue []byte) {
-	p.h.Clear()
+	p.h.Reset()
 
 	var buf [38]byte
 	buf[0] = originOp
@@ -595,7 +612,7 @@ func (p *Protocol) resetChain(originOp byte, chainValue []byte) {
 // and calculated tags, causing authentication failures to produce a distinct
 // subsequent state while successful operations remain synchronized.
 func (p *Protocol) resetSealChain(chainValue, wireTag, calculatedTag []byte) {
-	p.h.Clear()
+	p.h.Reset()
 
 	// The maximum frame is 106 bytes: a one-byte origin, three 32-byte
 	// values, four two-byte right encodings, and the chain operation byte.
@@ -662,3 +679,7 @@ const ctrWindowCap = 1024 * 1024
 // it, cipher.NewCTR's bulk keystream generation overtakes the per-block loop. The crossover measured ~128 bytes (8 AES
 // blocks); the value is a multiple of the AES block size.
 const ctrSmallMax = 128
+
+// streamHashBufferSize batches small streaming writes into enough KT128 chunks to saturate the widest parallel leaf
+// implementation.
+const streamHashBufferSize = 8 * kt128.ChunkSize
