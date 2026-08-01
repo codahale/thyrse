@@ -55,7 +55,20 @@ func New(label string) *Protocol {
 
 // Equal compares the two Protocol instances in constant time, returning 1 if they are equal, 0 if not.
 func (p *Protocol) Equal(other *Protocol) int {
-	return p.h.Equal(other.h)
+	left := p.h.Clone()
+	right := other.h.Clone()
+
+	var leftOutput, rightOutput [32]byte
+	_, _ = left.Read(leftOutput[:])
+	_, _ = right.Read(rightOutput[:])
+
+	equal := subtle.ConstantTimeCompare(leftOutput[:], rightOutput[:])
+	clear(leftOutput[:])
+	clear(rightOutput[:])
+	left.Clear()
+	right.Clear()
+
+	return equal
 }
 
 // String returns a state-independent representation of the protocol suitable
