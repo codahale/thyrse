@@ -7,7 +7,6 @@
 package thyrse
 
 import (
-	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/subtle"
@@ -242,6 +241,10 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 
 // MaskStream begins a streaming Mask operation. The returned stream encrypts and absorbs data incrementally and must
 // be closed to complete the operation. The Protocol must not be used for another operation until the stream is closed.
+//
+// For bulk throughput with many small plaintext inputs, batch them into larger slices before calling
+// [MaskStream.XORKeyStream]. When adapting the stream with [cipher.StreamWriter], wrap the StreamWriter in a
+// bufio.Writer of at least 8 * kt128.ChunkSize bytes and flush it before closing the MaskStream.
 func (p *Protocol) MaskStream(label string) *MaskStream {
 	return &MaskStream{state: p.newMaskStream(label)}
 }
@@ -249,6 +252,10 @@ func (p *Protocol) MaskStream(label string) *MaskStream {
 // UnmaskStream begins a streaming Unmask operation. The returned stream absorbs and decrypts data incrementally and
 // must be closed to complete the operation. The Protocol must not be used for another operation until the stream is
 // closed.
+//
+// For bulk throughput with many small ciphertext inputs, batch them into larger slices before calling
+// [UnmaskStream.XORKeyStream]. When adapting the stream with [cipher.StreamReader], wrap the StreamReader in a
+// bufio.Reader of at least 8 * kt128.ChunkSize bytes.
 func (p *Protocol) UnmaskStream(label string) *UnmaskStream {
 	return &UnmaskStream{state: p.newMaskStream(label)}
 }
@@ -288,7 +295,6 @@ func (s *UnmaskStream) Close() error {
 type maskStream struct {
 	p      *Protocol
 	stream cipher.Stream
-	hash   *bufio.Writer
 	n      uint64
 	closed bool
 }
@@ -308,7 +314,6 @@ func (p *Protocol) newMaskStream(label string) maskStream {
 	return maskStream{
 		p:      p,
 		stream: cipher.NewCTR(block, zeroIV[:]),
-		hash:   bufio.NewWriterSize(p.h, streamHashBufferSize),
 	}
 }
 
@@ -321,11 +326,11 @@ func (s *maskStream) xorKeyStream(dst, src []byte, decrypt bool) {
 	}
 
 	if decrypt {
-		_, _ = s.hash.Write(src)
+		_, _ = s.p.h.Write(src)
 		s.stream.XORKeyStream(dst, src)
 	} else {
 		s.stream.XORKeyStream(dst, src)
-		_, _ = s.hash.Write(dst[:len(src)])
+		_, _ = s.p.h.Write(dst[:len(src)])
 	}
 	s.n += uint64(len(src))
 }
@@ -335,21 +340,10 @@ func (s *maskStream) close() error {
 		return nil
 	}
 
-	err := s.hash.Flush()
-	kt128.ClearWriter(s.hash)
-	if err != nil {
-		s.closed = true
-		s.p = nil
-		s.stream = nil
-		s.hash = nil
-		return err
-	}
-
 	s.p.writeIntOp(s.n, opMaskData)
 	s.closed = true
 	s.p = nil
 	s.stream = nil
-	s.hash = nil
 	return nil
 }
 
@@ -679,7 +673,3 @@ const ctrWindowCap = 1024 * 1024
 // it, cipher.NewCTR's bulk keystream generation overtakes the per-block loop. The crossover measured ~128 bytes (8 AES
 // blocks); the value is a multiple of the AES block size.
 const ctrSmallMax = 128
-
-// streamHashBufferSize batches small streaming writes into enough KT128 chunks to saturate the widest parallel leaf
-// implementation.
-const streamHashBufferSize = 8 * kt128.ChunkSize

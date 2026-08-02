@@ -476,9 +476,6 @@ func TestMaskStream(t *testing.T) {
 		stream := gotProtocol.MaskStream("message")
 		got := make([]byte, len(plaintext))
 		xorInChunks(stream, got, plaintext)
-		if stream.state.hash.Buffered() == 0 {
-			t.Fatal("streaming ciphertext was not buffered")
-		}
 		if err := stream.Close(); err != nil {
 			t.Fatalf("Close() err = %v, want nil", err)
 		}
