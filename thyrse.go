@@ -55,18 +55,12 @@ func New(label string) *Protocol {
 
 // Equal compares the two Protocol instances in constant time, returning 1 if they are equal, 0 if not.
 func (p *Protocol) Equal(other *Protocol) int {
-	left := p.h.Clone()
-	right := other.h.Clone()
+	leftOutput := p.h.Sum(nil)
+	rightOutput := other.h.Sum(nil)
 
-	var leftOutput, rightOutput [32]byte
-	_, _ = left.Read(leftOutput[:])
-	_, _ = right.Read(rightOutput[:])
-
-	equal := subtle.ConstantTimeCompare(leftOutput[:], rightOutput[:])
-	clear(leftOutput[:])
-	clear(rightOutput[:])
-	left.Reset()
-	right.Reset()
+	equal := subtle.ConstantTimeCompare(leftOutput, rightOutput)
+	clear(leftOutput)
+	clear(rightOutput)
 
 	return equal
 }
@@ -424,7 +418,8 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 // Clone returns a related copy of the protocol state. The original and clone evolve independently, but Clone does not
 // provide the one-way compromise separation of [Protocol.ForkN].
 func (p *Protocol) Clone() *Protocol {
-	return &Protocol{h: p.h.Clone()}
+	h, _ := p.h.Clone()
+	return &Protocol{h: h.(*kt128.Hasher)}
 }
 
 // finalize derives one KT128 output bundle for the current transcript. The
