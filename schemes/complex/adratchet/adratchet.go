@@ -121,8 +121,6 @@ func (s *State) rotateSend() {
 	var ratchet [ratchetHeaderSize]byte
 	encodeRatchetHeader(ratchet[:], localPub, localKEM.EncapsulationKey(), kemCiphertext)
 	chain := s.deriveChain(ratchet[:], dh, kemShared)
-	clear(dh)
-	clear(kemShared)
 	s.localPriv = localPriv
 	s.localKEM = localKEM
 	s.localRatchet = ratchet
@@ -205,12 +203,9 @@ func (s *State) receiveMessage(
 		}
 		dh, err := s.localPriv.ECDH(pub)
 		if err != nil {
-			clear(kemShared)
 			return nil, thyrse.ErrInvalidCiphertext
 		}
 		chain := s.deriveChain(header[:ratchetHeaderSize], dh, kemShared)
-		clear(dh)
-		clear(kemShared)
 		s.recv = chain
 
 		// Update the remote public key and reset the receiving counter.

@@ -93,7 +93,6 @@ func (a *aead) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, erro
 	auth.Mix("message", plaintext)
 	expectedTag := auth.Derive("tag", nil, thyrse.TagSize)
 	if subtle.ConstantTimeCompare(expectedTag, receivedTag) == 0 {
-		clear(plaintext)
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 

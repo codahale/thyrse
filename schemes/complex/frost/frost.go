@@ -97,7 +97,6 @@ func KeyGen(domain string, maxSigners, threshold int) (*ristretto255.Element, []
 	p := thyrse.New(domain)
 	keygen, _ := p.Fork("process", []byte("keygen"), []byte("commitment"))
 	keygen.Mix("seed", seed[:])
-	clear(seed[:])
 
 	coeffs := make([]*ristretto255.Scalar, threshold)
 	for i := range threshold {
@@ -144,7 +143,6 @@ func (s *Signer) Commit() (Nonce, Commitment) {
 	_, c := x.Fork("process", []byte("keygen"), []byte("commitment"))
 	c.Mix("signing-share", s.signingShare.Bytes())
 	c.Mix("rand", random[:])
-	clear(random[:])
 
 	hiding, _ := ristretto255.NewScalar().SetUniformBytes(c.Derive("hiding-nonce", nil, 64))
 	binding, _ := ristretto255.NewScalar().SetUniformBytes(c.Derive("binding-nonce", nil, 64))

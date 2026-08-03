@@ -63,7 +63,6 @@ func exchange(domain string, initiatorID, responderID, sessionID, password []byt
 	var random [64]byte
 	_, _ = rand.Read(random[:])
 	a, _ := ristretto255.NewScalar().SetUniformBytes(random[:])
-	clear(random[:])
 
 	// Calculate the exchange point and encode it.
 	exchangePoint := ristretto255.NewIdentityElement().ScalarMult(a, gP)

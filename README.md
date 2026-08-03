@@ -107,7 +107,6 @@ sealed := p.Seal("message", nil, plaintext)
 | `Seal`, `Open`                | Authenticated encryption or decryption                           |
 | `Fork`, `ForkN`               | Split the state into independent branches                        |
 | `Clone`                       | Copy the current state without one-way separation                |
-| `Clear`                       | Erase and invalidate the protocol state                          |
 
 Writers and streams must be closed to complete their transcript operation. The associated `Protocol` must not be used
 for another operation until they are closed.

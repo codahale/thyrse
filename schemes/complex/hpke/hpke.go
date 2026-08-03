@@ -55,8 +55,6 @@ func Seal(
 		x25519Shared,
 		mlkemShared,
 	)
-	clear(x25519Shared)
-	clear(mlkemShared)
 	return p.Seal("message", header, plaintext)
 }
 
@@ -84,7 +82,6 @@ func Open(
 	mlkemCiphertext := header[x25519PublicKeySize:]
 	mlkemShared, err := receiverKEM.Decapsulate(mlkemCiphertext)
 	if err != nil {
-		clear(x25519Shared)
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 
@@ -97,8 +94,6 @@ func Open(
 		x25519Shared,
 		mlkemShared,
 	)
-	clear(x25519Shared)
-	clear(mlkemShared)
 	return p.Open("message", nil, ciphertext[headerSize:])
 }
 

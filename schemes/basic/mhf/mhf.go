@@ -66,7 +66,6 @@ func Hash(
 	mixUint64(base, "block size", uint64(blockSize))
 
 	buf := make([]byte, spaceCost*blockSize)
-	defer clear(buf)
 
 	block := func(i int) []byte {
 		start := i * blockSize
@@ -95,8 +94,6 @@ func Hash(
 	// memory access pattern.
 	indexBlock := make([]byte, blockSize)
 	addressBlock := make([]byte, blockSize)
-	defer clear(indexBlock)
-	defer clear(addressBlock)
 
 	for t := range timeCost {
 		for m := range spaceCost {
@@ -104,7 +101,6 @@ func Hash(
 			hash(block(m), prev, block(m))
 
 			for i := range delta {
-				clear(indexBlock)
 				binary.LittleEndian.PutUint64(indexBlock[0:8], uint64(t))
 				binary.LittleEndian.PutUint64(indexBlock[8:16], uint64(m))
 				binary.LittleEndian.PutUint64(indexBlock[16:24], uint64(i))

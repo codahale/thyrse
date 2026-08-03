@@ -38,7 +38,6 @@ func Sign(domain string, d *ristretto255.Scalar, message io.Reader) ([]byte, err
 	prover, verifier := p.Fork("role", []byte("prover"), []byte("verifier"))
 	prover.Mix("signer-private", d.Bytes())
 	prover.Mix("hedged-rand", random[:])
-	clear(random[:])
 
 	// Use the prover to derive a commitment scalar and commitment point which is guaranteed to be unique for the
 	// combination of signer and message. This eliminates the risk of private key recovery via nonce reuse, and the

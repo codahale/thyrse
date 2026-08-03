@@ -52,7 +52,6 @@ func Prove(domain string, d *ristretto255.Scalar, m []byte, n int) (prf, proof [
 	_, _ = rand.Read(random[:])
 	prover.Mix("prover-private", d.Bytes())
 	prover.Mix("rand", random[:])
-	clear(random[:])
 	k, _ := ristretto255.NewScalar().SetUniformBytes(prover.Derive("commitment", nil, 64))
 
 	// Calculate the commitment points.

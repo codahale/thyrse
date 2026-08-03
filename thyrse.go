@@ -59,8 +59,6 @@ func (p *Protocol) Equal(other *Protocol) int {
 	rightOutput := other.h.Sum(nil)
 
 	equal := subtle.ConstantTimeCompare(leftOutput, rightOutput)
-	clear(leftOutput)
-	clear(rightOutput)
 
 	return equal
 }
@@ -164,7 +162,6 @@ func (p *Protocol) ForkN(label string, values ...[]byte) []*Protocol {
 		branch := &Protocol{h: kt128.New(nil)}
 		branch.resetChain(opFork, branchCV[:])
 		branches[i] = branch
-		clear(branchCV[:])
 	}
 
 	p.resetChain(opFork, cv[:])
@@ -212,7 +209,6 @@ func (p *Protocol) Mask(label string, dst, plaintext []byte) []byte {
 	ret, ciphertext := mem.SliceForAppend(dst, len(plaintext))
 	p.resetChain(opMask, cv[:])
 	p.writeMaskedStringOp(opMaskData, key[:], ciphertext, plaintext, false)
-	clear(key[:])
 
 	return ret
 }
@@ -228,7 +224,6 @@ func (p *Protocol) Unmask(label string, dst, ciphertext []byte) []byte {
 	ret, plaintext := mem.SliceForAppend(dst, len(ciphertext))
 	p.resetChain(opMask, cv[:])
 	p.writeMaskedStringOp(opMaskData, key[:], plaintext, ciphertext, true)
-	clear(key[:])
 
 	return ret
 }
@@ -299,7 +294,6 @@ func (p *Protocol) newMaskStream(label string) maskStream {
 	var key [keySize]byte
 	cv := p.finalize(key[:])
 	block, err := aes.NewCipher(key[:])
-	clear(key[:])
 	if err != nil {
 		panic("thyrse: " + err.Error())
 	}
@@ -367,7 +361,6 @@ func (p *Protocol) Seal(label string, dst, plaintext []byte) []byte {
 	// keeping the tag-derivation state distinct from the state subsequent operations follow.
 	p.resetChain(opSealTag, cv[:])
 	p.writeMaskedStringOp(opSealData, key[:], ciphertext, plaintext, false)
-	clear(key[:])
 
 	cv = p.finalize(tagDst)
 	p.resetSealChain(cv[:], tagDst, tagDst)
@@ -401,14 +394,12 @@ func (p *Protocol) Open(label string, dst, sealed []byte) ([]byte, error) {
 	ret, plaintext := mem.SliceForAppend(dst, len(ct))
 	p.resetChain(opSealTag, cv[:])
 	p.writeMaskedStringOp(opSealData, key[:], plaintext, ct, true)
-	clear(key[:])
 
 	var tag [TagSize]byte
 	cv = p.finalize(tag[:])
 	p.resetSealChain(cv[:], tt, tag[:])
 
 	if subtle.ConstantTimeCompare(tag[:], tt) != 1 {
-		clear(plaintext)
 		return nil, ErrInvalidCiphertext
 	}
 
@@ -549,9 +540,6 @@ func (p *Protocol) ctrXORSmall(block cipher.Block, dst, src []byte) {
 			}
 		}
 	}
-
-	// The keystream equals the plaintext given the public ciphertext, so do not retain it.
-	clear(ks)
 }
 
 // writeIntOp writes right_encode(v) || op, an integer field closing the current frame, in a single call to h.Write.

@@ -31,18 +31,15 @@ func Seal(
 
 	sharedSecret, kemCiphertext := receiver.Encapsulate()
 	p := newProtocol(domain, receiver, sender.PublicKey(), kemCiphertext, sharedSecret)
-	clear(sharedSecret)
 
 	ciphertext := p.Mask("message", kemCiphertext, message)
 	commitment := p.Derive("commitment", nil, commitmentSize)
 	signature, err := sender.Sign(nil, commitment, nil)
-	clear(commitment)
 	if err != nil {
 		panic(err)
 	}
 
 	ciphertext = p.Mask("signature", ciphertext, signature)
-	clear(signature)
 	return ciphertext
 }
 
@@ -65,17 +62,13 @@ func Open(
 	}
 
 	p := newProtocol(domain, receiver.EncapsulationKey(), sender, kemCiphertext, sharedSecret)
-	clear(sharedSecret)
 
 	signatureOffset := len(ciphertext) - mldsa.MLDSA44SignatureSize
 	plaintext := p.Unmask("message", nil, ciphertext[mlkem.CiphertextSize768:signatureOffset])
 	commitment := p.Derive("commitment", nil, commitmentSize)
 	signature := p.Unmask("signature", nil, ciphertext[signatureOffset:])
 	err = mldsa.Verify(sender, commitment, signature, nil)
-	clear(commitment)
-	clear(signature)
 	if err != nil {
-		clear(plaintext)
 		return nil, thyrse.ErrInvalidCiphertext
 	}
 
