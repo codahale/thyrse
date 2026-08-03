@@ -822,34 +822,6 @@ func TestForkN(t *testing.T) {
 	})
 }
 
-func TestClear(t *testing.T) {
-	t.Run("zeros state", func(t *testing.T) {
-		p := New("test")
-		p.Mix("key", []byte("secret"))
-
-		// Derive before clearing to get a reference output.
-		ref := p.Clone()
-		out1 := ref.Derive("output", nil, 32)
-
-		p.Clear()
-
-		// After Clear, the hasher should be nil.
-		if p.h != nil {
-			t.Fatal("hasher not nil after Clear")
-		}
-
-		// A fresh protocol with the same inputs should still produce the reference output,
-		// confirming Clear didn't corrupt shared state.
-		p2 := New("test")
-		p2.Mix("key", []byte("secret"))
-		out2 := p2.Derive("output", nil, 32)
-
-		if !bytes.Equal(out1, out2) {
-			t.Fatal("Clear corrupted shared state")
-		}
-	})
-}
-
 func TestResetChainEncoding(t *testing.T) {
 	var chainValue [chainValueSize]byte
 	for i := range chainValue {

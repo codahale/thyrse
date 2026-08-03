@@ -82,7 +82,6 @@ func Hash(
 			p.Mix("input", input)
 		}
 		p.Derive("block", dst[:0], blockSize)
-		p.Clear()
 	}
 
 	// Step 1: expand the password and salt into the working buffer.
@@ -124,9 +123,7 @@ func Hash(
 	final.Mix("password", password)
 	final.Mix("salt", salt)
 	final.Mix("balloon", block(spaceCost-1))
-	ret := final.Derive("output", dst, outputSize)
-	final.Clear()
-	return ret
+	return final.Derive("output", dst, outputSize)
 }
 
 func mixUint64(p *thyrse.Protocol, label string, v uint64) {

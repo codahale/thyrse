@@ -96,7 +96,6 @@ func (s *State) SendMessage(plaintext []byte) []byte {
 	// Mix in the header and seal the message.
 	p.Mix("header", header)
 	ciphertext := p.Seal("message", header, plaintext)
-	p.Clear()
 	return ciphertext
 }
 
@@ -124,9 +123,6 @@ func (s *State) rotateSend() {
 	chain := s.deriveChain(ratchet[:], dh, kemShared)
 	clear(dh)
 	clear(kemShared)
-	if s.send != nil {
-		s.send.Clear()
-	}
 	s.localPriv = localPriv
 	s.localKEM = localKEM
 	s.localRatchet = ratchet
@@ -168,7 +164,6 @@ func (s *State) ReceiveMessage(ciphertext []byte) ([]byte, error) {
 	trial := s.clone()
 	plaintext, err := trial.receiveMessage(header, msg, pub, kemPub, kemCiphertext, ratchetID, n, pn)
 	if err != nil {
-		s.discard(trial)
 		return nil, err
 	}
 	s.commit(trial)
@@ -189,7 +184,6 @@ func (s *State) receiveMessage(
 		p = p.Clone()
 		p.Mix("header", header)
 		plaintext, err := p.Open("message", nil, msg)
-		p.Clear()
 		if err != nil {
 			return nil, err
 		}
@@ -217,9 +211,6 @@ func (s *State) receiveMessage(
 		chain := s.deriveChain(header[:ratchetHeaderSize], dh, kemShared)
 		clear(dh)
 		clear(kemShared)
-		if s.recv != nil {
-			s.recv.Clear()
-		}
 		s.recv = chain
 
 		// Update the remote public key and reset the receiving counter.
@@ -244,7 +235,6 @@ func (s *State) receiveMessage(
 	// Mix in the header and open the message.
 	p.Mix("header", header)
 	plaintext, err := p.Open("message", nil, msg)
-	p.Clear()
 	if err != nil {
 		return nil, err
 	}
@@ -275,38 +265,8 @@ func (s *State) clone() *State {
 	return &trial
 }
 
-// discard clears protocol states created by a failed transaction without
-// invalidating skipped-key protocols still owned by the live state.
-func (s *State) discard(trial *State) {
-	trial.root.Clear()
-	if trial.send != nil {
-		trial.send.Clear()
-	}
-	if trial.recv != nil {
-		trial.recv.Clear()
-	}
-	for k, p := range trial.skipped {
-		if original, ok := s.skipped[k]; !ok || original != p {
-			p.Clear()
-		}
-	}
-}
-
-// commit replaces the live state and clears protocol states that are no longer
-// reachable after a successful transaction.
+// commit replaces the live state after a successful transaction.
 func (s *State) commit(trial *State) {
-	s.root.Clear()
-	if s.send != nil {
-		s.send.Clear()
-	}
-	if s.recv != nil {
-		s.recv.Clear()
-	}
-	for k, p := range s.skipped {
-		if next, ok := trial.skipped[k]; !ok || next != p {
-			p.Clear()
-		}
-	}
 	*s = *trial
 }
 

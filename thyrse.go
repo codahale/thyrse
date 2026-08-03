@@ -427,14 +427,6 @@ func (p *Protocol) Clone() *Protocol {
 	return &Protocol{h: p.h.Clone()}
 }
 
-// Clear overwrites the protocol state with zeros and invalidates the instance. After Clear, the instance must not be
-// used.
-func (p *Protocol) Clear() {
-	p.h.Reset()
-	p.h = nil
-	clear(p.ctr[:])
-}
-
 // finalize derives one KT128 output bundle for the current transcript. The
 // bundle is parsed as cv || dst, where cv is always chainValueSize bytes and dst
 // may be empty.

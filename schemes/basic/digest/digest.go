@@ -63,7 +63,6 @@ func (d *digest) Sum(b []byte) []byte {
 	}
 	p, w := d.w.Clone()
 	_ = w.Close()
-	defer p.Clear()
 	var label string
 	if d.size == KeyedSize {
 		label = "tag"
@@ -74,12 +73,6 @@ func (d *digest) Sum(b []byte) []byte {
 }
 
 func (d *digest) Reset() {
-	if d.buf != nil {
-		kt128.ClearWriter(d.buf)
-	}
-	if d.p != nil {
-		d.p.Clear()
-	}
 	d.p = d.base.Clone()
 	d.w = d.p.MixWriter("message")
 	if d.buf == nil {
