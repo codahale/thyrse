@@ -2,6 +2,16 @@
 
 ![A diagram of a botanical thyrse.](thyrse.png)
 
+> [!CAUTION]
+> This library is essentially a personal research project. I've enjoyed working on it, but I can't
+> recommend using this library or any other library like it. A unified primitive object like Thyrse
+> (or a duplex, honestly) is really attractive from the perspective of designing a protocol, but
+> absolutely miserable from the perspective of _analyzing_ a protocol (or scheme). I feel like I've
+> carried this kind of design as far as it can be carried both in terms of ergonomics and
+> performance, so this repo is archived.
+
+---
+
 > [!WARNING]
 > Thyrse is experimental. Neither the design nor the implementation has been independently analyzed or audited. Do not
 > use it in production systems or for critical security applications.
